@@ -1,0 +1,339 @@
+/* ═══════════════════════════════════════════════
+   viewer.css — HWP Web Viewer 메인 스타일
+   ═══════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-primary:    #2563eb;
+  --color-secondary:  #475569;
+  --color-success:    #16a34a;
+  --color-danger:     #dc2626;
+  --color-warning:    #d97706;
+  --color-bg:         #f1f5f9;
+  --color-surface:    #ffffff;
+  --color-border:     #e2e8f0;
+  --color-text:       #1e293b;
+  --color-text-muted: #64748b;
+  --header-height:    56px;
+  --sidebar-width:    160px;
+  --status-height:    28px;
+  --shadow-sm:        0 1px 3px rgba(0,0,0,.1);
+  --shadow-md:        0 4px 12px rgba(0,0,0,.12);
+  --radius:           6px;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+/* ── 헤더 ────────────────────────────────────── */
+.app-header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--header-height);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-logo  { font-size: 22px; }
+.app-title { font-weight: 700; font-size: 15px; white-space: nowrap; }
+
+.file-name {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+  padding: 2px 8px;
+  background: var(--color-bg);
+  border-radius: var(--radius);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── 버튼 공통 ───────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter .15s, transform .1s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:not(:disabled):hover  { filter: brightness(.93); }
+.btn:not(:disabled):active { transform: scale(.97); }
+
+.btn-primary   { background: var(--color-primary);   color: #fff; }
+.btn-secondary { background: var(--color-secondary); color: #fff; }
+.btn-export    { background: var(--color-success);   color: #fff; }
+
+.export-group {
+  display: flex;
+  gap: 6px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration: underline;
+  padding: 0;
+}
+
+/* ── 드롭존 ──────────────────────────────────── */
+.drop-zone {
+  position: fixed;
+  inset: var(--header-height) 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  z-index: 10;
+  transition: background .2s;
+}
+
+.drop-zone.drag-over {
+  background: #dbeafe;
+  outline: 3px dashed var(--color-primary);
+  outline-offset: -12px;
+}
+
+.drop-zone-inner {
+  text-align: center;
+  padding: 48px;
+  background: var(--color-surface);
+  border-radius: 16px;
+  border: 2px dashed var(--color-border);
+  box-shadow: var(--shadow-md);
+  max-width: 460px;
+  width: 90%;
+}
+
+.drop-icon  { font-size: 56px; margin-bottom: 16px; }
+.drop-title { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+.drop-sub   { font-size: 14px; color: var(--color-text-muted); margin-bottom: 8px; }
+.drop-note  { font-size: 12px; color: var(--color-text-muted); }
+
+/* ── 로딩 오버레이 ───────────────────────────── */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  z-index: 200;
+  backdrop-filter: blur(2px);
+}
+
+.spinner {
+  width: 48px; height: 48px;
+  border: 5px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 에러 배너 ───────────────────────────────── */
+.error-banner {
+  position: fixed;
+  top: var(--header-height);
+  left: 0; right: 0;
+  background: #fef2f2;
+  border-bottom: 2px solid var(--color-danger);
+  color: var(--color-danger);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 150;
+  font-size: 13px;
+}
+.error-banner .close-btn {
+  background: none; border: none;
+  cursor: pointer; font-size: 16px;
+  color: var(--color-danger);
+}
+
+/* ── 메인 콘텐츠 ─────────────────────────────── */
+.main-content {
+  position: fixed;
+  top: var(--header-height);
+  bottom: var(--status-height);
+  left: 0; right: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── 사이드바 ────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 12px 8px;
+}
+
+.sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--color-text-muted);
+  padding: 0 6px 10px;
+}
+
+.page-thumbnails {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-thumb {
+  background: #f8fafc;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  transition: border-color .15s, background .15s;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.page-thumb:hover  { border-color: var(--color-primary); background: #eff6ff; }
+.page-thumb.active { border-color: var(--color-primary); background: #dbeafe; }
+
+.page-thumb-preview {
+  width: 100%;
+  flex: 1;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+  font-size: 7px;
+  line-height: 1.3;
+  padding: 4px;
+  text-align: left;
+  color: #334155;
+}
+
+/* ── 뷰어 패널 ───────────────────────────────── */
+.viewer-panel {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--color-bg);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.document-canvas {
+  width: 100%;
+  max-width: 860px;
+}
+
+/* 개별 HWP 페이지 래퍼 */
+.hwp-page {
+  background: white;
+  box-shadow: var(--shadow-md);
+  border-radius: 3px;
+  padding: 72px 80px;            /* A4 여백 시뮬레이션 */
+  margin-bottom: 24px;
+  min-height: 1100px;
+  position: relative;
+  break-after: page;
+}
+
+/* hwp.js 출력 내부 폰트/레이아웃 보정 */
+.hwp-page * {
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR',
+               '함초롬바탕', '함초롬돋움', 'HCR Batang', serif;
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+.hwp-page p   { margin-bottom: 4px; }
+.hwp-page h1,
+.hwp-page h2,
+.hwp-page h3  { margin: 12px 0 6px; }
+
+/* ── 상태바 ──────────────────────────────────── */
+.status-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--status-height);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  z-index: 100;
+}
+
+.mode-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.mode-badge.view { background: #dbeafe; color: #1d4ed8; }
+.mode-badge.edit { background: #fef9c3; color: #92400e; }
+
+/* ── 스크롤바 커스터마이징 ───────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

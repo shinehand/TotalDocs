@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  icons/generate-icons.html
+  브라우저에서 열어 버튼 클릭 시 각 크기별 PNG 아이콘을 생성합니다.
+  생성된 PNG 파일을 이 icons/ 폴더에 저장하세요.
+-->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>아이콘 생성기</title>
+</head>
+<body style="font-family:sans-serif;padding:20px;">
+<h2>HWP Viewer 아이콘 생성기</h2>
+<p>버튼을 클릭하여 아이콘 PNG 파일들을 다운로드하세요.</p>
+<button onclick="generateAll()">모든 아이콘 생성 및 다운로드</button>
+<div id="preview" style="display:flex;gap:16px;margin-top:20px;align-items:flex-end;"></div>
+
+<script>
+const SIZES = [16, 32, 48, 128];
+
+function drawIcon(size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // 배경
+  ctx.fillStyle = '#2563eb';
+  const r = size * 0.15;
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(size - r, 0);
+  ctx.quadraticCurveTo(size, 0, size, r);
+  ctx.lineTo(size, size - r);
+  ctx.quadraticCurveTo(size, size, size - r, size);
+  ctx.lineTo(r, size);
+  ctx.quadraticCurveTo(0, size, 0, size - r);
+  ctx.lineTo(0, r);
+  ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // 문서 아이콘
+  const pad = size * 0.18;
+  const w   = size - pad * 2;
+  const h   = size - pad * 2;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(pad, pad, w * 0.72, h);
+
+  // 접힌 귀퉁이
+  const fold = w * 0.18;
+  ctx.fillStyle = '#93c5fd';
+  ctx.beginPath();
+  ctx.moveTo(pad + w * 0.72 - fold, pad);
+  ctx.lineTo(pad + w * 0.72,        pad + fold);
+  ctx.lineTo(pad + w * 0.72 - fold, pad + fold);
+  ctx.closePath();
+  ctx.fill();
+
+  // "한" 텍스트
+  if (size >= 32) {
+    ctx.fillStyle = '#1d4ed8';
+    ctx.font      = `bold ${Math.floor(size * 0.26)}px 'Malgun Gothic', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('한', pad + w * 0.36, size * 0.56);
+  }
+
+  return canvas;
+}
+
+function generateAll() {
+  const preview = document.getElementById('preview');
+  preview.innerHTML = '';
+
+  SIZES.forEach(size => {
+    const canvas = drawIcon(size);
+    preview.appendChild(canvas);
+
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `icon${size}.png`;
+      a.click();
+    }, 'image/png');
+  });
+}
+</script>
+</body>
+</html>
