@@ -104,9 +104,32 @@ const HwpParser = {
     if (nFat === 0) return new Uint32Array(0);
     const ePS = ss / 4;
     const fat = new Uint32Array(nFat * ePS);
-    for (let i = 0; i < 109 && i < nFat; i++) {
-      const fatSec = HwpParser._u32(b, 0x4C + i * 4);
-      if (fatSec >= 0xFFFFFFF8) break;
+    const difat = [];
+    for (let i = 0; i < 109 && difat.length < nFat; i++) {
+      const sec = HwpParser._u32(b, 0x4C + i * 4);
+      if (sec >= 0xFFFFFFF8) break;
+      difat.push(sec);
+    }
+
+    let difatSec = HwpParser._u32(b, 0x44);
+    const nDifatSec = HwpParser._u32(b, 0x48);
+    let difatRead = 0;
+    const visited = new Set();
+    while (difat.length < nFat && difatSec < 0xFFFFFFF8 && difatRead < nDifatSec && !visited.has(difatSec)) {
+      visited.add(difatSec);
+      const base = (difatSec + 1) * ss;
+      if (base + ss > b.length) break;
+      for (let i = 0; i < ePS - 1 && difat.length < nFat; i++) {
+        const sec = HwpParser._u32(b, base + i * 4);
+        if (sec >= 0xFFFFFFF8) continue;
+        difat.push(sec);
+      }
+      difatSec = HwpParser._u32(b, base + (ePS - 1) * 4);
+      difatRead++;
+    }
+
+    for (let i = 0; i < difat.length; i++) {
+      const fatSec = difat[i];
       const base = (fatSec + 1) * ss;
       if (base + ss > b.length) continue;
       for (let j = 0; j < ePS; j++)
