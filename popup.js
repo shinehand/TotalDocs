@@ -13,14 +13,14 @@
   const toBase64 = async (file) => {
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    let binary = '';
+    const chunks = [];
     const CHUNK = 8192;
 
     for (let i = 0; i < bytes.length; i += CHUNK) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      chunks.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
     }
 
-    return btoa(binary);
+    return btoa(chunks.join(''));
   };
 
   const openFileInViewer = async (file) => {

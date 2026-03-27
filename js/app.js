@@ -693,7 +693,9 @@ async function processBuffer(buffer, filename, sizeBytes) {
   state.doc = doc; state.filename = filename; state.mode = 'view'; state.currentPage = 0;
   HwpExporter.setFilename(filename);
   if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-    chrome.runtime.sendMessage({ type: 'ADD_RECENT_HWP_FILE', filename }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'ADD_RECENT_HWP_FILE', filename }).catch((err) => {
+      console.warn('[APP] 최근 파일 저장 실패:', err?.message || err);
+    });
   }
 
   hideLoading();

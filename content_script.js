@@ -1,4 +1,6 @@
 (() => {
+  const MAX_LINK_TEXT_LENGTH = 120;
+
   const collectHwpLinks = () => {
     const links = Array.from(document.querySelectorAll('a[href]'))
       .map((anchor) => {
@@ -14,7 +16,7 @@
 
         return {
           url,
-          text: (anchor.textContent || '').trim().slice(0, 120),
+          text: (anchor.textContent || '').trim().slice(0, MAX_LINK_TEXT_LENGTH),
           ts: Date.now(),
         };
       })

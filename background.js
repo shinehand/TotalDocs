@@ -72,6 +72,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 
 const MAX_LINKS = 100;
 const MAX_RECENTS = 20;
+const HWP_LINK_PATTERN = /\.(hwp|hwpx)(?:$|\?)/i;
 
 async function mergeDiscoveredLinks(incomingLinks) {
   if (!Array.isArray(incomingLinks) || incomingLinks.length === 0) return;
@@ -82,7 +83,7 @@ async function mergeDiscoveredLinks(incomingLinks) {
       text: String(link?.text || '').trim(),
       ts: Number(link?.ts) || Date.now(),
     }))
-    .filter(link => /^https?:\/\//i.test(link.url) && /\.(hwp|hwpx)(?:$|\?)/i.test(link.url));
+    .filter(link => /^https?:\/\//i.test(link.url) && HWP_LINK_PATTERN.test(link.url));
 
   if (normalized.length === 0) return;
 
