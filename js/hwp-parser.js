@@ -191,52 +191,117 @@ export class HwpParser {
   }
 
   /**
-   * CFB 바이트 배열에서 PrvText 스트림을 찾아 UTF-16LE 디코딩
-   * CFB 섹터를 완전 순회하지 않고, 디렉토리 엔트리에서 "PrvText" 이름으로
-   * 스트림 위치를 찾는 경량 구현입니다.
+   * CFB 바이트 배열에서 PrvText 스트림을 찾아 UTF-16LE 디코딩.
+   *
+   * CFB 헤더 구조 (오프셋 기준):
+   *   0x00 (0)  : 8바이트 시그니처
+   *   0x08 (8)  : 16바이트 CLSID
+   *   0x18 (24) : 2바이트 Minor version
+   *   0x1A (26) : 2바이트 Major version
+   *   0x1C (28) : 2바이트 Byte order (0xFFFE)
+   *   0x1E (30) : 2바이트 섹터 크기 지수 (보통 9 → 512)
+   *   0x20 (32) : 2바이트 미니 섹터 크기 지수
+   *   0x22 (34) : 6바이트 예약
+   *   0x28 (40) : 4바이트 FAT 섹터 수
+   *   0x2C (44) : 4바이트 첫 번째 디렉토리 섹터 번호  ← 핵심!
+   *   0x30 (48) : 4바이트 트랜잭션 서명 (디렉토리 아님)
    */
   static _extractPrvText(bytes) {
-    // CFB 헤더에서 섹터 크기(512 or 4096) 읽기
-    const sectorSizeExp = HwpParser._readUint16LE(bytes, 30);  // 섹터 크기 지수
-    const sectorSize    = 1 << sectorSizeExp;                  // 보통 512
+    if (bytes.length < 512) return null;
 
-    // 디렉토리 섹터 번호 (오프셋 0x30)
-    const dirSector = HwpParser._readUint32LE(bytes, 0x30);
-    if (dirSector === 0xFFFFFFFE) return null;
+    // 섹터 크기 (오프셋 0x1E)
+    const sectorSizeExp = HwpParser._readUint16LE(bytes, 0x1E);
+    const sectorSize    = 1 << sectorSizeExp;   // 보통 512 (2^9)
+    if (sectorSize < 64 || sectorSize > 65536) return null;
 
-    // 디렉토리 섹터 위치 (섹터 번호 → 파일 오프셋)
-    const dirOffset = (dirSector + 1) * sectorSize;
+    // FAT 섹터 배열 로드 (DIFAT — 오프셋 0x4C~, 최대 109개)
+    const fatSectorCount = HwpParser._readUint32LE(bytes, 0x2C - 4); // 0x28
+    const fatSectors = [];
+    for (let i = 0; i < Math.min(fatSectorCount, 109); i++) {
+      const sn = HwpParser._readUint32LE(bytes, 0x4C + i * 4);
+      if (sn < 0xFFFFFFFA) fatSectors.push(sn);
+    }
+
+    // FAT 체인 읽기 헬퍼
+    const readFat = (sectorNum) => {
+      const offset = (sectorNum + 1) * sectorSize;
+      if (offset + sectorSize > bytes.length) return 0xFFFFFFFE;
+      const entries = sectorSize / 4;
+      const fat = [];
+      for (let i = 0; i < entries; i++) {
+        fat.push(HwpParser._readUint32LE(bytes, offset + i * 4));
+      }
+      return fat;
+    };
+
+    // 전체 FAT 테이블 구성
+    const fatTable = {};
+    fatSectors.forEach((sn, fatIdx) => {
+      const fat = readFat(sn);
+      if (Array.isArray(fat)) {
+        fat.forEach((next, i) => {
+          fatTable[fatIdx * (sectorSize / 4) + i] = next;
+        });
+      }
+    });
+
+    // 섹터 체인으로 데이터 읽기
+    const readChain = (startSector, maxBytes) => {
+      const chunks = [];
+      let cur = startSector;
+      let total = 0;
+      const visited = new Set();
+      while (cur < 0xFFFFFFFA && !visited.has(cur)) {
+        visited.add(cur);
+        const off = (cur + 1) * sectorSize;
+        if (off + sectorSize > bytes.length) break;
+        const chunk = bytes.slice(off, Math.min(off + sectorSize, bytes.length));
+        chunks.push(chunk);
+        total += chunk.length;
+        if (maxBytes && total >= maxBytes) break;
+        cur = fatTable[cur] ?? 0xFFFFFFFE;
+      }
+      const result = new Uint8Array(total);
+      let pos = 0;
+      chunks.forEach(c => { result.set(c, pos); pos += c.length; });
+      return result;
+    };
+
+    // 첫 번째 디렉토리 섹터 (오프셋 0x2C = 44)
+    const dirStartSector = HwpParser._readUint32LE(bytes, 0x2C);
+    if (dirStartSector >= 0xFFFFFFFA) return null;
+
+    // 디렉토리 데이터 로드 (최대 64KB)
+    const dirData = readChain(dirStartSector, 65536);
 
     // 디렉토리 엔트리 탐색 (각 128 바이트)
-    const maxEntries = sectorSize / 128;
-    for (let i = 0; i < maxEntries * 8; i++) {          // 최대 8개 섹터 탐색
-      const base = dirOffset + i * 128;
-      if (base + 128 > bytes.length) break;
+    const entryCount = Math.floor(dirData.length / 128);
+    for (let i = 0; i < entryCount; i++) {
+      const base = i * 128;
 
       // 이름 길이 (오프셋 64, uint16LE)
-      const nameLen = HwpParser._readUint16LE(bytes, base + 64);
-      if (nameLen === 0 || nameLen > 64) continue;
+      const nameLen = HwpParser._readUint16LE(dirData, base + 64);
+      if (nameLen < 2 || nameLen > 64) continue;
 
       // 이름 디코딩 (UTF-16LE)
       let name = '';
       for (let c = 0; c < (nameLen - 2) / 2; c++) {
-        name += String.fromCharCode(HwpParser._readUint16LE(bytes, base + c * 2));
+        name += String.fromCharCode(HwpParser._readUint16LE(dirData, base + c * 2));
       }
 
       if (name === 'PrvText') {
-        // 스트림 시작 섹터 (오프셋 116)
-        const startSector = HwpParser._readUint32LE(bytes, base + 116);
-        // 스트림 크기 (오프셋 120)
-        const streamSize  = HwpParser._readUint32LE(bytes, base + 120);
+        // 스트림 시작 섹터 (디렉토리 엔트리 오프셋 116)
+        const startSector = HwpParser._readUint32LE(dirData, base + 116);
+        // 스트림 크기 (디렉토리 엔트리 오프셋 120)
+        const streamSize  = HwpParser._readUint32LE(dirData, base + 120);
 
-        if (startSector === 0xFFFFFFFE || streamSize === 0) return null;
+        if (startSector >= 0xFFFFFFFA || streamSize === 0) return null;
 
-        const streamOffset = (startSector + 1) * sectorSize;
-        if (streamOffset + streamSize > bytes.length) return null;
+        const streamData = readChain(startSector, streamSize);
+        const actual = streamData.slice(0, Math.min(streamSize, streamData.length));
 
         // UTF-16LE → JS string
-        const streamBytes = bytes.slice(streamOffset, streamOffset + streamSize);
-        return new TextDecoder('utf-16le').decode(streamBytes);
+        return new TextDecoder('utf-16le').decode(actual);
       }
     }
     return null;

@@ -73,7 +73,7 @@ let   exporter = null;
 async function processFile(file) {
   const allowed = /\.(hwp|hwpx)$/i;
   if (!allowed.test(file.name)) {
-    showError(`지원하지 않는 파일 형식입니다: ${file.name}\n(.hwp 또는 .hwpx 파일을 선택하세요)`);
+    showError(`지원하지 않는 파일 형식입니다: ${file.name} (.hwp 또는 .hwpx 파일을 선택하세요)`);
     return;
   }
 
@@ -81,7 +81,10 @@ async function processFile(file) {
 
   try {
     const buffer = await file.arrayBuffer();
-    showLoading('HWP 구조를 파싱하는 중...');
+    showLoading(`HWP 구조를 파싱하는 중... (${(file.size/1024).toFixed(0)} KB)`);
+
+    // 파싱을 마이크로태스크 큐로 넘겨 UI 업데이트 후 실행
+    await new Promise(r => setTimeout(r, 30));
 
     const doc = await HwpParser.parse(buffer, file.name);
 
