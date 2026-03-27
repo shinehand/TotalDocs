@@ -56,9 +56,15 @@ const HwpParser = {
     if (!SIG.every((v, i) => b[i] === v))
       throw new Error('HWP 시그니처 불일치 — 올바른 HWP 5.0 파일인지 확인하세요.');
 
+    // 전략 1: CFB PrvText 스트림 직접 추출
     let text = null;
-    try { text = HwpParser._scanPrvText(b); }
-    catch(e) { console.warn('[HWP] scanPrvText 오류:', e); }
+    try { text = HwpParser._scanPrvText(b); } catch(e) { console.warn('[HWP] PrvText 오류:', e); }
+
+    // 전략 2: 파일 전체에서 한글 UTF-16LE 블록 직접 탐색 (CFB 구조 무관)
+    if (!text) {
+      console.log('[HWP] PrvText 실패 → 한글 텍스트 직접 스캔 시도');
+      try { text = HwpParser._scanKoreanText(b); } catch(e) { console.warn('[HWP] 텍스트 스캔 오류:', e); }
+    }
 
     if (!text) return HwpParser._fallback();
 
@@ -166,6 +172,53 @@ const HwpParser = {
 
     console.warn('[HWP] PrvText 엔트리를 찾지 못했습니다.');
     return null;
+  },
+
+  /**
+   * CFB 구조 파싱 없이 파일 바이트에서 한글 UTF-16LE 텍스트를 직접 탐색.
+   * 헤더(512 바이트) 이후를 2 바이트 단위로 슬라이드하며
+   * 한글·영문 출력 가능 문자가 연속으로 이어지는 가장 긴 블록을 반환.
+   */
+  _scanKoreanText(b) {
+    let bestStart = -1, bestLen = 0;
+    let runStart  = -1, runLen  = 0;
+    let koreanInRun = 0;
+
+    const isValidCp = cp =>
+      (cp >= 0x20  && cp <= 0x7E)   ||  // ASCII 출력 가능
+      (cp >= 0xAC00 && cp <= 0xD7A3)||  // 한글 음절 (가-힣)
+      (cp >= 0x1100 && cp <= 0x11FF)||  // 한글 자모
+      (cp >= 0x3130 && cp <= 0x318F)||  // 한글 호환 자모
+      (cp >= 0x4E00 && cp <= 0x9FFF)||  // 한중일 통합 한자
+      cp === 0x000A || cp === 0x000D || cp === 0x0009 || cp === 0x0002;
+
+    const isKorean = cp => cp >= 0xAC00 && cp <= 0xD7A3;
+
+    const flush = () => {
+      // 최소 30자 이상이고 한글이 5자 이상인 블록만 후보로
+      if (runLen >= 60 && koreanInRun >= 10) {
+        if (runLen > bestLen) { bestStart = runStart; bestLen = runLen; }
+      }
+      runStart = -1; runLen = 0; koreanInRun = 0;
+    };
+
+    for (let i = 512; i + 2 <= b.length; i += 2) {
+      const cp = b[i] | (b[i + 1] << 8);
+      if (isValidCp(cp)) {
+        if (runStart < 0) runStart = i;
+        runLen += 2;
+        if (isKorean(cp)) koreanInRun++;
+      } else {
+        flush();
+      }
+    }
+    flush();
+
+    if (bestStart < 0) { console.warn('[HWP] 한글 텍스트 블록을 찾지 못했습니다.'); return null; }
+    const raw = b.slice(bestStart, bestStart + bestLen);
+    const text = new TextDecoder('utf-16le').decode(raw);
+    console.log('[HWP] 한글 텍스트 스캔 성공: %d 글자 (한글 %d자)', text.length, koreanInRun);
+    return text;
   },
 
   _fallback() {
