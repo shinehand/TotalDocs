@@ -137,19 +137,25 @@ const HwpParser = {
       return { name, pat, nameLen: (name.length + 1) * 2 };
     });
     const result = {};
+    const found = new Set();
     for (let pos = 512; pos + 128 <= b.length; pos += 128) {
       const nl = HwpParser._u16(b, pos + 64);
       for (const { name, pat, nameLen } of queries) {
+        if (found.has(name)) continue;
         if (nl !== nameLen) continue;
         let ok = true;
         for (let k = 0; k < pat.length; k++) {
           if (b[pos + k] !== pat[k]) { ok = false; break; }
         }
-        if (ok) result[name] = {
-          startSec: HwpParser._u32(b, pos + 116),
-          streamSz: HwpParser._u32(b, pos + 120),
-        };
+        if (ok) {
+          result[name] = {
+            startSec: HwpParser._u32(b, pos + 116),
+            streamSz: HwpParser._u32(b, pos + 120),
+          };
+          found.add(name);
+        }
       }
+      if (found.size === queries.length) break;
     }
     return result;
   },
@@ -157,40 +163,46 @@ const HwpParser = {
   /* ── zlib 압축 해제 ── */
   async _decompressZlib(data) {
     const timeoutMs = 8000;
-    let timeoutId = null;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('zlib 압축 해제 시간 초과 (8초)')), timeoutMs);
-    });
+    for (const mode of ['deflate', 'deflate-raw']) {
+      let timeoutId = null;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('zlib 압축 해제 시간 초과 (8초)')), timeoutMs);
+      });
 
-    const ds = new DecompressionStream('deflate');
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
+      const ds = new DecompressionStream(mode);
+      const writer = ds.writable.getWriter();
+      const reader = ds.readable.getReader();
+      const chunks = [];
 
-    const chunks = [];
-    try {
-      const decodePromise = (async () => {
-        await writer.write(data);
-        await writer.close();
+      try {
+        const decodePromise = (async () => {
+          await writer.write(data);
+          await writer.close();
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      })();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+        })();
 
-      await Promise.race([decodePromise, timeoutPromise]);
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-      try { reader.releaseLock(); } catch {}
-      try { writer.releaseLock(); } catch {}
+        await Promise.race([decodePromise, timeoutPromise]);
+
+        const total = chunks.reduce((s, c) => s + c.length, 0);
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) { out.set(c, off); off += c.length; }
+        return out;
+      } catch (e) {
+        if (mode === 'deflate-raw') throw e;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        try { reader.releaseLock(); } catch {}
+        try { writer.releaseLock(); } catch {}
+      }
     }
 
-    const total = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(total);
-    let off = 0;
-    for (const c of chunks) { out.set(c, off); off += c.length; }
-    return out;
+    throw new Error('zlib 압축 해제 실패');
   },
 
   /* ── HWP 레코드 파서 (TagID 67 = HWPTAG_PARA_TEXT) ── */
@@ -238,7 +250,7 @@ const HwpParser = {
     const miniContainerOff = rootStartSec < 0xFFFFFFFA ? (rootStartSec + 1) * ss : -1;
 
     const fat = HwpParser._readFat(b, ss);
-    const sectionNames = Array.from({ length: 10 }, (_, i) => 'Section' + i);
+    const sectionNames = Array.from({ length: 100 }, (_, i) => 'Section' + i);
     const entries = HwpParser._scanDirEntries(b, ['FileHeader', ...sectionNames]);
 
     let compressed = true;
@@ -259,7 +271,7 @@ const HwpParser = {
     }
 
     const allParas = [];
-    for (let sn = 0; sn <= 9; sn++) {
+    for (let sn = 0; sn < 100; sn++) {
       const entry = entries['Section' + sn];
       if (!entry) break;
       const { startSec, streamSz } = entry;
@@ -695,7 +707,7 @@ function parseWithWorker(buffer, filename) {
     };
 
     // slice(0)로 ArrayBuffer 전체 복사본을 만들어 worker에만 transfer합니다.
-    // 원본 buffer는 detatch되지 않아 worker 타임아웃/실패 시 메인 스레드 fallback 파싱에 그대로 사용됩니다.
+    // 원본 buffer는 detach되지 않아 worker 타임아웃/실패 시 메인 스레드 fallback 파싱에 그대로 사용됩니다.
     const workerBuffer = buffer.slice(0);
     worker.postMessage({ buffer: workerBuffer, filename }, [workerBuffer]);
   });
