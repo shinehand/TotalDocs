@@ -1,363 +1,322 @@
 /**
- * hwp-parser.js
+ * hwp-parser.js  (v3 — 안정 재작성)
  * ─────────────────────────────────────────────────────────────────────────────
- * HWP 5.0 / HWPX 파일을 파싱하여 뷰어가 소비할 수 있는 공통 문서 모델로 변환.
+ * HWP 5.0 / HWPX 파일을 파싱하여 공통 HwpDocument 모델로 변환합니다.
  *
- * HWP 5.0 구조 개요
- * ─────────────────
- *  HWP 파일은 OLE Compound Document (CFB) 형식으로,
- *  내부에 여러 스트림(Stream)이 ZIP처럼 압축되어 있습니다.
+ * HWP 5.0 전략:
+ *   CFB(OLE) 컨테이너에서 "PrvText" 스트림을 찾아 UTF-16LE 텍스트를 추출.
+ *   PrvText 는 한글 워드프로세서가 빠른 미리보기 용도로 저장하는 일반 텍스트.
+ *   서식은 없지만 내용 확인·편집에는 충분합니다.
  *
- *  주요 스트림:
- *   • FileHeader        → 파일 버전, 암호화 여부 등 플래그
- *   • DocInfo           → 문서 전역 설정 (용지 크기, 여백 등) — zlib 압축
- *   • BodyText/Section0 → 실제 본문 데이터 — zlib 압축 + HWP 레코드 스트림
- *   • BinData/*         → 내장 이미지/OLE 오브젝트
- *   • PrvText           → 일반 텍스트 미리보기 (UTF-16LE)
+ *   핵심 알고리즘: FAT 체인 순회 없이 바이트 패턴 직접 스캔
+ *     → "PrvText"(UTF-16LE) 패턴을 파일 전체에서 선형 탐색
+ *     → 찾으면 해당 128 바이트 CFB 디렉토리 엔트리에서 스트림 위치 독취
+ *     → 스트림 섹터 순차 독취 (PrvText는 보통 연속 배치)
  *
- *  이 모듈은 두 가지 전략을 사용합니다:
- *   1) HWPX (.hwpx) → JSZip으로 ZIP 언패킹 후 XML 파싱 (권장 경로)
- *   2) HWP 5.0 (.hwp) → CFB 파싱 → PrvText 스트림으로 텍스트 추출 (폴백)
- *      * 브라우저에서 CFB 전체 파싱은 상당한 구현량이 필요하므로,
- *        여기서는 PrvText(일반 텍스트 미리보기) 스트림을 직접 추출하는
- *        경량 구현을 제공합니다. 완전한 서식 재현이 필요하면
- *        hahnlee/hwp.js 라이브러리를 번들링해 사용하세요.
+ * HWPX 전략:
+ *   JSZip 으로 ZIP 언팩 → Contents/section*.xml XML 파싱
  * ─────────────────────────────────────────────────────────────────────────────
  */
-
-/* ═══════════════════════════════════════════════════════════
-   공통 문서 모델 (Document Model)
-   ═══════════════════════════════════════════════════════════
-   HwpDocument {
-     meta: { title, author, pages, created, modified }
-     pages: HwpPage[]
-   }
-   HwpPage {
-     index: number
-     paragraphs: HwpParagraph[]
-   }
-   HwpParagraph {
-     texts: HwpTextRun[]
-     align: 'left'|'center'|'right'|'justify'
-   }
-   HwpTextRun {
-     text: string
-     bold, italic, underline: boolean
-     fontSize: number   (pt)
-     fontName: string
-     color: string      (hex)
-   }
-═══════════════════════════════════════════════════════════ */
 
 export class HwpParser {
   /**
    * @param {ArrayBuffer} buffer
-   * @param {string} filename
+   * @param {string}      filename
    * @returns {Promise<HwpDocument>}
    */
   static async parse(buffer, filename) {
     const ext = filename.split('.').pop().toLowerCase();
 
-    if (ext === 'hwpx') {
-      return HwpParser._parseHwpx(buffer);
-    }
-    if (ext === 'hwp') {
-      return HwpParser._parseHwp5(buffer);
-    }
-    throw new Error(`지원하지 않는 파일 형식입니다: .${ext}`);
+    // UI 업데이트 후 파싱 시작 (메인 스레드 블로킹 방지)
+    await new Promise(r => setTimeout(r, 60));
+
+    // 30초 타임아웃
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('파싱 시간 초과(30초). 파일이 너무 크거나 손상됐을 수 있습니다.')), 30_000)
+    );
+
+    const work = (async () => {
+      if (ext === 'hwpx') return HwpParser._parseHwpx(buffer);
+      if (ext === 'hwp')  return HwpParser._parseHwp5(buffer);
+      throw new Error(`지원하지 않는 파일 형식입니다: .${ext}`);
+    })();
+
+    return Promise.race([work, timeout]);
   }
 
-  /* ──────────────────────────────────────────────
-     HWPX 파싱 (ZIP + XML)
-  ────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════
+     HWPX (.hwpx) — ZIP + XML
+  ═══════════════════════════════════════════════════════════ */
   static async _parseHwpx(buffer) {
     if (typeof JSZip === 'undefined') {
-      throw new Error('JSZip 라이브러리가 로드되지 않았습니다.');
+      throw new Error('JSZip 라이브러리를 찾을 수 없습니다. lib/jszip.min.js 가 로드됐는지 확인하세요.');
     }
 
-    const zip   = await JSZip.loadAsync(buffer);
-    const pages = [];
+    let zip;
+    try {
+      zip = await JSZip.loadAsync(buffer);
+    } catch (e) {
+      throw new Error(`HWPX ZIP 열기 실패: ${e.message}`);
+    }
 
-    // HWPX 내부 경로: Contents/section0.xml, section1.xml …
     const sectionFiles = Object.keys(zip.files)
-      .filter(p => /Contents\/section\d+\.xml$/i.test(p))
+      .filter(p => /Contents[\\/]section\d+\.xml$/i.test(p))
       .sort();
 
     if (sectionFiles.length === 0) {
-      throw new Error('HWPX 파일에서 본문 섹션을 찾을 수 없습니다.');
+      throw new Error('HWPX 파일에서 본문 섹션(Contents/section*.xml)을 찾을 수 없습니다.');
     }
 
+    const pages = [];
     for (let i = 0; i < sectionFiles.length; i++) {
       const xmlStr = await zip.files[sectionFiles[i]].async('string');
-      const pageParagraphs = HwpParser._parseHwpxSection(xmlStr);
-      // 섹션을 페이지로 1:1 매핑 (단순화)
-      pages.push({ index: i, paragraphs: pageParagraphs });
+      pages.push({ index: i, paragraphs: HwpParser._parseHwpxSection(xmlStr) });
     }
 
-    // 메타 정보
-    let meta = { title: '', author: '', pages: pages.length };
-    const headerFile = zip.files['Contents/header.xml']
-                    || zip.files['content.opf'];
-    if (headerFile) {
-      const hXml = await headerFile.async('string');
-      meta = { ...meta, ...HwpParser._extractHwpxMeta(hXml) };
-    }
-
-    return { meta, pages };
+    return {
+      meta: { title: '', author: '', pages: pages.length },
+      pages,
+    };
   }
 
-  /**
-   * HWPX 섹션 XML에서 단락 배열 추출
-   * @param {string} xmlStr
-   * @returns {HwpParagraph[]}
-   */
   static _parseHwpxSection(xmlStr) {
-    const parser = new DOMParser();
-    const doc    = parser.parseFromString(xmlStr, 'application/xml');
-    const paras  = doc.querySelectorAll('p, hp\\:p');
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
+    } catch (e) {
+      return [{ align: 'left', texts: [HwpParser._run('(XML 파싱 오류)')] }];
+    }
+
+    const paras  = Array.from(doc.querySelectorAll('p, hp\\:p, hh\\:p'));
     const result = [];
 
-    paras.forEach(p => {
-      const align = HwpParser._getXmlAttr(p, 'align') || 'left';
+    for (const p of paras) {
+      const align = p.getAttribute('align') || 'left';
+      const runs  = Array.from(p.querySelectorAll('run, t, hp\\:run, hp\\:t, hh\\:run, hh\\:t'));
       const texts = [];
 
-      // 텍스트 런 <run> 또는 <t> 요소
-      const runs = p.querySelectorAll('run, t, hp\\:run, hp\\:t');
       if (runs.length > 0) {
-        runs.forEach(run => {
-          const charPr = run.querySelector('charPr, hp\\:charPr');
+        for (const run of runs) {
+          const charPr = run.querySelector('charPr, hp\\:charPr, hh\\:charPr');
+          const attr   = (el, a) => el?.getAttribute(a) || el?.getAttribute(`hp:${a}`) || null;
           texts.push({
-            text:      run.textContent,
-            bold:      HwpParser._getXmlAttr(charPr, 'bold') === '1',
-            italic:    HwpParser._getXmlAttr(charPr, 'italic') === '1',
-            underline: HwpParser._getXmlAttr(charPr, 'underline') === '1',
-            fontSize:  parseFloat(HwpParser._getXmlAttr(charPr, 'size') || '1000') / 100,
-            fontName:  HwpParser._getXmlAttr(charPr, 'fontRef') || 'Malgun Gothic',
-            color:     HwpParser._getXmlAttr(charPr, 'color') || '#000000',
+            text:      run.textContent || '',
+            bold:      attr(charPr, 'bold') === '1',
+            italic:    attr(charPr, 'italic') === '1',
+            underline: attr(charPr, 'underline') === '1',
+            fontSize:  parseFloat(attr(charPr, 'size') || '1000') / 100,
+            fontName:  attr(charPr, 'fontRef') || 'Malgun Gothic',
+            color:     attr(charPr, 'color') || '#000000',
           });
-        });
+        }
       } else {
-        // fallback: 원시 텍스트
         const raw = p.textContent.trim();
-        if (raw) texts.push(HwpParser._defaultRun(raw));
+        texts.push(HwpParser._run(raw));
       }
 
-      if (texts.length > 0 || p.textContent.trim() === '') {
-        result.push({ align, texts: texts.length ? texts : [HwpParser._defaultRun('')] });
-      }
-    });
-
-    return result.length ? result : [{ align: 'left', texts: [HwpParser._defaultRun('(빈 섹션)')] }];
-  }
-
-  static _extractHwpxMeta(xml) {
-    const doc    = new DOMParser().parseFromString(xml, 'application/xml');
-    const get    = (tag) => doc.querySelector(tag)?.textContent?.trim() || '';
-    return { title: get('title') || get('dc\\:title'), author: get('creator') || get('dc\\:creator') };
-  }
-
-  /* ──────────────────────────────────────────────
-     HWP 5.0 파싱 (CFB + PrvText 폴백)
-  ────────────────────────────────────────────── */
-  static async _parseHwp5(buffer) {
-    const bytes = new Uint8Array(buffer);
-
-    // 1) OLE CFB 시그니처 확인: D0 CF 11 E0 A1 B1 1A E1
-    const CFB_SIG = [0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1];
-    const valid   = CFB_SIG.every((b, i) => bytes[i] === b);
-    if (!valid) throw new Error('유효한 HWP 파일이 아닙니다 (CFB 시그니처 없음).');
-
-    // 2) PrvText 스트림 추출 (UTF-16LE 일반 텍스트)
-    const prvText = HwpParser._extractPrvText(bytes);
-
-    if (!prvText) {
-      // 3) PrvText 없으면 BodyText 스트림에서 직접 파싱 시도
-      return HwpParser._parseBodyTextFallback(bytes);
+      result.push({ align, texts });
     }
 
-    // PrvText → 단락 분리 → 페이지로 묶기
-    const lines      = prvText.split(/\r?\n|\r/);
+    return result.length
+      ? result
+      : [{ align: 'left', texts: [HwpParser._run('')] }];
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     HWP 5.0 — CFB 컨테이너 + PrvText 바이트 스캔
+  ═══════════════════════════════════════════════════════════ */
+  static _parseHwp5(buffer) {
+    const bytes = new Uint8Array(buffer);
+
+    // 1) OLE CFB 시그니처 확인
+    const SIG = [0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1];
+    if (!SIG.every((b, i) => bytes[i] === b)) {
+      throw new Error('유효한 HWP 파일이 아닙니다 (CFB 시그니처 불일치).');
+    }
+
+    // 2) 암호화 여부 간단 확인 (FileHeader 스트림의 플래그 비트 0)
+    //    정확한 확인은 복잡하므로 일단 PrvText 추출을 시도.
+
+    // 3) PrvText 바이트 스캔
+    let prvText = null;
+    try {
+      prvText = HwpParser._scanPrvText(bytes);
+    } catch (e) {
+      console.warn('[HWP] PrvText 스캔 실패:', e);
+    }
+
+    if (!prvText) {
+      return HwpParser._fallbackDoc();
+    }
+
+    // 4) 텍스트 → 단락 → 페이지 변환
+    // HWP PrvText 구분자:
+    //   0x000D 0x000A = 줄바꿈 (CRLF)
+    //   0x000D       = 단락 끝
+    //   0x0002       = 강제 줄바꿈
+    const lines = prvText
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\x02/g, '\n')
+      .split('\n');
+
     const paragraphs = lines.map(line => ({
       align: 'left',
-      texts: [HwpParser._defaultRun(line)],
+      texts: [HwpParser._run(line)],
     }));
 
-    // 30줄씩 1페이지로 단순 분할
-    const pages = HwpParser._chunkIntoPages(paragraphs, 30);
+    const pages = HwpParser._paginateParagraphs(paragraphs, 35);
+
     return {
-      meta: { title: '', author: '', pages: pages.length, note: 'PrvText 기반 (서식 제한)' },
+      meta: {
+        title:  '',
+        author: '',
+        pages:  pages.length,
+        note:   'PrvText 기반 텍스트 뷰 (서식 미지원 — 원본 서식 보존 편집은 HWPX 저장 후 사용)',
+      },
       pages,
     };
   }
 
   /**
-   * CFB 바이트 배열에서 PrvText 스트림을 찾아 UTF-16LE 디코딩.
+   * CFB 파일에서 "PrvText" 이름의 디렉토리 엔트리를 선형 스캔으로 찾고
+   * 스트림 데이터를 UTF-16LE로 반환합니다.
    *
-   * CFB 헤더 구조 (오프셋 기준):
-   *   0x00 (0)  : 8바이트 시그니처
-   *   0x08 (8)  : 16바이트 CLSID
-   *   0x18 (24) : 2바이트 Minor version
-   *   0x1A (26) : 2바이트 Major version
-   *   0x1C (28) : 2바이트 Byte order (0xFFFE)
-   *   0x1E (30) : 2바이트 섹터 크기 지수 (보통 9 → 512)
-   *   0x20 (32) : 2바이트 미니 섹터 크기 지수
-   *   0x22 (34) : 6바이트 예약
-   *   0x28 (40) : 4바이트 FAT 섹터 수
-   *   0x2C (44) : 4바이트 첫 번째 디렉토리 섹터 번호  ← 핵심!
-   *   0x30 (48) : 4바이트 트랜잭션 서명 (디렉토리 아님)
+   * 원리:
+   *   CFB 디렉토리 엔트리(128 바이트)의 첫 필드가 이름(UTF-16LE).
+   *   → 파일 전체에서 "PrvText" UTF-16LE 패턴을 탐색.
+   *   → 찾은 위치가 엔트리 시작점이므로, +116/+120 오프셋으로 스트림 정보 독취.
+   *
+   * @param {Uint8Array} bytes
+   * @returns {string|null}
    */
-  static _extractPrvText(bytes) {
-    if (bytes.length < 512) return null;
+  static _scanPrvText(bytes) {
+    // "PrvText" → UTF-16LE 바이트 배열
+    const NAME_BYTES = [
+      0x50,0x00, // P
+      0x72,0x00, // r
+      0x76,0x00, // v
+      0x54,0x00, // T
+      0x65,0x00, // e
+      0x78,0x00, // x
+      0x74,0x00, // t
+    ];
+    const NL = NAME_BYTES.length; // 14
 
-    // 섹터 크기 (오프셋 0x1E)
-    const sectorSizeExp = HwpParser._readUint16LE(bytes, 0x1E);
-    const sectorSize    = 1 << sectorSizeExp;   // 보통 512 (2^9)
-    if (sectorSize < 64 || sectorSize > 65536) return null;
+    // CFB 헤더에서 섹터 크기 읽기 (오프셋 0x1E)
+    const sectorSizeExp = HwpParser._u16(bytes, 0x1E);
+    const sectorSize    = (sectorSizeExp >= 7 && sectorSizeExp <= 14)
+      ? (1 << sectorSizeExp)
+      : 512;
 
-    // FAT 섹터 배열 로드 (DIFAT — 오프셋 0x4C~, 최대 109개)
-    const fatSectorCount = HwpParser._readUint32LE(bytes, 0x2C - 4); // 0x28
-    const fatSectors = [];
-    for (let i = 0; i < Math.min(fatSectorCount, 109); i++) {
-      const sn = HwpParser._readUint32LE(bytes, 0x4C + i * 4);
-      if (sn < 0xFFFFFFFA) fatSectors.push(sn);
+    // CFB 헤더는 512 바이트. 디렉토리 섹터는 그 뒤에 위치.
+    // 선형 스캔: 512 바이트 이후부터 패턴 검색 (128 바이트 단위로 이동)
+    const startOffset = 512; // 헤더 스킵
+
+    for (let pos = startOffset; pos + 128 <= bytes.length; pos += 128) {
+      // 이름 길이 필드 (엔트리 오프셋 64, uint16LE)
+      const nameLen = HwpParser._u16(bytes, pos + 64);
+      if (nameLen !== 16) continue; // "PrvText" = 7글자 * 2 + 2(null) = 16 바이트
+
+      // 패턴 매칭
+      let match = true;
+      for (let k = 0; k < NL; k++) {
+        if (bytes[pos + k] !== NAME_BYTES[k]) { match = false; break; }
+      }
+      if (!match) continue;
+
+      // 스트림 시작 섹터 (엔트리 오프셋 116)
+      const startSector = HwpParser._u32(bytes, pos + 116);
+      // 스트림 크기 (엔트리 오프셋 120)
+      const streamSize  = HwpParser._u32(bytes, pos + 120);
+
+      console.log(`[HWP] PrvText 발견 — pos=${pos} startSector=${startSector} size=${streamSize}`);
+
+      if (startSector >= 0xFFFFFFFA) {
+        console.warn('[HWP] PrvText: 잘못된 시작 섹터');
+        return null;
+      }
+      if (streamSize === 0 || streamSize > 8 * 1024 * 1024) {
+        console.warn('[HWP] PrvText: 비정상 스트림 크기', streamSize);
+        return null;
+      }
+
+      // 섹터 오프셋 계산: (섹터 번호 + 1) * sectorSize
+      const streamStart = (startSector + 1) * sectorSize;
+      if (streamStart + streamSize > bytes.length) {
+        // 섹터가 파일 끝을 넘어가면 파일 끝까지만 읽기
+        const available = bytes.slice(streamStart, bytes.length);
+        if (available.length === 0) return null;
+        return new TextDecoder('utf-16le').decode(available);
+      }
+
+      const streamData = bytes.slice(streamStart, streamStart + streamSize);
+      const text = new TextDecoder('utf-16le').decode(streamData);
+      console.log(`[HWP] PrvText 추출 완료 — ${text.length}글자`);
+      return text;
     }
 
-    // FAT 체인 읽기 헬퍼
-    const readFat = (sectorNum) => {
-      const offset = (sectorNum + 1) * sectorSize;
-      if (offset + sectorSize > bytes.length) return 0xFFFFFFFE;
-      const entries = sectorSize / 4;
-      const fat = [];
-      for (let i = 0; i < entries; i++) {
-        fat.push(HwpParser._readUint32LE(bytes, offset + i * 4));
-      }
-      return fat;
-    };
-
-    // 전체 FAT 테이블 구성
-    const fatTable = {};
-    fatSectors.forEach((sn, fatIdx) => {
-      const fat = readFat(sn);
-      if (Array.isArray(fat)) {
-        fat.forEach((next, i) => {
-          fatTable[fatIdx * (sectorSize / 4) + i] = next;
-        });
-      }
-    });
-
-    // 섹터 체인으로 데이터 읽기
-    const readChain = (startSector, maxBytes) => {
-      const chunks = [];
-      let cur = startSector;
-      let total = 0;
-      const visited = new Set();
-      while (cur < 0xFFFFFFFA && !visited.has(cur)) {
-        visited.add(cur);
-        const off = (cur + 1) * sectorSize;
-        if (off + sectorSize > bytes.length) break;
-        const chunk = bytes.slice(off, Math.min(off + sectorSize, bytes.length));
-        chunks.push(chunk);
-        total += chunk.length;
-        if (maxBytes && total >= maxBytes) break;
-        cur = fatTable[cur] ?? 0xFFFFFFFE;
-      }
-      const result = new Uint8Array(total);
-      let pos = 0;
-      chunks.forEach(c => { result.set(c, pos); pos += c.length; });
-      return result;
-    };
-
-    // 첫 번째 디렉토리 섹터 (오프셋 0x2C = 44)
-    const dirStartSector = HwpParser._readUint32LE(bytes, 0x2C);
-    if (dirStartSector >= 0xFFFFFFFA) return null;
-
-    // 디렉토리 데이터 로드 (최대 64KB)
-    const dirData = readChain(dirStartSector, 65536);
-
-    // 디렉토리 엔트리 탐색 (각 128 바이트)
-    const entryCount = Math.floor(dirData.length / 128);
-    for (let i = 0; i < entryCount; i++) {
-      const base = i * 128;
-
-      // 이름 길이 (오프셋 64, uint16LE)
-      const nameLen = HwpParser._readUint16LE(dirData, base + 64);
-      if (nameLen < 2 || nameLen > 64) continue;
-
-      // 이름 디코딩 (UTF-16LE)
-      let name = '';
-      for (let c = 0; c < (nameLen - 2) / 2; c++) {
-        name += String.fromCharCode(HwpParser._readUint16LE(dirData, base + c * 2));
-      }
-
-      if (name === 'PrvText') {
-        // 스트림 시작 섹터 (디렉토리 엔트리 오프셋 116)
-        const startSector = HwpParser._readUint32LE(dirData, base + 116);
-        // 스트림 크기 (디렉토리 엔트리 오프셋 120)
-        const streamSize  = HwpParser._readUint32LE(dirData, base + 120);
-
-        if (startSector >= 0xFFFFFFFA || streamSize === 0) return null;
-
-        const streamData = readChain(startSector, streamSize);
-        const actual = streamData.slice(0, Math.min(streamSize, streamData.length));
-
-        // UTF-16LE → JS string
-        return new TextDecoder('utf-16le').decode(actual);
-      }
-    }
+    console.warn('[HWP] PrvText 스트림을 찾지 못했습니다.');
     return null;
   }
 
-  /**
-   * PrvText를 찾지 못했을 때 최소한의 텍스트를 추출하는 폴백
-   * (실제 BodyText 파싱은 복잡하므로 안내 메시지만 반환)
-   */
-  static _parseBodyTextFallback(_bytes) {
+  /* ── 유틸리티 ─────────────────────────────── */
+
+  static _fallbackDoc() {
     return {
       meta: { title: '', author: '', pages: 1, note: '파싱 제한' },
       pages: [{
         index: 0,
         paragraphs: [{
           align: 'center',
-          texts: [HwpParser._defaultRun(
-            '⚠️ 이 HWP 파일의 본문을 브라우저에서 완전히 파싱할 수 없습니다.\n' +
-            '완전한 렌더링을 위해서는 서버사이드 변환 또는 hwp.js 번들 빌드가 필요합니다.'
+          texts: [HwpParser._run(
+            '⚠️ 이 HWP 파일의 텍스트를 추출할 수 없습니다.\n\n' +
+            '가능한 원인:\n' +
+            '• 파일이 암호로 보호되어 있음\n' +
+            '• HWP 2.x / 3.x 구형 포맷 (5.0 이상만 지원)\n' +
+            '• 파일이 손상됨\n\n' +
+            '해결책: 한글 워드프로세서에서 파일을 열고 "다른 이름으로 저장 → HWPX" 후 재시도하세요.'
           )],
         }],
       }],
     };
   }
 
-  /* ── 유틸리티 ─────────────────────────────────── */
-  static _defaultRun(text) {
-    return { text, bold: false, italic: false, underline: false,
-             fontSize: 10, fontName: 'Malgun Gothic', color: '#000000' };
-  }
-
-  static _chunkIntoPages(paragraphs, perPage) {
+  static _paginateParagraphs(paragraphs, perPage) {
+    if (paragraphs.length === 0) return [{ index: 0, paragraphs: [] }];
     const pages = [];
     for (let i = 0; i < paragraphs.length; i += perPage) {
       pages.push({ index: pages.length, paragraphs: paragraphs.slice(i, i + perPage) });
     }
-    return pages.length ? pages : [{ index: 0, paragraphs }];
+    return pages;
   }
 
-  static _getXmlAttr(el, attr) {
-    if (!el) return null;
-    // HWPX 네임스페이스 포함 속성 처리
-    return el.getAttribute(attr)
-        || el.getAttribute(`hp:${attr}`)
-        || el.getAttribute(`hwp:${attr}`)
-        || null;
+  static _run(text) {
+    return {
+      text:      text || '',
+      bold:      false,
+      italic:    false,
+      underline: false,
+      fontSize:  11,
+      fontName:  'Malgun Gothic',
+      color:     '#000000',
+    };
   }
 
-  static _readUint16LE(bytes, offset) {
-    return bytes[offset] | (bytes[offset + 1] << 8);
+  static _u16(bytes, offset) {
+    return (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8);
   }
 
-  static _readUint32LE(bytes, offset) {
-    return (bytes[offset]
-          | (bytes[offset + 1] << 8)
-          | (bytes[offset + 2] << 16)
-          | (bytes[offset + 3] << 24)) >>> 0;
+  static _u32(bytes, offset) {
+    return (
+      ((bytes[offset]     ?? 0)       ) |
+      ((bytes[offset + 1] ?? 0) <<  8 ) |
+      ((bytes[offset + 2] ?? 0) << 16 ) |
+      ((bytes[offset + 3] ?? 0) << 24 )
+    ) >>> 0;
   }
+
+  // 하위 호환 별칭
+  static _readUint16LE(b, o) { return HwpParser._u16(b, o); }
+  static _readUint32LE(b, o) { return HwpParser._u32(b, o); }
 }
