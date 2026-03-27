@@ -56,6 +56,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
     await chrome.storage.session.set({
       pendingHwp: { b64, filename, ts: Date.now() }
     });
+    await addRecentFile(filename);
 
     // 뷰어 탭 열기
     chrome.tabs.create({ url: viewerBase + '?fromContext=1' });
@@ -69,7 +70,51 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
   }
 });
 
-/* ── 뷰어 탭에서 pendingHwp 데이터 요청 시 응답 ── */
+const MAX_LINKS = 100;
+const MAX_RECENTS = 20;
+
+async function mergeDiscoveredLinks(incomingLinks) {
+  if (!Array.isArray(incomingLinks) || incomingLinks.length === 0) return;
+
+  const normalized = incomingLinks
+    .map(link => ({
+      url: String(link?.url || '').trim(),
+      text: String(link?.text || '').trim(),
+      ts: Number(link?.ts) || Date.now(),
+    }))
+    .filter(link => /^https?:\/\//i.test(link.url) && /\.(hwp|hwpx)(?:$|\?)/i.test(link.url));
+
+  if (normalized.length === 0) return;
+
+  const { discoveredHwpLinks = [] } = await chrome.storage.local.get('discoveredHwpLinks');
+  const mergedMap = new Map();
+
+  for (const item of discoveredHwpLinks) {
+    if (!item?.url) continue;
+    mergedMap.set(item.url, item);
+  }
+  for (const item of normalized) {
+    mergedMap.set(item.url, item);
+  }
+
+  const merged = Array.from(mergedMap.values())
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .slice(0, MAX_LINKS);
+
+  await chrome.storage.local.set({ discoveredHwpLinks: merged });
+}
+
+async function addRecentFile(filename) {
+  const name = String(filename || '').trim();
+  if (!name) return;
+
+  const { recentHwpFiles = [] } = await chrome.storage.local.get('recentHwpFiles');
+  const filtered = recentHwpFiles.filter(item => item?.name !== name);
+  filtered.unshift({ name, ts: Date.now() });
+  await chrome.storage.local.set({ recentHwpFiles: filtered.slice(0, MAX_RECENTS) });
+}
+
+/* ── 뷰어/팝업/컨텐츠 스크립트 메시지 처리 ── */
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'GET_PENDING_HWP') {
     chrome.storage.session.get('pendingHwp').then(result => {
@@ -78,5 +123,42 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       chrome.storage.session.remove('pendingHwp');
     });
     return true; // 비동기 응답
+  }
+
+  if (msg.type === 'OPEN_HWP_FROM_POPUP') {
+    const { b64, filename } = msg.payload || {};
+    if (!b64 || !filename) {
+      sendResponse({ ok: false, error: '파일 데이터가 비어 있습니다.' });
+      return false;
+    }
+
+    (async () => {
+      await chrome.storage.session.set({ pendingHwp: { b64, filename, ts: Date.now() } });
+      await addRecentFile(filename);
+      await chrome.tabs.create({ url: chrome.runtime.getURL('pages/viewer.html?fromContext=1') });
+      sendResponse({ ok: true });
+    })().catch(err => {
+      sendResponse({ ok: false, error: err?.message || '파일 열기에 실패했습니다.' });
+    });
+
+    return true;
+  }
+
+  if (msg.type === 'SYNC_HWP_LINKS') {
+    mergeDiscoveredLinks(msg.links).then(() => {
+      sendResponse({ ok: true });
+    }).catch(err => {
+      sendResponse({ ok: false, error: err?.message || '링크 동기화 실패' });
+    });
+    return true;
+  }
+
+  if (msg.type === 'ADD_RECENT_HWP_FILE') {
+    addRecentFile(msg.filename).then(() => {
+      sendResponse({ ok: true });
+    }).catch(err => {
+      sendResponse({ ok: false, error: err?.message || '최근 파일 저장 실패' });
+    });
+    return true;
   }
 });

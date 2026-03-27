@@ -559,9 +559,35 @@ const HwpExporter = {
   },
 
   _dl(blob, name) {
-    const a = Object.assign(document.createElement('a'), { href:URL.createObjectURL(blob), download:name });
+    if (typeof window.showSaveFilePicker === 'function') {
+      this._saveWithPicker(blob, name).catch(() => {
+        this._downloadByAnchor(blob, name);
+      });
+      return;
+    }
+    this._downloadByAnchor(blob, name);
+  },
+
+  async _saveWithPicker(blob, name) {
+    const ext = (name.split('.').pop() || 'bin').toLowerCase();
+    const handle = await window.showSaveFilePicker({
+      suggestedName: name,
+      types: [{
+        description: 'HWP Viewer Export',
+        accept: {
+          [blob.type || 'application/octet-stream']: [`.${ext}`],
+        },
+      }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  },
+
+  _downloadByAnchor(blob, name) {
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
     a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href), 10000);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   },
 };
 
@@ -666,9 +692,12 @@ async function processBuffer(buffer, filename, sizeBytes) {
 
   state.doc = doc; state.filename = filename; state.mode = 'view'; state.currentPage = 0;
   HwpExporter.setFilename(filename);
+  if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+    chrome.runtime.sendMessage({ type: 'ADD_RECENT_HWP_FILE', filename }).catch(() => {});
+  }
 
   hideLoading();
-  renderDocument(doc);
+  renderHWP(doc);
   updateUiAfterLoad(filename, sizeBytes);
 }
 
@@ -792,6 +821,10 @@ function renderDocument(doc) {
   });
 
   updateStatusBar();
+}
+
+function renderHWP(data) {
+  renderDocument(data);
 }
 
 function scrollToPage(pi) {
