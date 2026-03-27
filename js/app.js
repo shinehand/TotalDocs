@@ -145,28 +145,30 @@ const HwpParser = {
         console.log('[HWP] 일반 스트림: off=%d', off);
       }
 
-      // 오프셋이 범위를 벗어나면 반대 방식으로 재시도
+      // 오프셋 범위 검사 — 잘못된 오프셋이면 즉시 null 반환 (재시도 없음)
+      // 재시도 로직이 엉뚱한 데이터를 읽어 깨진 텍스트를 반환하는 문제 방지
       if (off < 0 || off >= b.length) {
-        console.warn('[HWP] 오프셋(%d) 범위 초과 → 반대 방식 재시도', off);
-        if (streamSz < miniCutoff) {
-          off = (startSec + 1) * ss;  // 미니 실패 → 일반 재시도
-        } else {
-          off = miniContainerOff > 0 ? miniContainerOff + startSec * 64 : -1; // 일반 실패 → 미니 재시도
-        }
-        if (off < 0 || off >= b.length) return null;
-        end = off + streamSz;
+        console.warn('[HWP] 오프셋(%d) 범위 초과 (fileLen=%d) → null 반환, _scanKoreanText로 위임', off, b.length);
+        return null;
       }
-      end = Math.min(end, b.length);
+      end = Math.min(off + streamSz, b.length);
 
       const raw  = b.slice(off, end);
       const text = new TextDecoder('utf-16le').decode(raw);
-      // 유효한 텍스트인지 간단 검증 (절반 이상이 제어문자면 폐기)
-      const printable = [...text].filter(c => c.charCodeAt(0) >= 0x20 || c === '\n' || c === '\r').length;
-      if (printable < text.length * 0.4) {
-        console.warn('[HWP] 디코딩 결과가 이진 데이터처럼 보임 — 폐기 (printable=%d/%d)', printable, text.length);
+
+      // 유효성 검증: 한글 + 출력 가능 문자가 60% 이상이어야 함
+      let korean = 0, printable = 0;
+      for (const c of text) {
+        const cp = c.charCodeAt(0);
+        if (cp >= 0xAC00 && cp <= 0xD7A3) { korean++; printable++; }
+        else if (cp >= 0x20 || cp === 10 || cp === 13) printable++;
+      }
+      const ratio = text.length > 0 ? printable / text.length : 0;
+      if (ratio < 0.6 || korean < 3) {
+        console.warn('[HWP] PrvText 품질 불량 (printable=%.0f%%, korean=%d) → 폐기', ratio*100, korean);
         return null;
       }
-      console.log('[HWP] PrvText 디코딩 완료: %d 글자 (유효율 %d%%)', text.length, Math.round(printable/text.length*100));
+      console.log('[HWP] PrvText 추출 성공: %d글자 (한글 %d, 유효율 %.0f%%)', text.length, korean, ratio*100);
       return text;
     }
 
@@ -180,7 +182,7 @@ const HwpParser = {
    * 한글·영문 출력 가능 문자가 연속으로 이어지는 가장 긴 블록을 반환.
    */
   _scanKoreanText(b) {
-    let bestStart = -1, bestLen = 0;
+    let bestStart = -1, bestLen = 0, bestRawLen = 0;
     let runStart  = -1, runLen  = 0;
     let koreanInRun = 0;
 
@@ -195,9 +197,11 @@ const HwpParser = {
     const isKorean = cp => cp >= 0xAC00 && cp <= 0xD7A3;
 
     const flush = () => {
-      // 최소 30자 이상이고 한글이 5자 이상인 블록만 후보로
-      if (runLen >= 60 && koreanInRun >= 10) {
-        if (runLen > bestLen) { bestStart = runStart; bestLen = runLen; }
+      // 최소 100바이트(50글자) 이상 & 한글 비율 20% 이상 블록만 후보
+      if (runLen >= 100 && koreanInRun >= runLen / 10) {
+        // 한글 비율이 높은 블록 우선 (길이 × 한글비율 점수)
+        const score = runLen * (koreanInRun / (runLen / 2));
+        if (score > bestLen) { bestStart = runStart; bestLen = score; bestRawLen = runLen; }
       }
       runStart = -1; runLen = 0; koreanInRun = 0;
     };
@@ -215,9 +219,9 @@ const HwpParser = {
     flush();
 
     if (bestStart < 0) { console.warn('[HWP] 한글 텍스트 블록을 찾지 못했습니다.'); return null; }
-    const raw = b.slice(bestStart, bestStart + bestLen);
+    const raw = b.slice(bestStart, bestStart + bestRawLen);
     const text = new TextDecoder('utf-16le').decode(raw);
-    console.log('[HWP] 한글 텍스트 스캔 성공: %d 글자 (한글 %d자)', text.length, koreanInRun);
+    console.log('[HWP] 한글 텍스트 스캔 성공: 오프셋=%d 길이=%d', bestStart, text.length);
     return text;
   },
 
