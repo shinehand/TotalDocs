@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "HWP Web Viewer & Editor",
+  "version": "1.0.0",
+  "description": "브라우저에서 HWP(한글) 파일을 열람하고 편집하는 확장 프로그램",
+  "icons": {
+    "16":  "icons/icon16.png",
+    "32":  "icons/icon32.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "action": {
+    "default_title": "HWP 뷰어 열기",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "32":  "icons/icon32.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "permissions": [
+    "downloads",
+    "tabs"
+  ],
+
+  "host_permissions": [],
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["pages/*", "css/*", "js/*", "lib/*", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
