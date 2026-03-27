@@ -100,13 +100,13 @@ const HwpParser = {
                 ss, miniCutoff, dirBase, rootStartSec, miniContainerOff);
 
     // ─────────────────────────────────────────────────────
-    // 디렉토리 섹터 스캔으로 "PrvText" 엔트리 탐색
-    //   dirBase 이후 최대 8섹터 범위만 탐색 (파일 전체 스캔 방지)
+    // 파일 전체 128바이트 단위 스캔으로 "PrvText" 디렉토리 엔트리 탐색
+    //   디렉토리 섹터가 비연속(FAT 체인)이어도 반드시 찾을 수 있도록
+    //   512 바이트(헤더) 이후부터 파일 끝까지 전체 탐색
     // ─────────────────────────────────────────────────────
-    const PAT  = [0x50,0x00,0x72,0x00,0x76,0x00,0x54,0x00,0x65,0x00,0x78,0x00,0x74,0x00];
-    const limit = Math.min(dirBase + ss * 8, b.length - 128);
+    const PAT = [0x50,0x00,0x72,0x00,0x76,0x00,0x54,0x00,0x65,0x00,0x78,0x00,0x74,0x00];
 
-    for (let pos = dirBase; pos <= limit; pos += 128) {
+    for (let pos = 512; pos + 128 <= b.length; pos += 128) {
       const nl = HwpParser._u16(b, pos + 64);
       // "PrvText" = 7글자 × 2 + null 2바이트 = 16
       if (nl !== 16) continue;
@@ -139,14 +139,28 @@ const HwpParser = {
         console.log('[HWP] 일반 스트림: off=%d', off);
       }
 
+      // 오프셋이 범위를 벗어나면 반대 방식으로 재시도
       if (off < 0 || off >= b.length) {
-        console.warn('[HWP] 스트림 오프셋(%d) 범위 초과 (파일크기=%d)', off, b.length);
-        return null;
+        console.warn('[HWP] 오프셋(%d) 범위 초과 → 반대 방식 재시도', off);
+        if (streamSz < miniCutoff) {
+          off = (startSec + 1) * ss;  // 미니 실패 → 일반 재시도
+        } else {
+          off = miniContainerOff > 0 ? miniContainerOff + startSec * 64 : -1; // 일반 실패 → 미니 재시도
+        }
+        if (off < 0 || off >= b.length) return null;
+        end = off + streamSz;
       }
       end = Math.min(end, b.length);
 
-      const text = new TextDecoder('utf-16le').decode(b.slice(off, end));
-      console.log('[HWP] PrvText 디코딩 완료: %d 글자', text.length);
+      const raw  = b.slice(off, end);
+      const text = new TextDecoder('utf-16le').decode(raw);
+      // 유효한 텍스트인지 간단 검증 (절반 이상이 제어문자면 폐기)
+      const printable = [...text].filter(c => c.charCodeAt(0) >= 0x20 || c === '\n' || c === '\r').length;
+      if (printable < text.length * 0.4) {
+        console.warn('[HWP] 디코딩 결과가 이진 데이터처럼 보임 — 폐기 (printable=%d/%d)', printable, text.length);
+        return null;
+      }
+      console.log('[HWP] PrvText 디코딩 완료: %d 글자 (유효율 %d%%)', text.length, Math.round(printable/text.length*100));
       return text;
     }
 
