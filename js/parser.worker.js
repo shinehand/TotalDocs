@@ -106,19 +106,35 @@ function scanDirEntries(b, names) {
    zlib 압축 해제 (DecompressionStream API)
 ════════════════════════════════════════════════════════ */
 async function decompressZlib(data) {
+  const timeoutMs = 8000;
+  let timeoutId = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('zlib 압축 해제 시간 초과 (8초)')), timeoutMs);
+  });
+
   // HWP는 RFC 1950 zlib 형식 사용 → 'deflate' 모드 (헤더 포함)
   const ds = new DecompressionStream('deflate');
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
 
-  await writer.write(data);
-  await writer.close();
-
   const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
+  try {
+    const decodePromise = (async () => {
+      await writer.write(data);
+      await writer.close();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+    })();
+
+    await Promise.race([decodePromise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    try { reader.releaseLock(); } catch {}
+    try { writer.releaseLock(); } catch {}
   }
 
   const total = chunks.reduce((s, c) => s + c.length, 0);

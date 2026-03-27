@@ -156,17 +156,36 @@ const HwpParser = {
 
   /* ── zlib 압축 해제 ── */
   async _decompressZlib(data) {
+    const timeoutMs = 8000;
+    let timeoutId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('zlib 압축 해제 시간 초과 (8초)')), timeoutMs);
+    });
+
     const ds = new DecompressionStream('deflate');
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
-    await writer.write(data);
-    await writer.close();
+
     const chunks = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
+    try {
+      const decodePromise = (async () => {
+        await writer.write(data);
+        await writer.close();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+      })();
+
+      await Promise.race([decodePromise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      try { reader.releaseLock(); } catch {}
+      try { writer.releaseLock(); } catch {}
     }
+
     const total = chunks.reduce((s, c) => s + c.length, 0);
     const out = new Uint8Array(total);
     let off = 0;
@@ -652,7 +671,7 @@ function parseWithWorker(buffer, filename) {
     }
 
     timer = setTimeout(() => {
-      finish(() => reject(new Error('파싱 시간 초과: Worker 처리 제한(30초)을 초과했습니다.')));
+      finish(() => reject(new Error('파싱 시간 초과: Worker 처리 제한(30초)')));
     }, WORKER_TIMEOUT_MS);
 
     worker.onmessage = ({ data }) => {
