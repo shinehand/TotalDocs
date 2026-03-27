@@ -335,6 +335,10 @@ const HwpParser = {
       .map(line => ({ align: 'left', texts: [HwpParser._run(line)] }));
   },
 
+  /**
+   * BodyText 구조 레코드 파싱이 실패했을 때 UTF-16LE 텍스트 덩어리를 휴리스틱하게 복구합니다.
+   * 한글이 1글자 이상 포함된 연속 블록만 후보로 삼아, 바이너리 노이즈보다 실제 본문을 우선 선택합니다.
+   */
   _scanUtf16TextBlock(data, startOffset = 0, minRawLen = 20) {
     let bestStart = -1, bestScore = 0, bestRawLen = 0;
     let runStart = -1, runLen = 0, koreanInRun = 0;
@@ -377,6 +381,10 @@ const HwpParser = {
     return new TextDecoder('utf-16le').decode(data.slice(bestStart, bestStart + bestRawLen));
   },
 
+  /**
+   * 섹션 스트림을 raw/deflated 양쪽으로 시도한 뒤, 구조 레코드가 안 맞으면 UTF-16 텍스트 블록 복구까지 수행합니다.
+   * 그래도 유의미한 본문을 찾지 못한 경우에만 빈 결과를 반환해 상위 단계에서 PrvText fallback 으로 넘어가게 합니다.
+   */
   async _extractSectionParas(data, compressedHint, sectionName) {
     const attempts = [];
     const pushAttempt = (mode, bytes) => {
@@ -639,6 +647,11 @@ const HwpParser = {
              fontSize:11, fontName:'Malgun Gothic', color:'#000000' };
   },
 
+  /**
+   * HWP PARA_TEXT 제어문자의 소비 길이입니다.
+   * 이 파서에서는 문단 내부 inline/extended control 을 16바이트, 일반 제어문자를 2바이트로 소비해
+   * 실제 본문 텍스트를 과도하게 건너뛰지 않도록 맞춥니다.
+   */
   _getParaTextControlSize(ch) {
     switch (ch) {
       case 0x0001:

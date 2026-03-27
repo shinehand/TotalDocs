@@ -306,6 +306,10 @@ function paragraphsFromText(text) {
     .map(line => ({ align: 'left', texts: [run(line)] }));
 }
 
+/**
+ * BodyText 구조 레코드가 깨졌을 때 UTF-16LE 텍스트 덩어리를 휴리스틱하게 복구합니다.
+ * 한글이 1글자 이상 포함된 연속 블록을 우선 선택해 바이너리 노이즈보다 실제 본문 후보를 고릅니다.
+ */
 function scanUtf16TextBlock(data, startOffset = 0, minRawLen = 20) {
   let bestStart = -1, bestScore = 0, bestRawLen = 0;
   let runStart = -1, runLen = 0, koreanInRun = 0;
@@ -348,6 +352,7 @@ function scanUtf16TextBlock(data, startOffset = 0, minRawLen = 20) {
   return new TextDecoder('utf-16le').decode(data.slice(bestStart, bestStart + bestRawLen));
 }
 
+/** HWP PARA_TEXT 제어문자의 소비 길이: 이 파서에서는 inline/extended control 을 16바이트, 일반 제어문자를 2바이트로 처리합니다. */
 function getParaTextControlSize(ch) {
   switch (ch) {
     case 0x0001:
@@ -374,6 +379,10 @@ function getParaTextControlSize(ch) {
   }
 }
 
+/**
+ * 섹션 스트림을 raw/deflated 양쪽으로 구조 파싱하고, 모두 실패하면 UTF-16 텍스트 블록 복구까지 시도합니다.
+ * 그래도 본문 후보가 없을 때만 빈 배열을 반환해 상위 단계가 PrvText fallback 으로 넘어가게 합니다.
+ */
 async function extractSectionParas(data, compressedHint, sectionName) {
   const attempts = [];
   const pushAttempt = (mode, bytes) => {
