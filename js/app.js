@@ -630,6 +630,18 @@ const state = { doc:null, filename:'', mode:'view', currentPage:0 };
 function parseWithWorker(buffer, filename) {
   return new Promise((resolve, reject) => {
     let worker;
+    let timer = null;
+    let settled = false;
+    const WORKER_TIMEOUT_MS = 30_000; // 30초
+
+    const finish = (handler) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (worker) worker.terminate();
+      handler();
+    };
+
     try {
       const workerUrl = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
         ? chrome.runtime.getURL('js/parser.worker.js')
@@ -639,30 +651,34 @@ function parseWithWorker(buffer, filename) {
       return reject(e);
     }
 
+    timer = setTimeout(() => {
+      finish(() => reject(new Error('파싱 시간 초과: Worker 처리 제한(30초)을 초과했습니다.')));
+    }, WORKER_TIMEOUT_MS);
+
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') {
         showLoading(data.msg);
       } else if (data.type === 'done') {
-        worker.terminate();
-        resolve(data.doc);
+        finish(() => resolve(data.doc));
       } else if (data.type === 'error') {
-        worker.terminate();
-        reject(new Error(data.message));
+        finish(() => reject(new Error(data.message)));
       } else if (data.type === 'fallback_main') {
         // Worker가 HWPX를 JSZip 없이 파싱 못함 → 메인 스레드에서 처리
-        worker.terminate();
-        console.log('[APP] Worker fallback → 메인 스레드 파싱');
-        HwpParser.parse(buffer.slice(0), filename)
-          .then(resolve).catch(reject);
+        finish(() => {
+          console.log('[APP] Worker fallback → 메인 스레드 파싱');
+          HwpParser.parse(buffer.slice(0), filename)
+            .then(resolve).catch(reject);
+        });
       }
     };
     worker.onerror = (e) => {
-      worker.terminate();
-      reject(new Error('Worker 오류: ' + e.message));
+      finish(() => reject(new Error('Worker 오류: ' + e.message)));
     };
 
-    // buffer를 전송(transfer)하여 복사 비용 제거
-    worker.postMessage({ buffer, filename }, [buffer]);
+    // slice(0)로 ArrayBuffer 전체 복사본을 만들어 worker에만 transfer합니다.
+    // 원본 buffer는 detatch되지 않아 worker 타임아웃/실패 시 메인 스레드 fallback 파싱에 그대로 사용됩니다.
+    const workerBuffer = buffer.slice(0);
+    worker.postMessage({ buffer: workerBuffer, filename }, [workerBuffer]);
   });
 }
 
