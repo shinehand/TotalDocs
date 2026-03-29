@@ -1,0 +1,470 @@
+# Work Log
+
+## 2026-03-27
+
+- 요청: 프로젝트 분석 및 문제 여부 점검
+- 범위: `manifest.json`, `background.js`, `pages/viewer.html`, `js/app.js`, `popup.js`, `sidepanel.js`, `content_script.js`, 보조 모듈/스타일
+- 수행:
+  - 저장소 구조 및 변경 상태 확인
+  - 주요 스크립트 정적 검토
+  - `node --check`로 JS 구문 점검
+- 확인한 핵심 이슈:
+  - 뷰어에서 파일을 연 직후 내보내기 버튼을 누르면 빈 결과물이 생성될 수 있음
+  - 편집 후 보기 모드로 돌아가면 수정 내용이 뷰어에 반영되지 않음
+  - `default_popup`이 설정된 상태라 `chrome.action.onClicked`로 등록한 새 탭 열기 동작은 실행되지 않음
+- 추가 대응:
+  - HWP `BodyText` 파서의 제어문자 해석을 수정함
+  - 잘못 2바이트 문자처럼 읽던 `0x0002`, `0x0006`, `0x0009` 계열 처리 보정
+  - 수정 파일: `js/app.js`, `js/parser.worker.js`
+  - 샘플 문서 `/Users/shinehandmac/Downloads/고엽제등록신청서.hwp` 로 재현 확인
+  - 추가 원인 확인: CFB 헤더 오프셋을 잘못 읽어 `dirStartSec`를 `0x2C`에서 가져오고 있었음
+  - 수정 후 샘플에서 `BodyText/Section0` 탐색 및 119개 문단 추출 확인
+  - 추가 보정: 압축 섹션에서 `deflated` 결과가 있으면 `raw` 텍스트 스캔으로 되돌아가지 않도록 조정
+  - 기대 효과: 5~30KB 문서에서 불필요한 섹션 재스캔 감소, 잡문자 후보 선택 방지
+- 추가 보정: `DecompressionStream` 의존을 줄이고 `pako` 기반 raw deflate 해제로 전환
+- 반영 파일: `lib/pako.min.js`, `pages/viewer.html`, `js/app.js`, `js/parser.worker.js`
+- 추가 대응: HWP `tbl ` 제어 레코드를 파싱해 표/셀 구조를 블록 형태로 복원
+- 반영 내용:
+  - `js/app.js`, `js/parser.worker.js`에 표 메타/셀/문단 파서 추가
+  - 뷰어 렌더러를 문단 전용에서 표 블록까지 처리하도록 확장
+  - Quill 편집기 로딩 시 표를 탭 구분 텍스트로 펼쳐 편집 가능하게 보정
+  - `css/viewer.css`에 신청서 양식용 표 스타일 추가
+  - 큰 표를 행 단위로 분할하는 페이지네이션 로직 추가
+- 검증:
+  - Playwright로 `http://127.0.0.1:4173/pages/viewer.html` 직접 열어 샘플 문서 업로드
+  - 샘플 `/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-hwp/test-input.hwp` 기준 표가 실제 칸 형태로 렌더링되는 것 확인
+  - 페이지 수가 `3페이지`로 정리되고 첫 페이지에 머리 문단과 표가 함께 배치되는 것 확인
+  - 검증 아티팩트: `.playwright-cli/page-2026-03-27T14-43-00-311Z.yml`, `.playwright-cli/page-2026-03-27T14-43-23-350Z.png`
+
+## 2026-03-29
+
+- 요청: 멀티 에이전트 방식으로 다음 고도화 방향을 잡고, 핵심 기능부터 개발 진행
+- 역할 구성:
+  - 기획 리더 1명 + 기획 연구원 3명으로 현재 상태/우선순위/리스크 조사
+  - 개발 리더 1명 + 개발자 2명으로 핵심 기능과 추가 기능 분리 후 구현 착수
+- 기획 결론:
+  - `P0 핵심`: 보기·편집·내보내기 상태 통합
+  - `P0 핵심`: 표/양식 충실도 유지 및 안정화
+  - `P1 이후`: 서식 복원 확장, 파서 공용화, 비텍스트 요소, 회귀 체계
+- 이번 스프린트에서 반영한 내용:
+  - `js/app.js`
+    - 보기 모드에서도 현재 문서 기준 HTML/PDF/HWPX 내보내기 가능하도록 정리
+    - 편집 후 보기 모드로 돌아가면 편집 결과를 `editedDoc/editedDelta` 기반으로 다시 렌더링
+    - 파싱 실패/오류 문서는 편집/내보내기 버튼을 자동 비활성화
+  - `background.js`, `popup.html`, `popup.js`
+    - `default_popup` 중심 UX로 정리하고 `chrome.action.onClicked` 충돌 제거
+    - 컨텍스트 메뉴 `targetUrlPatterns`를 루트/쿼리/해시 링크까지 확장
+    - 원격 링크 열기 공통 함수 추가 및 최근 파일 메타데이터 `{name,url,source,ts}` 저장
+    - 팝업에 최근 파일 목록 UI 및 원격 링크 `다시 열기` 동작 추가
+  - 추가 보정:
+    - `background.js`의 HWP 링크 정규식과 파일명 추출이 `#hash` 링크도 정상 처리하도록 수정
+- 검증:
+  - `node --check js/app.js`
+  - `node --check js/parser.worker.js`
+  - `node --check background.js`
+  - `node --check popup.js`
+  - Playwright로 `http://127.0.0.1:4174/pages/viewer.html` 검증
+    - 정상 샘플 업로드 시 `3페이지` 렌더링 유지
+    - `getCurrentDocumentHtml().length = 27086`으로 보기 모드 즉시 내보내기 소스 비어 있지 않음 확인
+    - 편집 모드에서 `테스트메모` 삽입 후 보기 모드 복귀 시 본문/내보내기 HTML에 반영되는 것 확인
+    - 잘못된 샘플 `output/playwright/invalid.hwp` 업로드 시 편집/HTML 저장 버튼이 `disabled=true` 로 잠기고 오류 문구가 노출되는 것 확인
+- 메모:
+  - 편집 후 보기 반영은 현재 Quill delta를 문단 블록으로 재구성하는 방식이라, 편집 이후에는 원본 표/페이지 구조가 단순화될 수 있음
+  - 다음 우선순위는 표의 border/fill/padding 충실도, 문자/문단 서식 복원, 파서 공용화 순서가 적절함
+- 요청: 개발팀 4명 방식으로 원본 서식에 더 가깝게 첫 페이지 양식을 미세 조정
+- 역할 분담:
+  - 개발자 2명: 렌더링/CSS 미세 조정 방향 도출
+  - 탐색 2명: 현재 스크린샷과 실제 신청서 양식 차이 분석
+- 반영한 내용:
+  - `js/app.js`
+    - 첫 페이지 첫 표에 한해 신청서 전용 정규화 로직 추가
+    - 제목/체크박스가 한 셀에 합쳐진 경우 `title-block` 전용 그리드로 재렌더링
+    - `①~③`, `④~⑦`이 한 줄에 과도하게 합쳐진 행을 서식형 2줄 구조로 분리
+    - `field-label`, `field-input`, `field-inline-note` 역할을 부여해 레이블 폭과 정렬을 안정화
+    - 제목행 최소 높이 계산을 줄여 상단 공백을 축소
+  - `css/viewer.css`
+    - 신청서 전용 제목 그리드, 옵션 줄 간격, 필드 라벨 폰트 크기/행간 보정
+    - `person-form`, `military-form` 계열 행의 상하 패딩과 세로 정렬을 원본 양식에 가깝게 조정
+  - `HwpExporter._wrap()` 내보내기용 인라인 CSS도 동일한 스타일 규칙으로 동기화
+  - 추가 미세 보정:
+    - 제목행의 불필요한 빈 줄을 제거하고 `rowSpan`을 2행 기준으로 보정
+    - 문서 내부 폰트 스택을 한글 문서용 serif 계열 우선으로 조정
+    - `⑧질병명` 행을 `1/2/3` 구조로 재정렬하고 `4.` 칸을 제거
+    - `⑬고엽제후유(의)증 환자 등과의 관계` 헤더 폭을 넓혀 2행 중심으로 정리
+    - `90일`, `①성명`, `③주소`, `⑤계급`, `⑥군별`, `⑦군번`, `⑭성명`, `⑮주민등록번호` 표기를 정규화
+- 검증:
+  - `node --check js/app.js`
+  - `node --check js/parser.worker.js`
+  - `node --check background.js`
+  - `node --check popup.js`
+  - Playwright로 `http://127.0.0.1:4174/pages/viewer.html` 에 샘플 업로드 재검증
+    - 제목행이 `등록신청서 + 체크박스 3줄 + 처리기간` 구조로 분리되어 보이는 것 확인
+    - `①성명/②주민등록번호` 와 `③주소`, `④입대일자/⑤계급`, `⑥군별/⑦군번`이 분리된 행으로 렌더링되는 것 확인
+    - `⑧질병명` 행이 `1/2/3` 구조로 정리되고, 가족사항 헤더 폭이 완화된 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T02-48-17-102Z.png`
+
+- 요청: HWP/HWPX 어떤 계열 파일도 더 안정적으로 열리도록 일반화하고, 실제 샘플 `.hwp` / `.hwpx` 파일로 다시 검증
+- 반영한 내용:
+  - `js/app.js`
+    - HWPX 셀 안의 중첩 표를 더 이상 평문으로 눌러버리지 않고 블록 구조로 유지
+    - HWPX의 큰 레이아웃용 외곽 표를 문단 흐름 + 실제 표 블록으로 선형화하는 휴리스틱 추가
+    - `Ⅰ / Ⅱ / Ⅲ ...` 같은 구획 제목 행은 단락형 헤더로 정리하고, 실제 다열 행은 작은 표 블록으로 유지
+    - HWPX 표 행 높이를 원본 raw height 대신 내용 기반 weight로 다시 계산해 과도한 페이지 분리를 줄임
+    - 셀 내부에 중첩 표가 남아 있을 때 렌더러가 재귀적으로 표를 그릴 수 있도록 확장
+    - HWPX 표 렌더링 시 높이 스케일을 별도로 적용해 긴 본문이 한 행 때문에 비정상적으로 커지지 않도록 조정
+  - `css/viewer.css`
+    - 셀 내부 중첩 표 렌더링용 `.hwp-table-nested` 여백 규칙 추가
+  - `HwpExporter._wrap()` 인라인 스타일도 동일한 중첩 표 규칙으로 동기화
+- 검증:
+  - `node --check js/app.js`
+  - Playwright로 `http://127.0.0.1:4174/pages/viewer.html` 실파일 업로드 검증
+    - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/inputs/goyeopje.hwp`
+      - `3페이지` 유지
+      - 첫 페이지 신청서 양식이 표/칸 구조로 유지되는 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T03-19-47-101Z.png`
+    - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/inputs/incheon-2a.hwpx`
+      - 이전 `28페이지` 수준으로 과분할되던 상태에서 `5페이지`로 안정화
+      - 첫 페이지에 제목과 공급위치/공급대상/안내 블록이 함께 배치되는 것 확인
+      - 3페이지에서 `공급규모/공급대상` 구간의 실제 다열 표가 다시 표 형태로 렌더링되는 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T03-20-09-878Z.png`, `.playwright-cli/page-2026-03-29T03-20-34-461Z.png`
+- 메모:
+  - HWPX는 문서마다 레이아웃용 표 사용 방식이 달라서, 현재는 `본문 흐름용 큰 표`와 `실제 정보 표`를 분리하는 휴리스틱 기반 대응까지 반영된 상태
+  - 남은 고도화 포인트는 `borderFill 실선/굵기/배경색 반영`, `문단 정렬/들여쓰기`, `도형/이미지 앵커 배치` 복원
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWPX `Contents/header.xml`을 읽어 `borderFill`, `paraPr`, `charPr`, 한글 폰트 정보를 파싱
+    - HWPX 문단에 정렬/들여쓰기/문단 간격/줄간격을 반영하고, 글자 크기/굵기/색상/폰트를 run 스타일로 적용
+    - HWPX 셀의 `borderFillIDRef`를 실제 CSS border/background로 매핑해 표 선 굵기와 색 차이를 반영
+    - 새 파일 로드 시 뷰어 스크롤과 상태바 페이지 번호를 첫 페이지로 리셋해 이전 문서 위치가 남지 않도록 수정
+- 재검증:
+  - `node --check js/app.js`
+  - Playwright 재검증
+    - HWPX 첫 페이지 제목이 `HY헤드라인M` 계열 굵은 글꼴로 반영되고, 표 선이 문서 메타 기반 두께/색으로 적용되는 것 확인
+    - HWPX 검증 아티팩트: `.playwright-cli/page-2026-03-29T04-52-44-807Z.png`
+    - HWP 샘플 재업로드 시 상태바가 `1 / 3 페이지`로 초기화되는 것 확인
+- 메모:
+  - 현재 단계부터는 내용 파싱뿐 아니라 HWPX 헤더 스타일을 일부 반영하는 상태
+  - 남은 우선순위는 `문단별 스타일 세분화(목차/표제/주석)`, `HWP 쪽 borderFill 정의 복원`, `도형/이미지 위치 복원`
+
+- 추가 미세 보정:
+  - `js/app.js`
+    - HWPX 문단의 선행 공백을 정리하고, 큰 글자 + 굵은 제목 문단은 가운데 정렬/제로 들여쓰기로 자동 정리
+    - 가운데/오른쪽 정렬 문단에는 좌측 패딩/들여쓰기를 강제로 넣지 않도록 렌더링 보정
+- 재검증:
+  - `node --check js/app.js`
+  - Playwright로 `incheon-2a.hwpx` 재검증
+    - 첫 페이지 제목 2줄의 `text-align`이 모두 `center` 로 반영되는 것 확인
+    - 상태바가 `1 / 5 페이지`에서 시작하는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T06-35-49-639Z.png`
+
+- 추가 확장:
+  - `js/app.js`
+    - HWPX `pic`를 실제 이미지 블록으로 파싱하고 `BinData/*` 자원을 data URL로 연결
+    - HWPX 문단을 단일 문자열이 아니라 run 배열로 보존하도록 바꿔 혼합 글자 스타일 손실을 줄임
+    - 이미지 블록을 보기/HTML 내보내기/표 셀 내부 렌더링 경로까지 연결
+    - 로고처럼 작은 상단 이미지가 페이지를 과하게 밀지 않도록 이미지 weight 계산을 조정
+- 재검증:
+  - `node --check js/app.js`
+  - Playwright로 `incheon-2a.hwpx` 재검증
+    - 이미지 블록이 실제 DOM `img.hwp-image` 로 렌더링되는 것 확인
+    - 첫 페이지가 다시 `로고 + 제목 + 공급위치/공급대상/안내 본문` 흐름으로 묶이고 전체가 `5페이지`로 유지되는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T06-47-21-182Z.png`
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWPX `secPr/visibility`, `header/footer applyPageType`, `pageNum`, `newNum(numType=PAGE)` 를 읽어 페이지별 헤더/푸터/쪽번호를 계산하도록 확장
+    - 헤더/푸터를 단순 복제가 아니라 `BOTH/ODD/EVEN/FIRST` 규칙으로 페이지별로 선택하도록 정리
+    - 쪽번호를 `- 1 -` 형태의 실제 footer 문단으로 생성해 DOM/HTML 내보내기에 같이 반영
+    - 뷰어/HTML 내보내기 모두 `header/body/footer` 영역 래퍼를 두고 footer가 페이지 하단으로 정렬되도록 보정
+    - 문단 렌더러가 `para.role` 을 직접 인식하도록 바꿔 synthetic page-number 스타일을 붙일 수 있게 수정
+  - `css/viewer.css`
+    - `.hwp-page-header`, `.hwp-page-body`, `.hwp-page-footer`, `.hwp-page-number` 규칙 추가
+- 재검증:
+  - `node --check js/app.js`
+  - `node --check js/parser.worker.js`
+  - Playwright로 `http://127.0.0.1:4174/pages/viewer.html` 재검증
+    - `incheon-2a.hwpx`
+      - 첫 페이지에 헤더 슬로건 이미지 + 본문 로고/제목/공급안내가 함께 유지되는 것 확인
+      - DOM snapshot에 footer 쪽번호 `- 1 -` 이 생성되는 것 확인
+      - 전체 페이지 수가 계속 `5페이지` 인 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T07-00-59-430Z.png`, `.playwright-cli/page-2026-03-29T07-00-59-276Z.yml`
+    - `goyeopje.hwp`
+      - 첫 페이지 신청서 표 구조와 `3페이지` 상태가 유지되는 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T07-01-29-274Z.png`, `.playwright-cli/page-2026-03-29T07-01-29-215Z.yml`
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWPX에서 `border/fill/gradient` 가 있는 1셀 표를 더 이상 문단으로 평탄화하지 않도록 바꿔 제목 밴드/장식선 보존
+    - `table/cell` 의 시각적 존재 여부를 텍스트뿐 아니라 border/fill 기준으로도 판단하도록 수정
+    - `renderDocument()` 에도 HWPX 페이지 스타일 적용을 연결해 브라우저 렌더와 HTML 내보내기 동작을 일치시킴
+    - `pageBorderFill` 참조를 실제 `borderFill` 정의와 연결해 페이지 메타를 더 정확히 유지
+    - `ODD/EVEN/FIRST/BOTH` 페이지 장식 우선순위 계산을 보정
+- 재검증:
+  - `node --check js/app.js`
+  - Playwright로 `incheon-2a.hwpx`, `goyeopje.hwp` 재검증
+    - `incheon-2a.hwpx`
+      - 첫 페이지 제목 영역이 다시 표/밴드 형태로 렌더링되고, 연분홍 장식선/배경이 살아난 것 확인
+      - DOM snapshot 에 footer 쪽번호 `- 1 -` 이 계속 유지되는 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T07-05-46-407Z.png`, `.playwright-cli/page-2026-03-29T07-06-33-382Z.yml`
+    - `goyeopje.hwp`
+      - 3페이지 상태와 첫 페이지 신청서 표 구조가 그대로 유지되는 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T07-06-01-938Z.png`
+
+- 추가 미세 조정:
+  - `js/app.js`
+    - HWPX `pic/pos` 의 `horzOffset`, `vertOffset` 을 inline/block 이미지 렌더 스타일에 반영
+    - 큰 offset 을 가진 헤더 이미지가 완전히 사라지지 않도록 오른쪽 정렬 해석을 추가
+- 재검증:
+  - `node --check js/app.js`
+  - Playwright로 `incheon-2a.hwpx` 재검증
+    - 첫 페이지 상단 슬로건 이미지가 일부라도 실제 화면에 드러나고, 로고/제목/핑크 밴드 구조는 유지되는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T09-16-56-432Z.png`
+
+- 추가 미세 조정:
+  - `js/app.js`
+    - 큰 `horzOffset` 을 가진 HWPX 헤더 이미지를 오른쪽 정렬 레이아웃으로 해석해 상단 슬로건이 완전히 잘리지 않도록 보정
+- 재검증:
+  - `node --check js/app.js`
+  - Playwright로 `incheon-2a.hwpx` 재검증
+    - 첫 페이지 상단 슬로건 이미지가 전체 문구로 노출되고, 핑크 타이틀 밴드/푸터 쪽번호가 계속 유지되는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T09-18-52-168Z.png`
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWP 바이너리 `DocInfo` 스트림에서 `HWPTAG_BORDER_FILL` 레코드를 읽어 표 셀의 `borderFillId` 와 연결
+    - HWP `COLORREF`, 테두리선 종류, 굵기, 단색/그라데이션 채우기를 CSS 친화적인 `borderStyle` 형태로 정규화
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 `DocInfo borderFill` 파서를 추가해 메인/워커 결과 차이를 제거
+    - `BodyText -> table cell` 파싱 시 `borderFillId` 를 실제 셀 테두리/배경 스타일로 반영
+- 재검증:
+  - `node --check js/app.js`
+  - `node --check js/parser.worker.js`
+  - Playwright로 `goyeopje.hwp`, `incheon-2a.hwpx` 재검증
+    - `goyeopje.hwp`
+      - 신청서 첫 페이지가 `DocInfo` 기반 선 굵기/외곽선 강약을 가진 표 형태로 유지되는 것 확인
+      - 전체 페이지 수가 계속 `3페이지` 인 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T09-28-47-405Z.png`, `.playwright-cli/page-2026-03-29T09-28-38-550Z.yml`
+    - `incheon-2a.hwpx`
+      - 상단 슬로건/핑크 타이틀 밴드/공급안내/푸터 쪽번호가 계속 유지되고, 전체가 `5페이지`로 안정적인 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T09-29-08-361Z.png`, `.playwright-cli/page-2026-03-29T09-28-59-474Z.yml`
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWP `DocInfo` 에서 `FACE_NAME`, `CHAR_SHAPE`, `PARA_SHAPE` 를 함께 읽어 폰트/글자크기/굵기/밑줄/문단 정렬/들여쓰기/문단 간격을 복원
+    - 본문과 표 셀 모두 `HWPTAG_PARA_HEADER + HWPTAG_PARA_CHAR_SHAPE + HWPTAG_PARA_TEXT` 조합으로 문단 블록을 만들도록 변경
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 `FaceName/CharShape/ParaShape` 파서를 추가해 실제 확장 경로와 메인 경로의 렌더 차이를 줄임
+    - 문단별 char-shape range를 run 단위로 나눠 HWP 일반 문서에서도 스타일 복원이 가능하도록 확장
+- 재검증:
+  - `node --check js/app.js`
+  - `node --check js/parser.worker.js`
+  - Playwright로 `goyeopje.hwp`, `incheon-2a.hwpx` 재검증
+    - `goyeopje.hwp`
+      - 신청서 표 구조/외곽선 강약이 유지된 채 `3페이지`로 계속 열리는 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-21-10-489Z.png`, `.playwright-cli/page-2026-03-29T11-21-05-364Z.yml`
+    - `incheon-2a.hwpx`
+      - 상단 슬로건/핑크 타이틀 밴드/공급안내/푸터 쪽번호가 유지된 채 `5페이지` 상태가 계속 안정적인 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-21-30-602Z.png`, `.playwright-cli/page-2026-03-29T11-21-24-750Z.yml`
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWP `PARA_LINE_SEG` 를 읽어 문단의 실제 줄 높이/레이아웃 높이를 안전한 범위에서 복원
+    - HWP 표 셀 `LIST_HEADER` 속성의 세로 정렬 비트를 읽어 `top/middle/bottom` 정렬로 반영
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 line-seg / cell vertical-align 파서를 추가해 렌더 일관성 유지
+- 재검증:
+  - `node --check js/app.js`
+  - `node --check js/parser.worker.js`
+  - Playwright로 `goyeopje.hwp`, `incheon-2a.hwpx` 재검증
+    - `goyeopje.hwp`
+      - line-seg / cell 정렬 반영 후에도 신청서 표 구조와 `3페이지` 상태가 계속 안정적인 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-32-46-037Z.png`, `.playwright-cli/page-2026-03-29T11-32-38-500Z.yml`
+    - `incheon-2a.hwpx`
+      - HWP 개선 이후에도 상단 슬로건/핑크 타이틀 밴드/푸터 쪽번호가 유지된 채 `5페이지` 상태가 계속 안정적인 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-33-09-900Z.png`, `.playwright-cli/page-2026-03-29T11-33-01-348Z.yml`
+
+- 기획/운영 정리:
+  - `BACKLOG.md`
+    - 현재 상태 점검과 함께 HWP/HWPX 품질, 공통 아키텍처, 검증/운영 관점의 우선순위 backlog 문서를 추가
+  - Playwright 세션 정리:
+    - 누적돼 있던 검증용 브라우저 세션을 모두 닫아 작업 환경을 초기화
+    - 이후 검증은 고정 세션 재사용 또는 종료를 기본 원칙으로 진행
+- 개발 적용:
+  - `scripts/playwright_smoke.sh`
+    - `chromehwp` 단일 세션으로 뷰어를 열고 HWP/HWPX 샘플을 순차 검증한 뒤 세션을 자동 종료하는 스모크 스크립트 추가
+    - 검증 창이 누적되지 않도록 `close -> open -> verify -> close` 흐름으로 정리
+- 재검증:
+  - `bash scripts/playwright_smoke.sh`
+    - `goyeopje.hwp` 업로드, 스크린샷 생성, `incheon-2a.hwpx` 업로드, 스크린샷 생성이 한 세션에서 순차 실행되는 것 확인
+    - 실행 후 `playwright_cli.sh list` 기준 열린 브라우저가 남지 않는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-41-34-168Z.png`, `.playwright-cli/page-2026-03-29T11-41-37-373Z.png`, `.playwright-cli/page-2026-03-29T11-41-36-802Z.yml`
+- 기획 문서 보강:
+  - `BACKLOG.md`
+    - HWPX 전용 품질 항목을 추가하고, 현재 렌더 품질과 구조 상태를 개발팀 전달용 관점으로 재정리
+    - 우선순위를 `HWP 개체/도형 -> HWPX 앵커/장식 -> 공통 메트릭 -> 파서 구조 -> 검증/운영` 순으로 고정
+
+- 기획/개발/운영 추가 정리:
+  - `BACKLOG.md`
+    - 기획팀 리서치 결과를 기준으로 현재 상태, 우선순위, 검증 기준을 다시 정리
+    - 이번 패스의 핵심 축을 `HWPX 표 메트릭 정밀화 + Playwright 세션 단일화 + 탭 식별 개선`으로 확정
+  - `docs/rendering-status.md`
+    - 현재 지원 범위, 남은 공백, 샘플 회귀검증 규칙, Playwright 세션 운영 규칙을 문서화
+  - `README.md`
+    - 최소 smoke 검증 명령과 `verify-current` 세션 운영 규칙을 추가
+
+- 추가 고도화:
+  - `js/app.js`
+    - HWPX `cellSz.height`, `subList.textHeight`, `subList.vertAlign` 를 실제 셀 메타에 반영
+    - HWPX 표에 대해 행별 실제 높이(`hwpxRowHeights`)를 따로 계산하고, 렌더 시 추정 weight 대신 실측 높이를 우선 사용하도록 보정
+    - HWPX 셀 margin 은 HWP와 분리된 스케일로 변환해 과도한 패딩을 줄이고 원본 칸 여백에 더 가깝게 조정
+    - 문서 로드 후 브라우저 탭 제목을 `파일명 - ChromeHWP Viewer` 로 갱신해 탭 식별성을 높임
+  - `pages/viewer.html`
+    - favicon / apple-touch-icon 링크를 추가해 로컬 검증 시 `favicon.ico` 404 를 제거하고 탭 아이콘을 고정
+  - `scripts/playwright_smoke.sh`
+    - 기본 세션명을 `verify-current` 로 변경
+    - 시작/종료 모두 `close-all` 을 사용해 검증 창이 누적되지 않도록 정리
+
+- 재검증:
+  - `node --check js/app.js`
+  - `node --check scripts/verify_samples.mjs`
+  - `node scripts/verify_samples.mjs`
+    - HWP `3페이지`, HWPX `5페이지`, 핵심 키워드/파일 배지 기준 회귀검증 통과
+  - `bash scripts/playwright_smoke.sh`
+    - `goyeopje.hwp` 업로드 시 탭 제목이 `goyeopje.hwp - ChromeHWP Viewer` 로 바뀌고 스크린샷이 생성되는 것 확인
+    - `incheon-2a.hwpx` 업로드 시 탭 제목이 `incheon-2a.hwpx - ChromeHWP Viewer` 로 바뀌고 스크린샷이 생성되는 것 확인
+    - 콘솔 에러 카운트가 사라지고, 실행 후 `playwright_cli.sh list` 기준 열린 브라우저가 남지 않는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-48-50-301Z.png`, `.playwright-cli/page-2026-03-29T11-48-53-533Z.png`, `.playwright-cli/page-2026-03-29T11-48-49-705Z.yml`, `.playwright-cli/page-2026-03-29T11-48-52-988Z.yml`
+
+- 추가 샘플 조사:
+  - 신규 HWP 샘플 추가:
+    - `/Users/shinehandmac/Downloads/(첨부)정정_공고문_신축다세대잔여세대선착순일반매각.hwp` 를 회귀 확인용으로 `output/playwright/inputs/attachment-sale-notice.hwp` 에 복사
+  - Playwright 재확인:
+    - `attachment-sale-notice.hwp` 를 현재 뷰어에서 열어 첫 페이지/썸네일 구조 확인
+    - 현재 렌더는 본문 텍스트와 표 데이터는 읽지만, 공고문 첫 페이지 상단 레이아웃과 일정/안내 영역의 정밀 배치가 많이 무너지는 것 확인
+    - 특히 제목 상단 여백/정렬, `알려드립니다` 헤더 스타일, `공고사전주택개방/동·호지정 및 계약체결` 일정행이 한 문단으로 뭉개지는 증상이 보여 HWP control object / tab stop / 정밀 레이아웃 해석 부족으로 판단
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-54-05-545Z.png`, `.playwright-cli/page-2026-03-29T11-53-56-135Z.yml`
+  - WebHWP 참조 가능성 확인:
+    - `https://webhwp.hancomdocs.com/webhwp/?mode=HWP_EDITOR&docId=nOnMzMd4EXx2h7x4fQE1yEB9B5nREZfQ&lang=ko_KR` 를 Playwright와 웹으로 확인
+    - 에디터 셸 자체는 열리지만, 현재 제공된 `docId` 는 공개 접근이 되지 않아 `문서를 열 수 없습니다. 문서 주소가 올바르지 않습니다.` 상태로 실제 문서 비교 기준으로는 바로 사용 불가
+    - 대신 한컴 공식 WebHWP 개발 가이드(`developer.hancom.com/en-us/webhwp/devguide`)와 HwpCtrl 문서를 기준 자료로 활용 가능하다는 점을 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-54-39-684Z.png`, `.playwright-cli/page-2026-03-29T11-54-39-194Z.yml`
+
+- HWP 공고문 추가 보강:
+  - 원인 확인:
+    - `attachment-sale-notice.hwp` 의 일정 영역은 단순 문단이 아니라 HWP 셀 안에 다시 들어간 중첩 `tbl ` control 인 것을 raw record 수준에서 확인
+    - 기존 구현은 셀 내부에서 nested control 을 재귀 파싱하지 못해, 중첩 표의 자식 문단이 바깥 셀 텍스트로 섞여 들어가고 있었음
+  - `js/app.js`
+    - HWP control subtree 스킵 헬퍼를 추가해 미지원 control 자식이 본문 흐름으로 새지 않게 보정
+    - HWP 표 셀 내부에서 nested `tbl ` control 을 재귀 파싱해 nested table block 으로 보존
+    - HWP 문단에서 연속 공백/개행/탭이 있는 경우 `pre-wrap` 으로 렌더해 의미 있는 공백이 유지되도록 보정
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 nested table 재귀 파싱 / control subtree 스킵 로직 반영
+  - 재검증:
+    - `node --check js/app.js`
+    - `node --check js/parser.worker.js`
+    - `node scripts/verify_samples.mjs` 통과로 기존 대표 HWP/HWPX 회귀 유지 확인
+    - `attachment-sale-notice.hwp` 재확인 결과, 일정 구간이 더 이상 단순 문단이 아니라 실제 nested `table` 로 DOM snapshot 에 복원되는 것 확인
+    - 검증 아티팩트: `.playwright-cli/page-2026-03-29T12-14-01-707Z.yml`, `.playwright-cli/page-2026-03-29T12-14-02-200Z.png`
+  - 잔여 과제:
+    - 첫 페이지 상단 로고/배너/정밀 위치 차이는 여전히 `gso` 개체(그림/도형) 파서 부재 영향이 커서 다음 패스에서 별도 대응 필요
+
+- 한컴 WebHWP 가이드 기준 HWP 그림 처리 보강:
+  - 기준 재점검:
+    - 한컴 공식 WebHWP 개발 가이드(`developer.hancom.com/en-us/webhwp/devguide`)와 `HwpCtrl` 문서에서 개체/그림/헤더 컨트롤이 독립 기능 축이라는 점을 다시 확인
+    - 다만 해당 문서는 HWP 바이너리 포맷 스펙이 아니라 기능 체크리스트 성격이라, 실제 구현은 샘플 HWP raw record 역분석으로 이어서 진행
+  - 원인 확인:
+    - 기존 HWP `gso` 그림 복원은 `BIN0001 -> BIN0002 -> ...` 순차 소비 휴리스틱이라, 문서마다 그림 순서가 달라지면 잘못된 이미지가 매칭될 여지가 있었음
+    - `attachment-sale-notice.hwp` 의 `HWPTAG_SHAPE_COMPONENT_PICTURE(85)` 바디를 raw dump 로 확인한 결과, 그림 body 후반부에 `1`, `2`, `3` 형태의 실제 BinData 참조값이 들어있는 것을 확인
+  - `js/app.js`
+    - HWP BinData 로드 결과에 `id -> image` 맵을 추가해 `BIN0001.png` 같은 스트림을 숫자 참조로 바로 찾을 수 있게 정리
+    - HWP picture body 에서 BinData 참조값을 읽는 헬퍼를 추가하고, `gso` 그림 렌더가 순차 소비보다 참조 기반 매핑을 우선 사용하도록 변경
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 BinData id 매핑 / picture body 참조 파싱 로직을 반영해 메인/워커 결과 차이가 생기지 않도록 정리
+  - 회귀검증 강화:
+    - `scripts/verify_samples.mjs`
+      - `attachment-sale-notice.hwp` 를 기본 회귀 샘플에 추가
+      - 상단 배너 이미지(`img "BIN0001.png"`), `알려드립니다`, `동·호지정 및 계약체결` 존재 여부를 함께 검사하도록 확장
+    - `scripts/playwright_smoke.sh`
+      - 세 번째 샘플 인자로 `attachment-sale-notice.hwp` 까지 업로드하도록 확장
+  - 재검증:
+    - `node --check js/app.js`
+    - `node --check js/parser.worker.js`
+    - `node scripts/verify_samples.mjs`
+    - `bash scripts/playwright_smoke.sh`
+    - `attachment-sale-notice.hwp` 는 현재 snapshot 기준으로 상단 타이틀/배너 구간에서 `BIN0002.png` 가 렌더되고, 일정 표의 `동·호지정 및 계약체결` 컬럼과 하단 `BIN0003.jpg` 도 함께 확인
+    - 최신 검증 아티팩트: `.playwright-cli/page-2026-03-29T12-40-29-857Z.yml`, `.playwright-cli/page-2026-03-29T12-43-13-245Z.png`, `.playwright-cli/page-2026-03-29T12-43-12-791Z.yml`
+
+- HWP GSO 표시 크기 보정:
+  - 원인 확인:
+    - `attachment-sale-notice.hwp` 첫 페이지에서 LH 로고가 페이지 대부분을 덮는 문제는 picture body 의 원본/확장 크기 후보를 그대로 최대값으로 선택하고 있었기 때문
+    - 같은 샘플의 raw record 를 보면 `ctrlBody` 쪽 표시 크기와 `pictureBody` 쪽 원본 크기 후보가 함께 들어 있어, 최대값 기준은 과대 렌더를 유발
+  - `js/app.js`
+    - HWP `gso` 그림의 width/height 계산을 최대값이 아니라 “실제 표시 크기에 가까운 최소 양수 후보”를 고르는 방식으로 변경
+    - `ctrlBody(16/20, 24/28)` 와 `pictureBody(52/56, 20/28, 32/40)` 후보를 함께 비교해 소형 로고/배너가 과대 표시되지 않도록 보정
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 표시 크기 선택 규칙을 반영
+  - 재검증:
+    - `node --check js/app.js`
+    - `node --check js/parser.worker.js`
+    - Playwright로 `attachment-sale-notice.hwp` 재업로드 후 첫 페이지 확인
+      - 기존의 과대 로고가 제목 아래 소형 로고 크기로 정상화된 것 확인
+      - 검증 아티팩트: `.playwright-cli/page-2026-03-29T13-29-10-444Z.png`, `.playwright-cli/page-2026-03-29T13-29-09-939Z.yml`
+    - `node scripts/verify_samples.mjs`
+      - 기존 대표 HWP/HWPX + 추가 HWP 공고문 회귀검증 통과
+
+- HWP 헤더/알 수 없는 control subtree 일반화:
+  - 한컴 WebHWP 개발 가이드에서 `HeadCtrl`, `LastCtrl`, `ParentCtrl` 처럼 control 기반 문서 구조를 다시 확인했고, 실제 바이너리 해석은 샘플 역분석으로 이어서 진행
+  - 원인 확인:
+    - `attachment-sale-notice.hwp` 의 상단 슬로건 `BIN0001.png` 는 `head` control subtree 아래에 있었고, 기존 파서는 `head/foot` 외의 미지원 control subtree 를 통째로 건너뛰고 있었음
+    - 이 구조면 문서마다 다른 wrapper control 아래 숨어 있는 표/그림/문단이 계속 누락될 수 있어 범용 HWP 대응에 취약
+  - `js/app.js`
+    - `head/foot` subtree 는 별도 `headerBlocks/footerBlocks` 로 수집하는 기존 흐름을 유지
+    - 그 외 미지원 control 도 subtree 를 재귀적으로 훑어, 내부에 복원 가능한 표/그림/문단이 있으면 본문 블록으로 살려내도록 일반화
+  - `js/parser.worker.js`
+    - Worker 경로에도 동일한 subtree salvage 로직을 반영해 메인/워커 결과 차이를 방지
+  - 재검증:
+    - `node --check js/app.js`
+    - `node --check js/parser.worker.js`
+    - `bash scripts/playwright_smoke.sh`
+    - `node scripts/verify_samples.mjs`
+    - 대표 샘플 3종(`goyeopje.hwp`, `incheon-2a.hwpx`, `attachment-sale-notice.hwp`) 회귀검증 통과
+    - 최신 검증 아티팩트: `.playwright-cli/page-2026-03-29T14-10-26-234Z.png`, `.playwright-cli/page-2026-03-29T14-10-25-778Z.yml`
+
+- 저장 UX 재구성:
+  - 요구사항:
+    - 상단에 흩어져 있던 `HTML/PDF/HWPX 저장` 3버튼 대신, `편집 후에만 활성화되는 저장`과 `포맷을 고르는 다른 이름으로 저장` 흐름으로 정리
+    - 현재 문서가 `HWPX` 인 경우에는 가능한 한 같은 파일을 덮어쓸 수 있게 하고, 원본이 `.hwp` 인 경우에는 안전하지 않은 바이너리 재저장을 막기
+  - `pages/viewer.html`
+    - 헤더 액션을 `💾 저장` + `형식 선택` + `🗂️ 다른 이름으로 저장` 구조로 교체
+    - 편집 모드 안내 문구도 저장 흐름에 맞게 조정
+  - `css/viewer.css`
+    - 저장 형식 `select` UI 스타일 추가
+  - `js/app.js`
+    - 편집 중 delta baseline 과 비교해 `hasUnsavedChanges` 를 실시간 추적하고, 실제 수정이 생긴 경우에만 `저장` 버튼이 활성화되도록 연결
+    - `HWPX` 파일은 `저장` 시 현재 파일명 기준으로 저장되며, 파일 시스템 핸들이 있으면 덮어쓰기 / 없으면 한 번 저장 위치를 받아 이후 기준 파일처럼 동작하도록 정리
+    - `다른 이름으로 저장` 은 `HWPX`, `HTML`, `PDF` 를 지원하고, `HWP` 바이너리 저장은 아직 안전하게 생성할 수 없어 버튼 비활성/안내 문구로 막음
+    - 기존 Playwright 업로드 흐름과 충돌하지 않도록 파일 열기 버튼은 hidden input 기반 업로드를 유지
+    - `Ctrl+S` 는 저장 가능 상태일 때 현재 문서 저장에 연결
+  - 재검증:
+    - `node --check js/app.js`
+    - `node --check js/parser.worker.js`
+    - `bash scripts/playwright_smoke.sh`
+    - Playwright 수동 검증:
+      - `incheon-2a.hwpx` 로드 직후 `💾 저장` 비활성 확인: `.playwright-cli/page-2026-03-29T14-21-04-634Z.yml`
+      - 편집 모드 진입 직후 `💾 저장` 비활성 유지 확인: `.playwright-cli/page-2026-03-29T14-21-15-176Z.yml`
+      - 에디터 입력 후 `💾 저장` 활성화 확인: `.playwright-cli/page-2026-03-29T14-21-30-107Z.yml`
+      - 저장 형식을 `HWP` 로 바꾸면 `🗂️ 다른 이름으로 저장` 비활성화 확인: `.playwright-cli/page-2026-03-29T14-21-55-571Z.yml`
+
+- 저장소 정리/커밋 준비:
+  - 목표:
+    - 실제 코드/문서/검증 스크립트/샘플만 커밋 대상으로 남기고, 로컬 Playwright 산출물은 저장소에서 제외
+  - `.gitignore`
+    - `.playwright-cli/`
+    - `output/playwright/*.png`
+    - `output/playwright/verify-hwp/`
+    - `output/playwright/invalid.hwp`
+    - `.DS_Store`
+  - 결과:
+    - 회귀검증에 필요한 `output/playwright/inputs/*` 샘플은 유지
+    - 반복 생성되는 스냅샷/스크린샷/로그 폴더는 커밋 범위에서 제외

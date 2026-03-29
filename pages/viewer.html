@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HWP Web Viewer &amp; Editor</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../icons/icon32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="../icons/icon16.png" />
+  <link rel="apple-touch-icon" href="../icons/icon128.png" />
   <link href="../lib/quill.snow.css" rel="stylesheet" />
   <link rel="stylesheet" href="../css/viewer.css" />
   <link rel="stylesheet" href="../css/editor.css" />
@@ -23,9 +26,14 @@
     <!-- style="display:none" 사용 — hidden 속성은 CSS display:flex에 의해 무시됨 -->
     <button id="btnViewMode"  class="btn btn-secondary" style="display:none">👁️ 보기 모드</button>
     <div class="export-group" id="exportGroup" style="display:none">
-      <button id="btnExportHTML" class="btn btn-export">⬇️ HTML 저장</button>
-      <button id="btnExportPDF"  class="btn btn-export">⬇️ PDF 저장</button>
-      <button id="btnExportHWPX" class="btn btn-export">⬇️ HWPX 저장</button>
+      <button id="btnSaveCurrent" class="btn btn-export" disabled>💾 저장</button>
+      <select id="saveAsFormat" class="save-format-select" aria-label="다른 이름으로 저장 형식">
+        <option value="hwpx">HWPX</option>
+        <option value="html">HTML</option>
+        <option value="pdf">PDF</option>
+        <option value="hwp">HWP</option>
+      </select>
+      <button id="btnSaveAs" class="btn btn-export" disabled>🗂️ 다른 이름으로 저장</button>
     </div>
   </div>
   <input type="file" id="fileInput" accept=".hwp,.hwpx" style="display:none" />
@@ -71,7 +79,7 @@
   <!-- 편집기 패널 -->
   <section class="editor-panel" id="editorPanel" style="display:none">
     <div class="editor-toolbar-info">
-      ℹ️ 편집 모드: 아래 에디터에서 텍스트와 서식을 수정한 뒤 내보내기하세요.
+      ℹ️ 편집 모드: 아래 에디터에서 텍스트와 서식을 수정한 뒤 저장하거나 다른 이름으로 저장하세요.
     </div>
     <div id="quillEditor"></div>
   </section>
@@ -87,6 +95,7 @@
 
 <script src="../lib/quill.min.js"></script>
 <script src="../lib/jszip.min.js"></script>
+<script src="../lib/pako.min.js"></script>
 <script src="../js/app.js"></script>
 
 </body>

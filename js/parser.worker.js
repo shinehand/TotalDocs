@@ -5,6 +5,12 @@
  * main thread ↔ Worker 통신: postMessage / onmessage
  */
 
+try {
+  importScripts('../lib/pako.min.js');
+} catch (err) {
+  // pako 로드에 실패하면 아래의 브라우저 기본 API fallback 을 사용합니다.
+}
+
 /* ── HWP 파서 (worker 내 독립 구현) ── */
 
 const HWP_SIG = [0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1];
@@ -12,6 +18,12 @@ const HWP_SIG = [0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1];
 function u16(b, o) { return (b[o] ?? 0) | ((b[o+1] ?? 0) << 8); }
 function u32(b, o) {
   return ((b[o]??0)|((b[o+1]??0)<<8)|((b[o+2]??0)<<16)|((b[o+3]??0)<<24)) >>> 0;
+}
+function u16be(b, o) {
+  return ((b[o] ?? 0) << 8) | (b[o + 1] ?? 0);
+}
+function u32be(b, o) {
+  return (((b[o] ?? 0) << 24) | ((b[o + 1] ?? 0) << 16) | ((b[o + 2] ?? 0) << 8) | (b[o + 3] ?? 0)) >>> 0;
 }
 
 function run(text, opts) {
@@ -24,10 +36,31 @@ function run(text, opts) {
 
 function paginate(paras, n) {
   if (!paras.length) return [{ index:0, paragraphs:[] }];
-  const r = [];
-  for (let i=0; i<paras.length; i+=n)
-    r.push({ index: r.length, paragraphs: paras.slice(i, i+n) });
-  return r;
+  const expanded = paras.flatMap(para => (
+    para.type === 'table'
+      ? splitTableBlock(para, Math.max(16, n - 4))
+      : [para]
+  ));
+  const pages = [];
+  let current = [];
+  let currentWeight = 0;
+
+  for (const para of expanded) {
+    const weight = Math.max(1, estimateBlockWeight(para));
+    if (current.length && currentWeight + weight > n) {
+      pages.push({ index: pages.length, paragraphs: current });
+      current = [];
+      currentWeight = 0;
+    }
+    current.push(para);
+    currentWeight += weight;
+  }
+
+  if (current.length) {
+    pages.push({ index: pages.length, paragraphs: current });
+  }
+
+  return pages;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -39,10 +72,8 @@ function paginate(paras, n) {
  * fat[섹터번호] = 다음 섹터번호 (0xFFFFFFFE = 끝, 0xFFFFFFFF = 미사용)
  */
 function readFat(b, ss) {
-  const nFat = u32(b, 0x28);
-  if (nFat === 0) return new Uint32Array(0);
+  const nFat = u32(b, 0x2C);
   const entriesPerSec = ss / 4;
-  const fat = new Uint32Array(nFat * entriesPerSec);
   const difat = [];
   for (let i = 0; i < 109 && difat.length < nFat; i++) {
     const sec = u32(b, 0x4C + i * 4);
@@ -50,15 +81,29 @@ function readFat(b, ss) {
     difat.push(sec);
   }
 
+  // 일부 HWP는 csectFat가 0인데도 헤더 DIFAT에 실제 FAT 섹터를 기록합니다.
+  // 이 경우 헤더 DIFAT를 기준으로 FAT를 복원해야 BodyText/Section 스트림을 찾을 수 있습니다.
+  if (nFat === 0) {
+    for (let i = difat.length; i < 109; i++) {
+      const sec = u32(b, 0x4C + i * 4);
+      if (sec >= 0xFFFFFFF8) break;
+      difat.push(sec);
+    }
+  }
+
+  const fatSectorCount = Math.max(nFat, difat.length);
+  if (fatSectorCount === 0) return new Uint32Array(0);
+  const fat = new Uint32Array(fatSectorCount * entriesPerSec);
+
   let difatSec = u32(b, 0x44);
   const nDifatSec = u32(b, 0x48);
   let difatRead = 0;
   const visited = new Set();
-  while (difat.length < nFat && difatSec < 0xFFFFFFF8 && difatRead < nDifatSec && !visited.has(difatSec)) {
+  while (difat.length < fatSectorCount && difatSec < 0xFFFFFFF8 && difatRead < nDifatSec && !visited.has(difatSec)) {
     visited.add(difatSec);
     const base = (difatSec + 1) * ss;
     if (base + ss > b.length) break;
-    for (let i = 0; i < entriesPerSec - 1 && difat.length < nFat; i++) {
+    for (let i = 0; i < entriesPerSec - 1 && difat.length < fatSectorCount; i++) {
       const sec = u32(b, base + i * 4);
       if (sec >= 0xFFFFFFF8) continue;
       difat.push(sec);
@@ -67,8 +112,9 @@ function readFat(b, ss) {
     difatRead++;
   }
 
-  for (let i = 0; i < difat.length; i++) {
+  for (let i = 0; i < fatSectorCount; i++) {
     const fatSec = difat[i];
+    if (fatSec == null) break;
     const base = (fatSec + 1) * ss;
     if (base + ss > b.length) continue;
     for (let j = 0; j < entriesPerSec; j++) {
@@ -187,10 +233,131 @@ function scanDirEntries(b, names, ss, fat, dirStartSec) {
   return result;
 }
 
+function scanAllDirEntries(b, ss, fat, dirStartSec) {
+  const result = {};
+  if (dirStartSec >= 0xFFFFFFFA) return result;
+
+  let sec = dirStartSec;
+  const visited = new Set();
+  while (sec < 0xFFFFFFF8 && !visited.has(sec)) {
+    visited.add(sec);
+    const base = (sec + 1) * ss;
+    if (base + ss > b.length) break;
+
+    for (let pos = base; pos + 128 <= base + ss; pos += 128) {
+      const nl = u16(b, pos + 64);
+      if (!nl) continue;
+      const name = new TextDecoder('utf-16le')
+        .decode(b.slice(pos, pos + Math.max(0, nl - 2)))
+        .replace(/\u0000/g, '');
+      if (!name) continue;
+      result[name] = {
+        startSec: u32(b, pos + 116),
+        streamSz: u32(b, pos + 120),
+      };
+    }
+
+    sec = (fat[sec] ?? 0xFFFFFFFE) >>> 0;
+  }
+  return result;
+}
+
+function readEntryStream(b, entry, ss, fat, miniCutoff, miniStream, miniFat) {
+  if (!entry) return null;
+  const { startSec, streamSz } = entry;
+  if (streamSz < miniCutoff && miniStream) {
+    return readStreamByMiniFat(miniStream, startSec, streamSz, miniFat);
+  }
+  return readStreamByFat(b, startSec, streamSz, ss, fat);
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function detectImageMime(bytes, filename = '') {
+  if (!bytes?.length) return '';
+  const ext = String(filename).split('.').pop().toLowerCase();
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (bytes[0] === 0x42 && bytes[1] === 0x4D) return 'image/bmp';
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    return 'image/webp';
+  }
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'bmp') return 'image/bmp';
+  if (ext === 'webp') return 'image/webp';
+  return '';
+}
+
+async function parseHwpBinaryMap(b, allEntries, ss, fat, miniCutoff, miniStream, miniFat) {
+  const binEntries = Object.entries(allEntries || {})
+    .filter(([name]) => /^BIN\d+\.(png|jpe?g|gif|bmp|webp)$/i.test(name))
+    .sort((a, b) => {
+      const ai = Number((a[0].match(/^BIN(\d+)/i) || [])[1] || 0);
+      const bi = Number((b[0].match(/^BIN(\d+)/i) || [])[1] || 0);
+      return ai - bi;
+    });
+
+  const images = {};
+  const ordered = [];
+  const byId = {};
+
+  for (const [name, entry] of binEntries) {
+    let bytes = readEntryStream(b, entry, ss, fat, miniCutoff, miniStream, miniFat);
+    if (!bytes?.length) continue;
+
+    let mime = detectImageMime(bytes, name);
+    if (!mime) {
+      try {
+        bytes = await decompressZlib(bytes);
+        mime = detectImageMime(bytes, name);
+      } catch {}
+    }
+    if (!mime) continue;
+
+    const src = `data:${mime};base64,${bytesToBase64(bytes)}`;
+    const numericId = Number((name.match(/^BIN(\d+)/i) || [])[1] || 0);
+    const imageEntry = { id: numericId, name, src };
+    images[name] = src;
+    ordered.push(imageEntry);
+    if (numericId > 0) {
+      byId[numericId] = imageEntry;
+    }
+  }
+
+  return { images, ordered, byId };
+}
+
 /* ════════════════════════════════════════════════════════
-   zlib 압축 해제 (DecompressionStream API)
+   zlib 압축 해제
 ════════════════════════════════════════════════════════ */
 async function decompressZlib(data) {
+  if (typeof pako !== 'undefined') {
+    try {
+      return pako.inflateRaw(data);
+    } catch (rawErr) {
+      try {
+        return pako.inflate(data);
+      } catch (wrappedErr) {
+        throw new Error(`zlib 압축 해제 실패: ${rawErr?.message || wrappedErr?.message || wrappedErr || rawErr}`);
+      }
+    }
+  }
+
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('압축 해제 라이브러리를 찾을 수 없습니다.');
+  }
+
   const timeoutMs = 8000;
   let lastError = null;
   for (const mode of ['deflate', 'deflate-raw']) {
@@ -199,12 +366,12 @@ async function decompressZlib(data) {
       timeoutId = setTimeout(() => reject(new Error(`zlib 압축 해제 시간 초과 (${Math.floor(timeoutMs / 1000)}초)`)), timeoutMs);
     });
 
-    const ds = new DecompressionStream(mode);
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
-    const chunks = [];
-
     try {
+      const ds = new DecompressionStream(mode);
+      const writer = ds.writable.getWriter();
+      const reader = ds.readable.getReader();
+      const chunks = [];
+
       const decodePromise = (async () => {
         await writer.write(data);
         await writer.close();
@@ -230,8 +397,6 @@ async function decompressZlib(data) {
       }
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
-      try { reader.releaseLock(); } catch {}
-      try { writer.releaseLock(); } catch {}
     }
   }
 
@@ -243,57 +408,1042 @@ async function decompressZlib(data) {
    TagID 66 = HWPTAG_PARA_HEADER
    TagID 67 = HWPTAG_PARA_TEXT  ← 텍스트 추출 대상
 ════════════════════════════════════════════════════════ */
-function parseHwpRecords(data) {
-  const paras = [];
-  let pos = 0;
+function createParagraphBlock(text, align = 'left') {
+  return {
+    type: 'paragraph',
+    align,
+    texts: [run(text)],
+  };
+}
 
-  while (pos + 4 <= data.length) {
-    const hdr  = u32(data, pos); pos += 4;
-    const tagId = hdr & 0x3FF;
-    let size    = (hdr >> 20) & 0xFFF;
-    if (size === 0xFFF) {
-      if (pos + 4 > data.length) break;
-      size = u32(data, pos); pos += 4;
-    }
-    const recEnd = Math.min(pos + size, data.length);
+function hwpBorderTypeName(typeId) {
+  switch (Number(typeId)) {
+    case 0: return 'SOLID';
+    case 1: return 'LONG_DASH';
+    case 2: return 'DOT';
+    case 3: return 'DASH_DOT';
+    case 4: return 'DASH_DOT_DOT';
+    case 5: return 'LONG_DASH';
+    case 6: return 'DOT';
+    case 7:
+    case 8:
+    case 9:
+    case 10:
+      return 'DOUBLE';
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+    case 16:
+      return 'SOLID';
+    default:
+      return 'NONE';
+  }
+}
 
-    if (tagId === 67 && size >= 2) {
-      // HWPTAG_PARA_TEXT: UTF-16LE 문자열
-      // 인라인 컨트롤(0x01~0x1F): 0x09(탭)·0x0A·0x0D 제외하고 32바이트 블록 차지
-      const chars = [];
-      let i = pos;
-      while (i + 2 <= recEnd) {
-        const ch = data[i] | (data[i+1] << 8);
-        if (ch === 0x000D) {
-          // 단락 끝 마커
-          i += 2; break;
-        } else if (ch === 0x0009) {
-          chars.push('\t'); i += 2;
-        } else if (ch === 0x000A || ch === 0x0006) {
-          chars.push('\n'); i += 2; // 강제 줄바꿈
-        } else if (ch === 0x0002) {
-          chars.push('\n'); i += 2; // 섹션/컬럼 나눔
-        } else if (ch >= 0x0001 && ch <= 0x001F) {
-          i += getParaTextControlSize(ch);
-        } else if (ch >= 0x0020) {
-          chars.push(String.fromCharCode(ch));
-          i += 2;
-        } else {
-          i += 2;
-        }
-      }
-      paras.push({ align: 'left', texts: [run(chars.join(''))] });
-    }
+function hwpBorderWidthMm(widthId) {
+  const widths = [
+    0.1, 0.12, 0.15, 0.2,
+    0.25, 0.3, 0.4, 0.5,
+    0.6, 0.7, 1.0, 1.5,
+    2.0, 3.0, 4.0, 5.0,
+  ];
+  return widths[Number(widthId)] || 0.1;
+}
 
-    pos = recEnd;
+function hwpColorRefToCss(value) {
+  const color = Number(value);
+  if (!Number.isFinite(color)) return '';
+  const r = color & 0xFF;
+  const g = (color >> 8) & 0xFF;
+  const b = (color >> 16) & 0xFF;
+  return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function i16(b, o) {
+  const value = u16(b, o);
+  return value > 0x7FFF ? value - 0x10000 : value;
+}
+
+function parseHwpFillInfo(body, offset = 32) {
+  if (!body || offset + 4 > body.length) {
+    return { fillColor: '', fillGradient: null };
   }
 
-  return paras;
+  const fillType = u32(body, offset);
+  let pos = offset + 4;
+  let fillColor = '';
+  let fillGradient = null;
+
+  if ((fillType & 0x00000001) && pos + 12 <= body.length) {
+    fillColor = hwpColorRefToCss(u32(body, pos));
+    pos += 12;
+  }
+
+  if ((fillType & 0x00000004) && pos + 12 <= body.length) {
+    const angle = i16(body, pos + 2);
+    const colorCount = Math.max(0, u16(body, pos + 10));
+    pos += 12;
+
+    if (colorCount > 2 && pos + (colorCount * 4) <= body.length) {
+      pos += colorCount * 4;
+    }
+
+    const colors = [];
+    for (let i = 0; i < colorCount && pos + 4 <= body.length; i++, pos += 4) {
+      const color = hwpColorRefToCss(u32(body, pos));
+      if (color) colors.push(color);
+    }
+
+    if (colors.length >= 2) {
+      fillGradient = { type: 'LINEAR', angle, colors };
+    } else if (!fillColor && colors[0]) {
+      fillColor = colors[0];
+    }
+  }
+
+  return { fillColor, fillGradient };
+}
+
+function parseHwpBorderFill(body) {
+  if (!body || body.length < 32) return null;
+
+  const lineTypes = [body[2], body[3], body[4], body[5]];
+  const lineWidths = [body[6], body[7], body[8], body[9]];
+  const lineColors = [
+    u32(body, 10),
+    u32(body, 14),
+    u32(body, 18),
+    u32(body, 22),
+  ];
+  const fill = parseHwpFillInfo(body, 32);
+  const toBorder = index => ({
+    type: hwpBorderTypeName(lineTypes[index]),
+    widthMm: hwpBorderWidthMm(lineWidths[index]),
+    color: hwpColorRefToCss(lineColors[index]),
+  });
+
+  return {
+    left: toBorder(0),
+    right: toBorder(1),
+    top: toBorder(2),
+    bottom: toBorder(3),
+    fillColor: fill.fillColor,
+    fillGradient: fill.fillGradient,
+  };
+}
+
+function parseHwpFaceName(body) {
+  if (!body || body.length < 3) return '';
+  const nameLength = u16(body, 1);
+  if (!nameLength) return '';
+  const end = Math.min(body.length, 3 + (nameLength * 2));
+  return new TextDecoder('utf-16le')
+    .decode(body.slice(3, end))
+    .replace(/\u0000/g, '')
+    .trim();
+}
+
+function parseHwpCharShape(body, faceNames = {}) {
+  if (!body || body.length < 56) return null;
+  const attr = u32(body, 46);
+  const faceId = u16(body, 0);
+  const fontSizeRaw = u32(body, 42);
+  return {
+    fontName: faceNames[faceId] || '',
+    fontSize: fontSizeRaw > 0 ? Math.round((fontSizeRaw / 100) * 10) / 10 : 0,
+    color: hwpColorRefToCss(u32(body, 52)),
+    bold: Boolean(attr & (1 << 1)),
+    italic: Boolean(attr & 1),
+    underline: ((attr >> 2) & 0x3) !== 0,
+  };
+}
+
+function hwpAlignFromAttr(attr) {
+  switch ((Number(attr) >> 2) & 0x7) {
+    case 0: return 'justify';
+    case 1: return 'left';
+    case 2: return 'right';
+    case 3: return 'center';
+    case 4:
+    case 5:
+      return 'justify';
+    default:
+      return 'left';
+  }
+}
+
+function i32(b, o) {
+  const value = u32(b, o);
+  return value > 0x7FFFFFFF ? value - 0x100000000 : value;
+}
+
+function parseHwpParaShape(body) {
+  if (!body || body.length < 26) return null;
+  const attr = u32(body, 0);
+  const modernLineSpacing = body.length >= 54 ? u32(body, 50) : 0;
+  const legacyLineSpacing = body.length >= 28 ? u32(body, 24) : 0;
+  return {
+    align: hwpAlignFromAttr(attr),
+    marginLeft: i32(body, 4),
+    textIndent: i32(body, 12),
+    spacingBefore: i32(body, 16),
+    spacingAfter: i32(body, 20),
+    lineSpacing: modernLineSpacing || legacyLineSpacing || 0,
+  };
+}
+
+function parseHwpParaHeader(body) {
+  if (!body || body.length < 18) {
+    return { paraShapeId: 0, charShapes: [] };
+  }
+  return {
+    paraShapeId: u16(body, 8),
+    styleId: body[10] ?? 0,
+    splitFlags: body[11] ?? 0,
+    charShapeCount: u16(body, 12),
+    charShapes: [],
+  };
+}
+
+function parseHwpParaCharShape(body) {
+  const ranges = [];
+  if (!body || body.length < 8) return ranges;
+
+  for (let offset = 0; offset + 8 <= body.length; offset += 8) {
+    ranges.push({
+      start: u32(body, offset),
+      charShapeId: u32(body, offset + 4),
+    });
+  }
+
+  return ranges;
+}
+
+function parseHwpParaLineSeg(body) {
+  const segments = [];
+  if (!body || body.length < 36) return segments;
+
+  for (let offset = 0; offset + 36 <= body.length; offset += 36) {
+    const height = i32(body, offset + 8);
+    const textHeight = i32(body, offset + 12);
+    const lineSpacing = i32(body, offset + 20);
+    if (height <= 0 && textHeight <= 0) continue;
+    segments.push({
+      height,
+      textHeight,
+      lineSpacing,
+    });
+  }
+
+  return segments;
+}
+
+function hwpCellVerticalAlign(listFlags) {
+  switch ((Number(listFlags) >> 5) & 0x3) {
+    case 1: return 'middle';
+    case 2: return 'bottom';
+    default: return 'top';
+  }
+}
+
+function summarizeHwpLineSegs(lineSegs = []) {
+  const saneSegs = lineSegs.filter(seg => {
+    const height = Math.max(Number(seg?.height) || 0, Number(seg?.textHeight) || 0);
+    return height >= 400 && height <= 6000;
+  });
+  if (!saneSegs.length) {
+    return { lineHeightPx: 0, layoutHeightPx: 0 };
+  }
+
+  const heights = saneSegs.map(seg => Math.max(Number(seg.height) || 0, Number(seg.textHeight) || 0));
+  const totalHeight = heights.reduce((sum, value) => sum + value, 0);
+  const avgHeight = totalHeight / heights.length;
+  return {
+    lineHeightPx: Math.max(11, Math.min(42, Math.round(avgHeight / 106))),
+    layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 106))),
+  };
+}
+
+function buildHwpTextRuns(text, charShapes = [], docInfo = null) {
+  const sourceText = String(text || '');
+  const normalizedRanges = Array.isArray(charShapes)
+    ? charShapes
+      .filter(range => Number.isFinite(range?.start) && Number.isFinite(range?.charShapeId))
+      .sort((a, b) => a.start - b.start)
+    : [];
+
+  if (!normalizedRanges.length) {
+    return [run(sourceText)];
+  }
+
+  if (normalizedRanges[0].start !== 0) {
+    normalizedRanges.unshift({
+      start: 0,
+      charShapeId: normalizedRanges[0].charShapeId,
+    });
+  }
+
+  const runs = [];
+  for (let i = 0; i < normalizedRanges.length; i++) {
+    const current = normalizedRanges[i];
+    const nextStart = i + 1 < normalizedRanges.length
+      ? normalizedRanges[i + 1].start
+      : sourceText.length;
+    const safeStart = Math.max(0, Math.min(sourceText.length, current.start));
+    const safeEnd = Math.max(safeStart, Math.min(sourceText.length, nextStart));
+    const runText = sourceText.slice(safeStart, safeEnd);
+    if (!runText && sourceText.length) continue;
+    runs.push(run(runText, docInfo?.charShapes?.[current.charShapeId] || {}));
+  }
+
+  return runs.length ? runs : [run(sourceText)];
+}
+
+function createHwpParagraphBlock(text, paraState = {}, docInfo = null) {
+  const paraStyle = docInfo?.paraShapes?.[paraState?.paraShapeId] || null;
+  const lineMetrics = summarizeHwpLineSegs(paraState?.lineSegs || []);
+  return {
+    type: 'paragraph',
+    align: paraStyle?.align || 'left',
+    marginLeft: paraStyle?.marginLeft ?? 0,
+    textIndent: paraStyle?.textIndent ?? 0,
+    spacingBefore: paraStyle?.spacingBefore ?? 0,
+    spacingAfter: paraStyle?.spacingAfter ?? 0,
+    lineSpacing: paraStyle?.lineSpacing ?? 0,
+    lineHeightPx: lineMetrics.lineHeightPx,
+    layoutHeightPx: lineMetrics.layoutHeightPx,
+    texts: buildHwpTextRuns(text, paraState?.charShapes || [], docInfo),
+  };
+}
+
+function parseHwpDocInfoRecords(data) {
+  const faceNames = {};
+  const borderFills = {};
+  const charShapes = {};
+  const paraShapes = {};
+  let faceNameId = 1;
+  let borderFillId = 1;
+  let charShapeId = 1;
+  let paraShapeId = 1;
+  let pos = 0;
+
+  while (pos < data.length) {
+    const rec = readRecord(data, pos);
+    if (!rec) break;
+    if (rec.tagId === 19) {
+      const faceName = parseHwpFaceName(rec.body);
+      if (faceName) {
+        faceNames[faceNameId] = faceName;
+      }
+      faceNameId += 1;
+      pos = rec.nextPos;
+      continue;
+    }
+    if (rec.tagId === 20) {
+      const borderFill = parseHwpBorderFill(rec.body);
+      if (borderFill) {
+        borderFills[borderFillId] = borderFill;
+      }
+      borderFillId += 1;
+      pos = rec.nextPos;
+      continue;
+    }
+    if (rec.tagId === 21) {
+      const charShape = parseHwpCharShape(rec.body, faceNames);
+      if (charShape) {
+        charShapes[charShapeId] = charShape;
+      }
+      charShapeId += 1;
+      pos = rec.nextPos;
+      continue;
+    }
+    if (rec.tagId === 25) {
+      const paraShape = parseHwpParaShape(rec.body);
+      if (paraShape) {
+        paraShapes[paraShapeId] = paraShape;
+      }
+      paraShapeId += 1;
+    }
+    pos = rec.nextPos;
+  }
+
+  return {
+    faceNames,
+    borderFills,
+    charShapes,
+    paraShapes,
+    faceNameCount: faceNameId - 1,
+    borderFillCount: borderFillId - 1,
+    charShapeCount: charShapeId - 1,
+    paraShapeCount: paraShapeId - 1,
+  };
+}
+
+async function parseHwpDocInfoStream(data, compressedHint) {
+  const attempts = [{ mode: 'raw', bytes: data }];
+  try {
+    attempts.push({ mode: 'deflated', bytes: await decompressZlib(data) });
+  } catch (e) {
+    if (compressedHint) {
+      console.warn('[Worker] DocInfo 압축 해제 실패:', e.message);
+    }
+  }
+
+  let best = {
+    faceNames: {},
+    borderFills: {},
+    charShapes: {},
+    paraShapes: {},
+    faceNameCount: 0,
+    borderFillCount: 0,
+    charShapeCount: 0,
+    paraShapeCount: 0,
+  };
+  let bestMode = 'raw';
+  for (const attempt of attempts) {
+    if (!attempt.bytes?.length) continue;
+    const parsed = parseHwpDocInfoRecords(attempt.bytes);
+    const score = (parsed.faceNameCount || 0)
+      + (parsed.borderFillCount || 0)
+      + (parsed.charShapeCount || 0)
+      + (parsed.paraShapeCount || 0);
+    const bestScore = (best.faceNameCount || 0)
+      + (best.borderFillCount || 0)
+      + (best.charShapeCount || 0)
+      + (best.paraShapeCount || 0);
+    if (score > bestScore) {
+      best = parsed;
+      bestMode = attempt.mode;
+    }
+  }
+
+  if ((best.borderFillCount || 0) > 0 || (best.charShapeCount || 0) > 0 || (best.paraShapeCount || 0) > 0) {
+    self.postMessage({
+      type: 'progress',
+      msg: `DocInfo borderFill ${best.borderFillCount || 0}개, 글자모양 ${best.charShapeCount || 0}개, 문단모양 ${best.paraShapeCount || 0}개 적용 (${bestMode})`,
+    });
+  }
+
+  return best;
+}
+
+function nextHwpBinaryImage(docInfo = null) {
+  if (!docInfo?.binImages?.length) return null;
+  const index = docInfo.binImageCursor || 0;
+  const image = docInfo.binImages[index] || null;
+  if (image) {
+    docInfo.binImageCursor = index + 1;
+  }
+  return image;
+}
+
+function parseHwpPictureBinId(pictureBody, docInfo = null) {
+  if (!pictureBody || pictureBody.length < 72) return 0;
+
+  const candidates = [
+    u32be(pictureBody, 68),
+    u16be(pictureBody, 70),
+    pictureBody[71] || 0,
+  ].filter(value => Number.isFinite(value) && value > 0);
+
+  if (docInfo?.binImagesById) {
+    const matched = candidates.find(value => docInfo.binImagesById[value]);
+    if (matched) return matched;
+  }
+
+  return candidates[0] || 0;
+}
+
+function resolveHwpBinaryImage(docInfo = null, pictureBody = null) {
+  const binId = parseHwpPictureBinId(pictureBody, docInfo);
+  if (binId > 0 && docInfo?.binImagesById?.[binId]) {
+    return docInfo.binImagesById[binId];
+  }
+  return nextHwpBinaryImage(docInfo);
+}
+
+function pickHwpDisplayMetric(...candidates) {
+  const positives = candidates
+    .map(value => Number(value) || 0)
+    .filter(value => value > 0);
+  if (!positives.length) return 0;
+  return Math.min(...positives);
+}
+
+function firstPositiveMetric(...candidates) {
+  for (const candidate of candidates) {
+    const value = Number(candidate) || 0;
+    if (value > 0) return value;
+  }
+  return 0;
+}
+
+function parseHwpGsoBlock(ctrlBody, pictureBody, docInfo = null) {
+  if (!pictureBody?.length) return null;
+  const imageRef = resolveHwpBinaryImage(docInfo, pictureBody);
+  if (!imageRef?.src) return null;
+
+  const width = firstPositiveMetric(
+    u32(ctrlBody, 16),
+    u32(pictureBody, 52),
+    u32(pictureBody, 20),
+    u32(pictureBody, 28),
+    0,
+  );
+  const height = firstPositiveMetric(
+    u32(ctrlBody, 20),
+    u32(pictureBody, 56),
+    u32(pictureBody, 32),
+    u32(pictureBody, 40),
+    0,
+  );
+
+  return {
+    type: 'image',
+    src: imageRef.src,
+    alt: imageRef.name || 'image',
+    width,
+    height,
+    align: 'left',
+    inline: false,
+    offsetX: 0,
+    offsetY: 0,
+    sourceFormat: 'hwp',
+  };
+}
+
+function parseGsoControl(data, startPos, ctrlLevel, ctrlBody, docInfo = null) {
+  let pos = startPos;
+  let pictureBody = null;
+
+  while (pos < data.length) {
+    const rec = readRecord(data, pos);
+    if (!rec) break;
+    if (rec.level <= ctrlLevel) break;
+    if (rec.tagId === 85 && !pictureBody) {
+      pictureBody = rec.body;
+    }
+    pos = rec.nextPos;
+  }
+
+  return {
+    block: parseHwpGsoBlock(ctrlBody, pictureBody, docInfo),
+    nextPos: pos,
+  };
+}
+
+function readRecord(data, pos) {
+  if (pos + 4 > data.length) return null;
+
+  const hdr = u32(data, pos);
+  pos += 4;
+
+  const tagId = hdr & 0x3FF;
+  const level = (hdr >> 10) & 0x3FF;
+  let size = (hdr >> 20) & 0xFFF;
+
+  if (size === 0xFFF) {
+    if (pos + 4 > data.length) return null;
+    size = u32(data, pos);
+    pos += 4;
+  }
+
+  const end = Math.min(pos + size, data.length);
+  return {
+    tagId,
+    level,
+    size,
+    startPos: pos,
+    nextPos: end,
+    body: data.subarray(pos, end),
+  };
+}
+
+function ctrlId(body) {
+  if (!body || body.length < 4) return '';
+  return String.fromCharCode(body[3], body[2], body[1], body[0]);
+}
+
+function skipControlSubtree(data, startPos, ctrlLevel) {
+  let pos = startPos;
+  while (pos < data.length) {
+    const rec = readRecord(data, pos);
+    if (!rec) break;
+    if (rec.level <= ctrlLevel) break;
+    pos = rec.nextPos;
+  }
+  return pos;
+}
+
+function parseTableInfo(body) {
+  if (!body || body.length < 18) return null;
+
+  const rowCount = u16(body, 4);
+  const colCount = u16(body, 6);
+  const cellSpacing = u16(body, 8);
+  const rowHeights = [];
+
+  let off = 18;
+  for (let i = 0; i < rowCount && off + 2 <= body.length; i++, off += 2) {
+    rowHeights.push(u16(body, off));
+  }
+
+  return {
+    rowCount,
+    colCount,
+    cellSpacing,
+    rowHeights,
+  };
+}
+
+function parseTableCell(body) {
+  if (!body || body.length < 34) return null;
+  const listFlags = u32(body, 2);
+
+  return {
+    paragraphCount: Math.max(0, u16(body, 0)),
+    listFlags,
+    verticalAlign: hwpCellVerticalAlign(listFlags),
+    col: u16(body, 8),
+    row: u16(body, 10),
+    colSpan: Math.max(1, u16(body, 12)),
+    rowSpan: Math.max(1, u16(body, 14)),
+    width: u32(body, 16),
+    height: u32(body, 20),
+    padding: [
+      u16(body, 24),
+      u16(body, 26),
+      u16(body, 28),
+      u16(body, 30),
+    ],
+    borderFillId: u16(body, 32),
+    paragraphs: [],
+  };
+}
+
+function cellText(cell) {
+  if (!cell?.paragraphs?.length) return '';
+  return cell.paragraphs
+    .map(block => blockText(block))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function blockText(block) {
+  if (!block) return '';
+
+  if (block.type === 'table') {
+    return (block.rows || [])
+      .map(row => (row.cells || []).map(cell => cellText(cell)).join(' '))
+      .join('\n');
+  }
+
+  return (block.texts || []).map(chunk => chunk.text || '').join('');
+}
+
+function estimateBlockWeight(block) {
+  if (!block) return 1;
+  if (block.type === 'table') {
+    return (block.rows || []).reduce(
+      (sum, row) => sum + tableRowWeight(block, row.index),
+      0,
+    );
+  }
+  return 1;
+}
+
+function tableRowWeight(tableBlock, rowIndex) {
+  const rowHeight = tableBlock?.rowHeights?.[rowIndex];
+  return Math.max(1, rowHeight || 4);
+}
+
+function isSafeTableBreak(tableBlock, rowIndex) {
+  return !(tableBlock.rows || []).some(row => (row.cells || []).some(cell => (
+    cell.row <= rowIndex && (cell.row + cell.rowSpan - 1) > rowIndex
+  )));
+}
+
+function sliceTableBlock(tableBlock, startRow, endRow) {
+  const rows = Array.from({ length: endRow - startRow }, (_, index) => ({ index, cells: [] }));
+  const sourceRows = (tableBlock.rows || []).slice(startRow, endRow);
+
+  sourceRows.forEach((sourceRow, offset) => {
+    (sourceRow.cells || []).forEach(cell => {
+      const nextCell = {
+        ...cell,
+        row: cell.row - startRow,
+        paragraphs: [...(cell.paragraphs || [])],
+      };
+      rows[offset].cells.push(nextCell);
+    });
+  });
+
+  return {
+    ...tableBlock,
+    rowCount: rows.length,
+    rows,
+    rowHeights: (tableBlock.rowHeights || []).slice(startRow, endRow),
+    estimatedParagraphs: rows.reduce(
+      (sum, row) => sum + row.cells.reduce(
+        (cellSum, cell) => cellSum + Math.max(1, (cell.paragraphs || []).length),
+        0,
+      ),
+      0,
+    ),
+    texts: [run('')],
+  };
+}
+
+function splitTableBlock(tableBlock, maxWeight) {
+  if (tableBlock.type !== 'table' || tableBlock.rowCount <= 1) {
+    return [tableBlock];
+  }
+
+  const chunks = [];
+  let startRow = 0;
+
+  while (startRow < tableBlock.rowCount) {
+    let endRow = startRow;
+    let weight = 0;
+    let lastSafeBreak = -1;
+
+    while (endRow < tableBlock.rowCount) {
+      weight += tableRowWeight(tableBlock, endRow);
+      if (isSafeTableBreak(tableBlock, endRow)) {
+        lastSafeBreak = endRow + 1;
+      }
+      endRow += 1;
+
+      if (weight >= maxWeight && lastSafeBreak > startRow) {
+        endRow = lastSafeBreak;
+        break;
+      }
+    }
+
+    if (endRow <= startRow) {
+      endRow = startRow + 1;
+    }
+
+    chunks.push(sliceTableBlock(tableBlock, startRow, endRow));
+    startRow = endRow;
+  }
+
+  return chunks;
+}
+
+function buildTableBlock(tableInfo, cells) {
+  if (!cells.length) return null;
+
+  const rowCount = Math.max(
+    tableInfo?.rowCount || 0,
+    ...cells.map(cell => cell.row + cell.rowSpan),
+  );
+  const colCount = Math.max(
+    tableInfo?.colCount || 0,
+    ...cells.map(cell => cell.col + cell.colSpan),
+  );
+
+  const columnWidths = Array.from({ length: colCount }, () => 0);
+  const sortedCells = cells
+    .filter(cell => cell.col < colCount && cell.row < rowCount)
+    .sort((a, b) => (a.row - b.row) || (a.col - b.col));
+
+  for (const cell of sortedCells) {
+    const unitWidth = cell.width > 0 ? cell.width / Math.max(1, cell.colSpan) : 0;
+    for (let c = cell.col; c < Math.min(colCount, cell.col + cell.colSpan); c++) {
+      columnWidths[c] = Math.max(columnWidths[c], unitWidth);
+    }
+  }
+
+  if (!columnWidths.some(Boolean)) {
+    columnWidths.fill(1);
+  }
+
+  const rows = Array.from({ length: rowCount }, (_, index) => ({ index, cells: [] }));
+  for (const cell of sortedCells) {
+    rows[cell.row].cells.push(cell);
+  }
+
+  const estimatedParagraphs = cells.reduce(
+    (sum, cell) => sum + Math.max(1, cell.paragraphs.length),
+    0,
+  );
+
+  return {
+    type: 'table',
+    align: 'left',
+    rowCount,
+    colCount,
+    rows,
+    columnWidths,
+    cellSpacing: tableInfo?.cellSpacing || 0,
+    rowHeights: tableInfo?.rowHeights || [],
+    estimatedParagraphs,
+    texts: [run('')],
+  };
+}
+
+function parseTableControl(data, startPos, ctrlLevel, docInfo = null) {
+  let pos = startPos;
+  let tableInfo = null;
+  const cells = [];
+
+  while (pos < data.length) {
+    const rec = readRecord(data, pos);
+    if (!rec) break;
+    if (rec.level <= ctrlLevel) break;
+
+    if (rec.level === ctrlLevel + 1 && rec.tagId === 77) {
+      tableInfo = parseTableInfo(rec.body);
+      pos = rec.nextPos;
+      continue;
+    }
+
+    if (rec.level === ctrlLevel + 1 && rec.tagId === 72) {
+      const cell = parseTableCell(rec.body);
+      pos = rec.nextPos;
+
+      if (!cell) continue;
+
+      const paragraphs = [];
+      let currentText = null;
+      let currentParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+      const pushParagraph = () => {
+        if (currentText === null) return;
+        paragraphs.push(createHwpParagraphBlock(currentText, currentParaState, docInfo));
+        currentText = null;
+        currentParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+      };
+
+      while (pos < data.length) {
+        const next = readRecord(data, pos);
+        if (!next) break;
+        if (next.level <= ctrlLevel) break;
+        if (next.level === ctrlLevel + 1 && next.tagId === 72) break;
+
+        if (next.tagId === 71) {
+          const nestedCtrlId = ctrlId(next.body);
+          if (nestedCtrlId === 'tbl ') {
+            pushParagraph();
+            const { block, nextPos } = parseTableControl(data, next.nextPos, next.level, docInfo);
+            if (block) paragraphs.push(block);
+            pos = nextPos;
+            continue;
+          }
+          if (nestedCtrlId === 'gso ') {
+            pushParagraph();
+            const { block, nextPos } = parseGsoControl(data, next.nextPos, next.level, next.body, docInfo);
+            if (block) paragraphs.push(block);
+            pos = nextPos;
+            continue;
+          }
+          pos = skipControlSubtree(data, next.nextPos, next.level);
+          continue;
+        }
+
+        if (next.level === ctrlLevel + 1 && next.tagId === 66) {
+          pushParagraph();
+          currentText = '';
+          currentParaState = parseHwpParaHeader(next.body);
+          currentParaState.lineSegs = [];
+          pos = next.nextPos;
+          continue;
+        }
+
+        if (next.tagId === 68) {
+          currentParaState.charShapes = parseHwpParaCharShape(next.body);
+          pos = next.nextPos;
+          continue;
+        }
+
+        if (next.tagId === 69) {
+          currentParaState.lineSegs = parseHwpParaLineSeg(next.body);
+          pos = next.nextPos;
+          continue;
+        }
+
+        if (next.tagId === 67) {
+          if (currentText === null) currentText = '';
+          currentText += decodeParaText(next.body, 0, next.body.length);
+        }
+
+        pos = next.nextPos;
+      }
+
+      pushParagraph();
+      if (!paragraphs.length) {
+        paragraphs.push(createParagraphBlock(''));
+      }
+
+      cell.paragraphs = paragraphs;
+      cell.borderStyle = docInfo?.borderFills?.[cell.borderFillId] || null;
+      cells.push(cell);
+      continue;
+    }
+
+    pos = rec.nextPos;
+  }
+
+  return {
+    block: buildTableBlock(tableInfo, cells),
+    nextPos: pos,
+  };
+}
+
+function parseHwpRecords(data, docInfo = null, extras = null) {
+  return parseHwpBlockRange(data, 0, docInfo, null, extras).blocks;
+}
+
+function parseHwpBlockRange(data, startPos = 0, docInfo = null, stopLevel = null, extras = null) {
+  const paras = [];
+  let pos = startPos;
+  let currentText = null;
+  let currentParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+  const pushParagraph = () => {
+    if (currentText === null) return;
+    paras.push(createHwpParagraphBlock(currentText, currentParaState, docInfo));
+    currentText = null;
+    currentParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+  };
+
+  while (pos < data.length) {
+    const rec = readRecord(data, pos);
+    if (!rec) break;
+    if (stopLevel !== null && rec.level <= stopLevel) break;
+
+    if (rec.tagId === 71) {
+      const controlId = ctrlId(rec.body);
+      if (controlId === 'tbl ') {
+        pushParagraph();
+        const { block, nextPos } = parseTableControl(data, rec.nextPos, rec.level, docInfo);
+        if (block) paras.push(block);
+        pos = nextPos;
+        continue;
+      }
+      if (controlId === 'gso ') {
+        pushParagraph();
+        const { block, nextPos } = parseGsoControl(data, rec.nextPos, rec.level, rec.body, docInfo);
+        if (block) paras.push(block);
+        pos = nextPos;
+        continue;
+      }
+      if (controlId === 'head' || controlId === 'foot') {
+        pushParagraph();
+        const subtree = parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
+        const target = controlId === 'head' ? extras?.headerBlocks : extras?.footerBlocks;
+        if (target && subtree.blocks.length) {
+          target.push(...subtree.blocks);
+        }
+        pos = subtree.nextPos;
+        continue;
+      }
+
+      pushParagraph();
+      const subtree = parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
+      if (subtree.blocks.length) {
+        paras.push(...subtree.blocks);
+        pos = subtree.nextPos;
+        continue;
+      }
+      pos = skipControlSubtree(data, rec.nextPos, rec.level);
+      continue;
+    }
+
+    if (rec.tagId === 66) {
+      pushParagraph();
+      currentText = '';
+      currentParaState = parseHwpParaHeader(rec.body);
+      currentParaState.lineSegs = [];
+      pos = rec.nextPos;
+      continue;
+    }
+
+    if (rec.tagId === 68) {
+      currentParaState.charShapes = parseHwpParaCharShape(rec.body);
+      pos = rec.nextPos;
+      continue;
+    }
+
+    if (rec.tagId === 69) {
+      currentParaState.lineSegs = parseHwpParaLineSeg(rec.body);
+      pos = rec.nextPos;
+      continue;
+    }
+
+    if (rec.tagId === 67 && rec.size >= 2) {
+      if (currentText === null) currentText = '';
+      currentText += decodeParaText(rec.body, 0, rec.body.length);
+    }
+
+    pos = rec.nextPos;
+  }
+
+  pushParagraph();
+  return { blocks: paras, nextPos: pos };
+}
+
+function isInlineOrExtendedControl(ch) {
+  return (
+    ch === 0x0001 ||
+    ch === 0x0002 ||
+    (ch >= 0x0003 && ch <= 0x0009) ||
+    (ch >= 0x000B && ch <= 0x0017)
+  );
+}
+
+function decodeParaText(data, start, end) {
+  const chars = [];
+  let i = start;
+
+  while (i + 2 <= end) {
+    const ch = data[i] | (data[i + 1] << 8);
+
+    if (ch === 0x000D) {
+      i += 2;
+      break;
+    }
+
+    if (ch === 0x0009) {
+      chars.push('\t');
+      i += 16;
+      continue;
+    }
+
+    if (ch === 0x000A) {
+      chars.push('\n');
+      i += 2;
+      continue;
+    }
+
+    if (ch === 0x0018) {
+      chars.push('-');
+      i += 2;
+      continue;
+    }
+
+    if (ch === 0x001E || ch === 0x001F) {
+      chars.push(' ');
+      i += 2;
+      continue;
+    }
+
+    if (isInlineOrExtendedControl(ch)) {
+      i += 16;
+      continue;
+    }
+
+    if (ch >= 0x0020) chars.push(String.fromCharCode(ch));
+    i += 2;
+  }
+
+  return chars.join('');
 }
 
 function scoreParas(paras) {
   return paras.reduce((sum, para) => (
-    sum + para.texts.reduce((textSum, chunk) => textSum + chunk.text.replace(/\s+/g, '').length, 0)
+    sum + blockText(para).replace(/\s+/g, '').length
   ), 0);
 }
 
@@ -303,7 +1453,7 @@ function paragraphsFromText(text) {
     .replace(/\r/g, '\n')
     .replace(/\x02/g, '\n')
     .split('\n')
-    .map(line => ({ align: 'left', texts: [run(line)] }));
+    .map(line => createParagraphBlock(line));
 }
 
 /**
@@ -352,83 +1502,71 @@ function scanUtf16TextBlock(data, startOffset = 0, minRawLen = 20) {
   return new TextDecoder('utf-16le').decode(data.slice(bestStart, bestStart + bestRawLen));
 }
 
-/** HWP PARA_TEXT 제어문자의 소비 길이: 이 파서에서는 inline/extended control 을 16바이트, 일반 제어문자를 2바이트로 처리합니다. */
-function getParaTextControlSize(ch) {
-  switch (ch) {
-    case 0x0001:
-    case 0x0003:
-    case 0x0004:
-    case 0x0005:
-    case 0x0007:
-    case 0x0008:
-    case 0x000B:
-    case 0x000C:
-    case 0x000E:
-    case 0x000F:
-    case 0x0010:
-    case 0x0011:
-    case 0x0012:
-    case 0x0013:
-    case 0x0014:
-    case 0x0015:
-    case 0x0016:
-    case 0x0017:
-      return 16;
-    default:
-      return 2;
-  }
-}
-
 /**
  * 섹션 스트림을 raw/deflated 양쪽으로 구조 파싱하고, 모두 실패하면 UTF-16 텍스트 블록 복구까지 시도합니다.
- * 그래도 본문 후보가 없을 때만 빈 배열을 반환해 상위 단계가 PrvText fallback 으로 넘어가게 합니다.
+ * 그래도 본문 후보가 없을 때만 빈 결과를 반환해 상위 단계가 PrvText fallback 으로 넘어가게 합니다.
  */
-async function extractSectionParas(data, compressedHint, sectionName) {
+async function extractSectionParas(data, compressedHint, sectionName, docInfo = null) {
   const attempts = [];
   const pushAttempt = (mode, bytes) => {
     if (!bytes || bytes.length === 0) return;
     attempts.push({ mode, bytes });
   };
 
-  if (!compressedHint) pushAttempt('raw', data);
-
-  try {
-    pushAttempt('deflated', await decompressZlib(data));
-  } catch (e) {
-    console.warn(`[Worker] ${sectionName} 압축 해제 실패:`, e.message);
+  if (compressedHint) {
+    try {
+      pushAttempt('deflated', await decompressZlib(data));
+    } catch (e) {
+      console.warn(`[Worker] ${sectionName} 압축 해제 실패:`, e.message);
+      pushAttempt('raw', data);
+    }
+  } else {
+    pushAttempt('raw', data);
+    try {
+      pushAttempt('deflated', await decompressZlib(data));
+    } catch {}
   }
 
-  if (compressedHint) pushAttempt('raw', data);
-
   let bestParas = [];
+  let bestHeaderBlocks = [];
+  let bestFooterBlocks = [];
   let bestScore = 0;
 
   for (const { mode, bytes } of attempts) {
-    const paras = parseHwpRecords(bytes);
+    const extras = { headerBlocks: [], footerBlocks: [] };
+    const paras = parseHwpRecords(bytes, docInfo, extras);
     const score = scoreParas(paras);
     if (score > bestScore) {
       bestScore = score;
       bestParas = paras;
+      bestHeaderBlocks = extras.headerBlocks;
+      bestFooterBlocks = extras.footerBlocks;
     }
     if (score > 0) {
       self.postMessage({ type: 'progress', msg: `${sectionName}: ${paras.length}개 단락 완료 (${mode})` });
     }
   }
 
-  if (bestScore > 0) return bestParas;
+  if (bestScore > 0) {
+    return {
+      paras: bestParas,
+      headerBlocks: bestHeaderBlocks,
+      footerBlocks: bestFooterBlocks,
+    };
+  }
 
   for (const { mode, bytes } of attempts) {
     const text = scanUtf16TextBlock(bytes, 0, 20);
     if (!text) continue;
-    const paras = paragraphsFromText(text);
-    const score = scoreParas(paras);
-    if (score > 0) {
-      self.postMessage({ type: 'progress', msg: `${sectionName}: 텍스트 블록 복구 (${mode})` });
-      return paras;
+      const paras = paragraphsFromText(text);
+      const score = scoreParas(paras);
+      if (score > 0) {
+        self.postMessage({ type: 'progress', msg: `${sectionName}: 텍스트 블록 복구 (${mode})` });
+        return { paras, headerBlocks: [], footerBlocks: [] };
+      }
     }
-  }
 
-  return [];
+  return { paras: [], headerBlocks: [], footerBlocks: [] };
 }
 
 /* ════════════════════════════════════════════════════════
@@ -439,7 +1577,7 @@ async function parseBodyText(b) {
 
   const ss          = (() => { const e = u16(b, 0x1E); return (e>=7&&e<=14)?(1<<e):512; })();
   const miniCutoff  = u32(b, 0x38) || 4096;
-  const dirStartSec = u32(b, 0x2C);
+  const dirStartSec = u32(b, 0x30);
   if (dirStartSec >= 0xFFFFFFFA) return null;
 
   const dirBase         = (dirStartSec + 1) * ss;
@@ -455,11 +1593,11 @@ async function parseBodyText(b) {
 
   // 우선 자주 쓰는 구간(Section0~9)만 빠르게 스캔
   let sectionNames = Array.from({ length: 10 }, (_, i) => 'Section' + i);
-  let entries = scanDirEntries(b, ['FileHeader', ...sectionNames], ss, fat, dirStartSec);
+  let entries = scanDirEntries(b, ['FileHeader', 'DocInfo', ...sectionNames], ss, fat, dirStartSec);
   // 9번 섹션까지 존재하면 그때만 확장 스캔
   if (entries.Section9) {
     sectionNames = Array.from({ length: 100 }, (_, i) => 'Section' + i);
-    entries = scanDirEntries(b, ['FileHeader', ...sectionNames], ss, fat, dirStartSec);
+    entries = scanDirEntries(b, ['FileHeader', 'DocInfo', ...sectionNames], ss, fat, dirStartSec);
   }
 
   // FileHeader → 압축/암호화 플래그 확인
@@ -482,13 +1620,35 @@ async function parseBodyText(b) {
     }
   }
 
+  const docInfoEntry = entries.DocInfo;
+  let docInfo = { borderFills: {}, borderFillCount: 0 };
+  if (docInfoEntry) {
+    const { startSec, streamSz } = docInfoEntry;
+    let docInfoData;
+    if (streamSz < miniCutoff && miniContainerOff > 0) {
+      docInfoData = readStreamByMiniFat(miniStream, startSec, streamSz, miniFat);
+    } else {
+      docInfoData = readStreamByFat(b, startSec, streamSz, ss, fat);
+    }
+    if (docInfoData?.length) {
+      docInfo = await parseHwpDocInfoStream(docInfoData, compressed);
+    }
+  }
+
+  const allEntries = scanAllDirEntries(b, ss, fat, dirStartSec);
+  const hwpImages = await parseHwpBinaryMap(b, allEntries, ss, fat, miniCutoff, miniStream, miniFat);
+  docInfo.images = hwpImages.images;
+  docInfo.binImages = hwpImages.ordered;
+  docInfo.binImagesById = hwpImages.byId;
+  docInfo.binImageCursor = 0;
+
   let sectionNumbers = Object.keys(entries)
     .filter(name => /^Section\d+$/.test(name))
     .map(name => Number(name.slice(7)))
     .sort((a, b) => a - b);
   if (sectionNumbers.length === 0 && !entries.Section9) {
     sectionNames = Array.from({ length: 100 }, (_, i) => 'Section' + i);
-    entries = scanDirEntries(b, ['FileHeader', ...sectionNames], ss, fat, dirStartSec);
+    entries = scanDirEntries(b, ['FileHeader', 'DocInfo', ...sectionNames], ss, fat, dirStartSec);
     sectionNumbers = Object.keys(entries)
       .filter(name => /^Section\d+$/.test(name))
       .map(name => Number(name.slice(7)))
@@ -497,6 +1657,8 @@ async function parseBodyText(b) {
 
   // Section 파싱
   const allParas = [];
+  let headerBlocks = [];
+  let footerBlocks = [];
   for (const sn of sectionNumbers) {
     const entry = entries['Section' + sn];
     if (!entry) continue;
@@ -514,11 +1676,21 @@ async function parseBodyText(b) {
     }
     if (!data || data.length === 0) continue;
 
-    const paras = await extractSectionParas(data, compressed, 'Section' + sn);
-    allParas.push(...paras);
+    const parsed = await extractSectionParas(data, compressed, 'Section' + sn, docInfo);
+    allParas.push(...(parsed?.paras || []));
+    if (!headerBlocks.length && parsed?.headerBlocks?.length) {
+      headerBlocks = parsed.headerBlocks;
+    }
+    if (!footerBlocks.length && parsed?.footerBlocks?.length) {
+      footerBlocks = parsed.footerBlocks;
+    }
   }
 
-  return allParas.length > 0 ? allParas : null;
+  return allParas.length > 0 ? {
+    paragraphs: allParas,
+    headerBlocks,
+    footerBlocks,
+  } : null;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -529,7 +1701,7 @@ function scanPrvText(b) {
   const ss   = (exp >= 7 && exp <= 14) ? (1 << exp) : 512;
   const miniCutoff = u32(b, 0x38) || 4096;
 
-  const dirStartSec = u32(b, 0x2C);
+  const dirStartSec = u32(b, 0x30);
   if (dirStartSec >= 0xFFFFFFFA) return null;
   const dirBase = (dirStartSec + 1) * ss;
   if (dirBase + 128 > b.length) return null;
@@ -665,23 +1837,31 @@ self.onmessage = async ({ data }) => {
       }
 
       // ── 전략 0: BodyText/Section 스트림 파싱 (전체 텍스트 + 단락 구조) ──
-      let allParas = null;
+      let parsedBody = null;
       try {
-        allParas = await parseBodyText(b);
+        parsedBody = await parseBodyText(b);
       } catch(e) {
         console.warn('[Worker] BodyText 파싱 실패:', e.message);
       }
 
-      if (allParas) {
+      if (parsedBody?.paragraphs?.length) {
         // 빈 단락 정리 (연속 빈 줄 2개 초과 → 1개로 압축)
         const cleaned = [];
         let emptyRun = 0;
-        for (const p of allParas) {
-          const isEmpty = !p.texts.some(t => t.text.trim());
+        for (const p of parsedBody.paragraphs) {
+          const isEmpty = !blockText(p).trim();
           if (isEmpty) { if (++emptyRun <= 2) cleaned.push(p); }
           else { emptyRun = 0; cleaned.push(p); }
         }
-        const pages = paginate(cleaned, 40);
+        const pages = paginate(cleaned, 48);
+        if (pages.length) {
+          if (parsedBody.headerBlocks?.length) {
+            pages[0].headerBlocks = parsedBody.headerBlocks;
+          }
+          if (parsedBody.footerBlocks?.length) {
+            pages[0].footerBlocks = parsedBody.footerBlocks;
+          }
+        }
         doc = { meta: { pages: pages.length }, pages };
         self.postMessage({ type: 'done', doc });
         return;
@@ -706,7 +1886,7 @@ self.onmessage = async ({ data }) => {
         };
       } else {
         const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\x02/g,'\n').split('\n');
-        const paras = lines.map(l => ({ align:'left', texts:[run(l)] }));
+        const paras = lines.map(line => createParagraphBlock(line));
         const pages = paginate(paras, 35);
         doc = { meta:{ pages:pages.length, note:'⚠️ PrvText 텍스트 추출 (서식 미지원)' }, pages };
       }

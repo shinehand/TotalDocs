@@ -106,6 +106,17 @@ html, body {
 .export-group {
   display: flex;
   gap: 6px;
+  align-items: center;
+}
+
+.save-format-select {
+  height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  padding: 0 10px;
 }
 
 .link-btn {
@@ -292,13 +303,28 @@ html, body {
   min-height: 1100px;
   position: relative;
   break-after: page;
+  display: flex;
+  flex-direction: column;
+}
+
+.hwp-page-header {
+  flex: 0 0 auto;
+}
+
+.hwp-page-body {
+  flex: 1 1 auto;
+}
+
+.hwp-page-footer {
+  margin-top: auto;
+  padding-top: 18px;
 }
 
 /* hwp.js 출력 내부 폰트/레이아웃 보정 */
 .hwp-page * {
-  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR',
-               '함초롬바탕', '함초롬돋움', 'HCR Batang', serif;
-  line-height: 1.7;
+  font-family: 'HCR Batang', '함초롬바탕', '함초롬돋움',
+               'Noto Serif KR', 'Malgun Gothic', 'Apple SD Gothic Neo', serif;
+  line-height: 1.58;
   word-break: keep-all;
 }
 
@@ -306,6 +332,154 @@ html, body {
 .hwp-page h1,
 .hwp-page h2,
 .hwp-page h3  { margin: 12px 0 6px; }
+
+.hwp-page p {
+  white-space: pre-wrap;
+}
+
+.hwp-page-number {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #475569;
+}
+
+.hwp-inline-image {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+
+.hwp-table-wrap {
+  margin: 10px 0 16px;
+  overflow-x: auto;
+}
+
+.hwp-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
+  font-size: 12.7px;
+  outline: 1.5px solid #374151;
+  outline-offset: -1px;
+}
+
+.hwp-table[data-source-format="hwpx"] {
+  outline: none;
+}
+
+.hwp-table-cell {
+  border: 1px solid #6b7280;
+  padding: 4px 6px;
+  vertical-align: top;
+  font-size: 12.7px;
+  line-height: 1.32;
+  white-space: normal;
+}
+
+.hwp-table-paragraph {
+  margin: 0;
+  min-height: 1.1em;
+  line-height: 1.2;
+}
+
+.hwp-table-paragraph + .hwp-table-paragraph {
+  margin-top: 3px;
+}
+
+.hwp-image-block {
+  margin: 10px 0;
+  text-align: center;
+}
+
+.hwp-image-block[data-align="left"] {
+  text-align: left;
+}
+
+.hwp-image-block[data-align="right"] {
+  text-align: right;
+}
+
+.hwp-image-block[data-inline="true"] {
+  margin: 4px 0 8px;
+}
+
+.hwp-image {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+}
+
+.hwp-table-nested {
+  margin-top: 6px;
+}
+
+.hwp-table-nested > .hwp-table-wrap {
+  margin: 6px 0 0;
+}
+
+/* 신청서 첫 페이지 첫 표 미세 조정 */
+.hwp-table[data-layout="first-page-primary"] .hwp-table-row[data-row-role="title"] > td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  vertical-align: middle;
+}
+
+.hwp-table[data-layout="first-page-primary"] .hwp-table-row[data-row-role^="person-form"] > td,
+.hwp-table[data-layout="first-page-primary"] .hwp-table-row[data-row-role^="military-form"] > td {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  vertical-align: middle;
+}
+
+.hwp-table-cell[data-role="field-label"] {
+  font-size: 11.8px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.hwp-table-cell[data-role="field-inline-note"] {
+  font-size: 11.8px;
+}
+
+.hwp-table-cell[data-role="process-period"] .hwp-table-paragraph {
+  text-align: center;
+}
+
+.hwp-form-title-grid {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(282px, 1.45fr);
+  align-items: center;
+  column-gap: 10px;
+  min-height: 74px;
+}
+
+.hwp-form-title-label {
+  margin: 0;
+  text-align: center;
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.06;
+  white-space: nowrap;
+}
+
+.hwp-form-title-options {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hwp-form-title-option {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.04;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
 
 /* ── 상태바 ──────────────────────────────────── */
 .status-bar {

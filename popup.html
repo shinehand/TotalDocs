@@ -55,6 +55,69 @@
       color: #334155;
     }
     #status.error { color: #b91c1c; }
+    .recent-wrap {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .recent-title {
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+    .recent-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+      max-height: 130px;
+      overflow: auto;
+    }
+    .recent-item {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 6px 8px;
+      display: grid;
+      gap: 5px;
+    }
+    .recent-name {
+      font-size: 12px;
+      color: #1e293b;
+      word-break: break-all;
+      line-height: 1.35;
+    }
+    .recent-meta {
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .recent-open {
+      border: 0;
+      border-radius: 6px;
+      background: #334155;
+      color: #fff;
+      padding: 4px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      flex: none;
+    }
+    .recent-empty {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0;
+    }
+    .recent-note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.4;
+    }
     input[type="file"] { display: none; }
   </style>
 </head>
@@ -72,6 +135,12 @@
       <button id="btnOpenViewer" class="secondary">뷰어만 열기</button>
     </div>
     <p id="status"></p>
+    <section class="recent-wrap">
+      <div class="recent-title">최근 파일</div>
+      <ul class="recent-list" id="recentList"></ul>
+      <p class="recent-empty" id="recentEmpty">아직 기록된 파일이 없습니다.</p>
+      <p class="recent-note">링크로 연 문서는 여기서 다시 열 수 있습니다. 로컬 업로드 기록은 이름만 표시됩니다.</p>
+    </section>
     <input id="fileInput" type="file" accept=".hwp,.hwpx" />
   </div>
   <script src="popup.js"></script>

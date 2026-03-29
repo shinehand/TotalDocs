@@ -1,0 +1,7 @@
+.DS_Store
+
+# Local Playwright artifacts
+.playwright-cli/
+output/playwright/*.png
+output/playwright/verify-hwp/
+output/playwright/invalid.hwp
