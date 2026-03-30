@@ -2925,6 +2925,10 @@ const HwpExporter = {
     return true;
   },
 
+  printAsPdf() {
+    return this.exportPdf();
+  },
+
   async saveCurrent() {
     if (!ensureDocumentActionAllowed('저장')) return false;
     const disabledReason = getSaveCurrentDisabledReason();
@@ -3225,6 +3229,12 @@ function getSaveAsDisabledReason(format = UI.saveAsFormat?.value || 'hwpx') {
   return '';
 }
 
+function getPrintDisabledReason() {
+  if (!state.doc) return '인쇄할 문서가 없습니다.';
+  if (state.documentLocked) return state.documentLockReason || '현재 문서는 인쇄할 수 없습니다.';
+  return '';
+}
+
 function getDocumentLockReason(doc) {
   if (!doc || !Array.isArray(doc.pages) || doc.pages.length === 0) {
     return '문서가 정상적으로 로드되지 않아 편집/내보내기를 사용할 수 없습니다.';
@@ -3254,9 +3264,7 @@ function applyDocumentActionState() {
   const title = locked ? (state.documentLockReason || '') : '';
   const saveCurrentReason = getSaveCurrentDisabledReason();
   const saveAsReason = getSaveAsDisabledReason();
-  const printReason = !state.doc
-    ? '인쇄할 문서가 없습니다.'
-    : (locked ? (state.documentLockReason || '현재 문서는 인쇄할 수 없습니다.') : '');
+  const printReason = getPrintDisabledReason();
 
   UI.btnEditMode.disabled = !state.doc || locked;
   UI.btnSaveCurrent.disabled = Boolean(saveCurrentReason);
@@ -4494,7 +4502,7 @@ UI.btnSaveAs.onclick = () => {
   });
 };
 UI.btnPrint.onclick = () => {
-  HwpExporter.exportPdf();
+  HwpExporter.printAsPdf();
 };
 UI.saveAsFormat.onchange = () => applyDocumentActionState();
 UI.btnCloseError.onclick  = () => { UI.errorBanner.style.display = 'none'; };
@@ -4539,10 +4547,10 @@ document.addEventListener('keydown', e => {
       });
     }
   }
-  if (e.ctrlKey && e.key==='p') {
+  if (e.ctrlKey && e.key === 'p') {
     e.preventDefault();
     if (!UI.btnPrint.disabled) {
-      HwpExporter.exportPdf();
+      HwpExporter.printAsPdf();
     }
   }
   if (e.key==='Escape' && state.mode==='edit') enterViewMode();
