@@ -2925,6 +2925,10 @@ const HwpExporter = {
     return true;
   },
 
+  printAsPdf() {
+    return this.exportPdf();
+  },
+
   async saveCurrent() {
     if (!ensureDocumentActionAllowed('저장')) return false;
     const disabledReason = getSaveCurrentDisabledReason();
@@ -3152,6 +3156,7 @@ const UI = {
   btnSaveCurrent: $('btnSaveCurrent'),
   saveAsFormat:   $('saveAsFormat'),
   btnSaveAs:      $('btnSaveAs'),
+  btnPrint:       $('btnPrint'),
   btnCloseError:  $('btnCloseError'),
   loadingOverlay: $('loadingOverlay'),
   loadingMsg:     $('loadingMsg'),
@@ -3224,6 +3229,12 @@ function getSaveAsDisabledReason(format = UI.saveAsFormat?.value || 'hwpx') {
   return '';
 }
 
+function getPrintDisabledReason() {
+  if (!state.doc) return '인쇄할 문서가 없습니다.';
+  if (state.documentLocked) return state.documentLockReason || '현재 문서는 인쇄할 수 없습니다.';
+  return '';
+}
+
 function getDocumentLockReason(doc) {
   if (!doc || !Array.isArray(doc.pages) || doc.pages.length === 0) {
     return '문서가 정상적으로 로드되지 않아 편집/내보내기를 사용할 수 없습니다.';
@@ -3253,14 +3264,17 @@ function applyDocumentActionState() {
   const title = locked ? (state.documentLockReason || '') : '';
   const saveCurrentReason = getSaveCurrentDisabledReason();
   const saveAsReason = getSaveAsDisabledReason();
+  const printReason = getPrintDisabledReason();
 
   UI.btnEditMode.disabled = !state.doc || locked;
   UI.btnSaveCurrent.disabled = Boolean(saveCurrentReason);
   UI.btnSaveAs.disabled = Boolean(saveAsReason);
+  UI.btnPrint.disabled = Boolean(printReason);
 
   UI.btnEditMode.title = title;
   UI.btnSaveCurrent.title = saveCurrentReason || '';
   UI.btnSaveAs.title = saveAsReason || '';
+  UI.btnPrint.title = printReason || '';
   if (UI.saveAsFormat) UI.saveAsFormat.title = saveAsReason || '';
 }
 
@@ -4487,6 +4501,9 @@ UI.btnSaveAs.onclick = () => {
     showError('다른 이름으로 저장 실패: ' + err.message);
   });
 };
+UI.btnPrint.onclick = () => {
+  HwpExporter.printAsPdf();
+};
 UI.saveAsFormat.onchange = () => applyDocumentActionState();
 UI.btnCloseError.onclick  = () => { UI.errorBanner.style.display = 'none'; };
 
@@ -4528,6 +4545,12 @@ document.addEventListener('keydown', e => {
         if (err?.name === 'AbortError') return;
         showError('저장 실패: ' + err.message);
       });
+    }
+  }
+  if (e.ctrlKey && e.key === 'p') {
+    e.preventDefault();
+    if (!UI.btnPrint.disabled) {
+      HwpExporter.printAsPdf();
     }
   }
   if (e.key==='Escape' && state.mode==='edit') enterViewMode();
