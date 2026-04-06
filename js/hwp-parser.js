@@ -1036,6 +1036,9 @@ const HwpParser = {
         if (parsedBody.footerBlocks?.length) {
           pages[0].footerBlocks = parsedBody.footerBlocks.map(cloneParagraphBlock);
         }
+        if (parsedBody.pageStyle) {
+          pages.forEach(page => { page.pageStyle = parsedBody.pageStyle; });
+        }
       }
       return { meta: { pages: pages.length }, pages };
     }
@@ -2479,6 +2482,26 @@ const HwpParser = {
     return ['paper', 'page', 'column', 'para', 'absolute'][Number(code) || 0] || 'absolute';
   },
 
+  _parseHwpSecDef(body) {
+    if (!body || body.length < 36) return null;
+    const paperWidth  = HwpParser._i32(body, 4);
+    const paperHeight = HwpParser._i32(body, 8);
+    if (paperWidth <= 0 || paperHeight <= 0) return null;
+    return {
+      sourceFormat: 'hwp',
+      width:  paperWidth,
+      height: paperHeight,
+      margins: {
+        left:   HwpParser._i32(body, 12),
+        right:  HwpParser._i32(body, 16),
+        top:    HwpParser._i32(body, 20),
+        bottom: HwpParser._i32(body, 24),
+        header: HwpParser._i32(body, 28),
+        footer: HwpParser._i32(body, 32),
+      },
+    };
+  },
+
   _parseHwpObjectCommon(ctrlBody) {
     if (!ctrlBody || ctrlBody.length < 46) return null;
     const attr = HwpParser._u32(ctrlBody, 4);
@@ -3205,6 +3228,26 @@ const HwpParser = {
           continue;
         }
 
+        if (controlId === 'secd') {
+          pushParagraph();
+          if (extras && !extras.sectionMeta) {
+            let scanPos = rec.nextPos;
+            while (scanPos < data.length) {
+              const sub = HwpParser._readRecord(data, scanPos);
+              if (!sub) break;
+              if (sub.level <= rec.level) break;
+              if (sub.tagId === 78) {
+                const secDef = HwpParser._parseHwpSecDef(sub.body);
+                if (secDef) extras.sectionMeta = secDef;
+                break;
+              }
+              scanPos = sub.nextPos;
+            }
+          }
+          pos = HwpParser._skipControlSubtree(data, rec.nextPos, rec.level);
+          continue;
+        }
+
         pushParagraph();
         const subtree = HwpParser._parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
         if (subtree.blocks.length) {
@@ -3325,10 +3368,11 @@ const HwpParser = {
     let bestParas = [];
     let bestHeaderBlocks = [];
     let bestFooterBlocks = [];
+    let bestSectionMeta = null;
     let bestScore = 0;
 
     for (const { mode, bytes } of attempts) {
-      const extras = { headerBlocks: [], footerBlocks: [] };
+      const extras = { headerBlocks: [], footerBlocks: [], sectionMeta: null };
       const paras = HwpParser._parseHwpRecords(bytes, docInfo, extras);
       const score = HwpParser._scoreParas(paras);
       if (score > bestScore) {
@@ -3336,6 +3380,7 @@ const HwpParser = {
         bestParas = paras;
         bestHeaderBlocks = extras.headerBlocks;
         bestFooterBlocks = extras.footerBlocks;
+        bestSectionMeta = extras.sectionMeta || null;
       }
       if (score > 0) {
         console.log('[HWP] %s: %d단락 (%s)', sectionName, paras.length, mode);
@@ -3347,6 +3392,7 @@ const HwpParser = {
         paras: bestParas,
         headerBlocks: bestHeaderBlocks,
         footerBlocks: bestFooterBlocks,
+        sectionMeta: bestSectionMeta,
       };
     }
 
@@ -3357,11 +3403,11 @@ const HwpParser = {
       const score = HwpParser._scoreParas(paras);
       if (score > 0) {
         console.warn('[HWP] %s: 구조 파싱 실패 → 텍스트 블록 복구 (%s)', sectionName, mode);
-        return { paras, headerBlocks: [], footerBlocks: [] };
+        return { paras, headerBlocks: [], footerBlocks: [], sectionMeta: null };
       }
     }
 
-    return { paras: [], headerBlocks: [], footerBlocks: [] };
+    return { paras: [], headerBlocks: [], footerBlocks: [], sectionMeta: null };
   },
 
   /* ── BodyText/Section 스트림 파싱 ── */
@@ -3451,6 +3497,7 @@ const HwpParser = {
     const allParas = [];
     let headerBlocks = [];
     let footerBlocks = [];
+    let pageStyle = null;
     for (const sn of sectionNumbers) {
       const entry = entries['Section' + sn];
       if (!entry) continue;
@@ -3478,12 +3525,16 @@ const HwpParser = {
       if (!footerBlocks.length && parsed?.footerBlocks?.length) {
         footerBlocks = parsed.footerBlocks;
       }
+      if (!pageStyle && parsed?.sectionMeta) {
+        pageStyle = parsed.sectionMeta;
+      }
     }
 
     return allParas.length > 0 ? {
       paragraphs: allParas,
       headerBlocks,
       footerBlocks,
+      pageStyle,
     } : null;
   },
 

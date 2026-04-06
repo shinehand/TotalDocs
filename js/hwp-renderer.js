@@ -853,7 +853,35 @@ function resolveHwpxPageBorder(pageStyle, pageIndex) {
 
 function applyPageStyle(pageEl, page, pageIndex) {
   const pageStyle = page?.pageStyle;
-  if (!pageStyle || pageStyle.sourceFormat !== 'hwpx') return;
+  if (!pageStyle) return;
+
+  if (pageStyle.sourceFormat === 'hwp') {
+    const margins = pageStyle.margins || {};
+    // HWP 단위: HWPUNIT = 1/7200 inch, 96 DPI 기준 1/75 px
+    const HWP_SCALE = 1 / 75;
+    pageEl.dataset.sourceFormat = 'hwp';
+    if (pageStyle.width > 0) {
+      pageEl.style.width = `${Math.max(680, Math.min(860, Math.round(pageStyle.width * HWP_SCALE)))}px`;
+    }
+    if (pageStyle.height > 0) {
+      pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWP_SCALE)))}px`;
+    }
+    if (margins.top > 0) {
+      pageEl.style.paddingTop = `${Math.max(22, Math.min(96, Math.round(margins.top * HWP_SCALE)))}px`;
+    }
+    if (margins.right > 0) {
+      pageEl.style.paddingRight = `${Math.max(22, Math.min(120, Math.round(margins.right * HWP_SCALE)))}px`;
+    }
+    if (margins.bottom > 0) {
+      pageEl.style.paddingBottom = `${Math.max(22, Math.min(96, Math.round(margins.bottom * HWP_SCALE)))}px`;
+    }
+    if (margins.left > 0) {
+      pageEl.style.paddingLeft = `${Math.max(22, Math.min(120, Math.round(margins.left * HWP_SCALE)))}px`;
+    }
+    return;
+  }
+
+  if (pageStyle.sourceFormat !== 'hwpx') return;
 
   const pageBorder = resolveHwpxPageBorder(pageStyle, pageIndex);
   const borderOffset = pageBorder?.offset || {};
@@ -1270,7 +1298,10 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   table.dataset.tableIndex = String(tableIndex);
   if (tableBlock.sourceFormat) table.dataset.sourceFormat = tableBlock.sourceFormat;
   if (usePrimaryFormLayout) table.dataset.layout = 'first-page-primary';
-  const cellSpacingPx = hwpPageUnitToPx(tableBlock.cellSpacing, 0, 48, 0);
+  const isHwpxTable = tableBlock.sourceFormat === 'hwpx';
+  // HWPX 단위: 1/100 mm → px (≈1/26.45), HWP 단위: HWPUNIT (1/7200 inch) → px (≈1/75)
+  const TABLE_UNIT_SCALE = isHwpxTable ? (1 / 26.45) : (1 / 75);
+  const cellSpacingPx = Math.max(0, Math.min(48, Math.round((Number(tableBlock.cellSpacing) || 0) * TABLE_UNIT_SCALE)));
   if (cellSpacingPx > 0) {
     wrap.dataset.cellSpacing = String(tableBlock.cellSpacing || 0);
     table.dataset.cellSpacing = String(tableBlock.cellSpacing || 0);
@@ -1328,20 +1359,19 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     const maxCellHeight = cells.reduce((max, cell) => Math.max(max, Number(cell.height) || 0), 0);
     const maxContentHeight = cells.reduce((max, cell) => Math.max(max, Number(cell.contentHeight) || 0), 0);
     const maxParagraphLines = cells.reduce((max, cell) => Math.max(max, cell.paragraphs?.length || 1), 1);
-    const isHwpxTable = tableBlock.sourceFormat === 'hwpx';
     const explicitHwpxRowHeight = isHwpxTable
       ? Number(tableBlock.hwpxRowHeights?.[row.index]) || 0
       : 0;
     const rowHeightPx = isHwpxTable
       ? (explicitHwpxRowHeight > 0
-        ? hwpPageUnitToPx(explicitHwpxRowHeight, 0, 280, 0)
+        ? Math.max(0, Math.min(280, Math.round(explicitHwpxRowHeight * TABLE_UNIT_SCALE)))
         : hwpUnitToPx(rowHeight, 24, 280, 12, 0))
-      : hwpPageUnitToPx(rowHeight, 0, 320, 0);
+      : Math.max(0, Math.min(320, Math.round((Number(rowHeight) || 0) * TABLE_UNIT_SCALE)));
     const cellHeightPx = isHwpxTable
-      ? hwpPageUnitToPx(maxCellHeight, 0, 200, 0)
-      : hwpPageUnitToPx(maxCellHeight, 0, 300, 0);
+      ? Math.max(0, Math.min(200, Math.round(maxCellHeight * TABLE_UNIT_SCALE)))
+      : Math.max(0, Math.min(300, Math.round(maxCellHeight * TABLE_UNIT_SCALE)));
     const contentHeightPx = isHwpxTable
-      ? hwpPageUnitToPx(maxContentHeight, 0, 200, 0)
+      ? Math.max(0, Math.min(200, Math.round(maxContentHeight * TABLE_UNIT_SCALE)))
       : 0;
     let minRowHeight = Math.max(30, rowHeightPx, cellHeightPx, contentHeightPx);
     if (rowLooksLikeTitle) {
@@ -1436,10 +1466,10 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       let bottomPx = 3;
       let leftPx = 4;
       if (hasPaddingInfo) {
-        topPx = hwpPageUnitToPx(padT, 0, 18, 0);
-        rightPx = hwpPageUnitToPx(padR, 0, 20, 0);
-        bottomPx = hwpPageUnitToPx(padB, 0, 18, 0);
-        leftPx = hwpPageUnitToPx(padL, 0, 20, 0);
+        topPx    = Math.max(0, Math.min(18, Math.round((Number(padT) || 0) * TABLE_UNIT_SCALE)));
+        rightPx  = Math.max(0, Math.min(20, Math.round((Number(padR) || 0) * TABLE_UNIT_SCALE)));
+        bottomPx = Math.max(0, Math.min(18, Math.round((Number(padB) || 0) * TABLE_UNIT_SCALE)));
+        leftPx   = Math.max(0, Math.min(20, Math.round((Number(padL) || 0) * TABLE_UNIT_SCALE)));
       } else if (rowLooksLikeTitle) {
         if (isTitleLabelCell) {
           topPx = 16; rightPx = 10; bottomPx = 16; leftPx = 10;
