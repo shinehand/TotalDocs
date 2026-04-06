@@ -19,7 +19,7 @@
 - **코드 파일 분할**: `js/hwp-parser.js`, `js/hwp-renderer.js`, `js/app.js`
 - HWP 스타일/문단 머리 확장 (`TAB_DEF`, `NUMBERING`, `BULLET`, `STYLE`).
 - **HWP Section Definition 파싱 추가 (이번 세션)**
-  - `_parseHwpSecDef(body)`: BodyText 내 HWPTAG_SEC_DEF (tag 78) 레코드 파싱 → 용지 크기·여백 추출
+  - `_parseHwpSecDef(body)`: BodyText 내 HWPTAG_PAGE_DEF (tag 73) 레코드 파싱 → 용지 크기·여백 추출 (이전에 tag 78로 잘못 설정되어 있었고 바이트 오프셋도 4바이트씩 오류였음, 수정 완료)
   - `_parseHwpBlockRange`: `secd` 컨트롤 인식 → HWPTAG_SEC_DEF 서브레코드 탐색, `extras.sectionMeta` 저장
   - `_extractSectionParas` / `_parseBodyText` / `_parseHwp5` 파이프라인으로 `sectionMeta` → `pageStyle` 전달
   - 각 HWP 페이지에 `page.pageStyle = { sourceFormat: 'hwp', width, height, margins }` 적용
@@ -59,8 +59,8 @@
 
 ## 다음 우선순위
 
-1. HWP 실문서에서 `secd` 컨트롤 인식 검증 (HWPTAG_SEC_DEF tag 78 실데이터 확인)
-2. HWPX 표 셀패딩 1/26.45 스케일 적용 결과 시각 확인
+1. HWP 실문서에서 `secd` 컨트롤 인식 검증 완료 (HWPTAG_PAGE_DEF tag 73 → offset 0부터 실데이터 확인 및 수정)
+2. HWPX 표 셀패딩 1/75 스케일 (HWPUNIT 기반) 적용 결과 시각 확인
 3. `결석계.hwp` 하단 중첩 표 행높이와 세로 정렬 재확인
 4. 차트/OLE placeholder를 실제 렌더 경로로 확장
 5. 실샘플 기준 `page/paper` 절대배치 검증
