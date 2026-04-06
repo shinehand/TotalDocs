@@ -497,8 +497,8 @@ function resolveParagraphLineHeight(para) {
 function applyImageOffsetStyles(el, imageLike, inline = false) {
   const offsetX = Number(imageLike?.offsetX) || 0;
   const offsetY = Number(imageLike?.offsetY) || 0;
-  const translateX = hwpSignedUnitToPx(offsetX, inline ? -280 : -520, inline ? 280 : 520, 1 / 106, 0);
-  const translateY = hwpSignedUnitToPx(offsetY, -120, 120, 1 / 106, 0);
+  const translateX = hwpSignedUnitToPx(offsetX, inline ? -280 : -520, inline ? 280 : 520, 1 / 75, 0);
+  const translateY = hwpSignedUnitToPx(offsetY, -120, 120, 1 / 75, 0);
   if (!translateX && !translateY) return;
   el.style.transform = `translate(${translateX}px, ${translateY}px)`;
 }

@@ -2139,9 +2139,10 @@ const HwpParser = {
     const heights = saneSegs.map(seg => Math.max(Number(seg.height) || 0, Number(seg.textHeight) || 0));
     const totalHeight = heights.reduce((sum, value) => sum + value, 0);
     const avgHeight = totalHeight / heights.length;
+    // HWPUNIT (1/7200 inch) → px at 96 DPI: 1/75 scale
     return {
-      lineHeightPx: hwpPageUnitToPx(avgHeight, 11, 56, 0),
-      layoutHeightPx: hwpPageUnitToPx(totalHeight, 12, 320, 0),
+      lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 75))),
+      layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 75))),
     };
   },
 

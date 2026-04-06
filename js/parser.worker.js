@@ -1120,8 +1120,8 @@ function summarizeHwpLineSegs(lineSegs = []) {
   const totalHeight = heights.reduce((sum, value) => sum + value, 0);
   const avgHeight = totalHeight / heights.length;
   return {
-    lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 106))),
-    layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 106))),
+    lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 75))),
+    layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 75))),
   };
 }
 
