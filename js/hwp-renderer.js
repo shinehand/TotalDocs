@@ -82,6 +82,18 @@ function resolveParagraphListMarker(para, listStateRef = null) {
   return marker || `${currentValue}.`;
 }
 
+const LIST_MARKER_MIN_WIDTH_EM = 1.8;
+const LIST_MARKER_MAX_WIDTH_EM = 4.2;
+const LIST_MARKER_BASE_WIDTH_EM = 1.4;
+const LIST_MARKER_CHAR_WIDTH_EM = 0.16;
+
+function calculateListMarkerWidth(markerLength) {
+  return Math.max(
+    LIST_MARKER_MIN_WIDTH_EM,
+    Math.min(LIST_MARKER_MAX_WIDTH_EM, LIST_MARKER_BASE_WIDTH_EM + (markerLength * LIST_MARKER_CHAR_WIDTH_EM)),
+  );
+}
+
 function appendParagraphBlock(parent, para, className = '', options = {}) {
   const {
     alignOverride = '',
@@ -186,7 +198,7 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     markerEl.textContent = listMarker;
     markerEl.style.display = 'inline-block';
     markerEl.style.flex = '0 0 auto';
-    markerEl.style.minWidth = `${Math.max(1.8, Math.min(4.2, 1.4 + (listMarker.length * 0.16)))}em`;
+    markerEl.style.minWidth = `${calculateListMarkerWidth(listMarker.length)}em`;
     markerEl.style.whiteSpace = 'nowrap';
     p.appendChild(markerEl);
 

@@ -1966,7 +1966,7 @@ const HwpParser = {
       offset += len * 2;
     }
     const start = offset + 2 <= body.length ? HwpParser._u16(body, offset) : 1;
-    offset += offset + 2 <= body.length ? 2 : 0;
+    if (offset + 2 <= body.length) offset += 2;
     const starts = [];
     for (let i = 0; i < 7 && offset + 4 <= body.length; i++, offset += 4) {
       starts.push(HwpParser._u32(body, offset));
@@ -1994,18 +1994,21 @@ const HwpParser = {
     offset += 2;
     const name = HwpParser._decodeHwpUtf16String(body, offset, localNameLen);
     offset += localNameLen * 2;
-    const enNameLen = offset + 2 <= body.length ? HwpParser._u16(body, offset) : 0;
-    offset += offset + 2 <= body.length ? 2 : 0;
+    const hasEnglishNameLen = offset + 2 <= body.length;
+    const enNameLen = hasEnglishNameLen ? HwpParser._u16(body, offset) : 0;
+    offset += hasEnglishNameLen ? 2 : 0;
     const englishName = HwpParser._decodeHwpUtf16String(body, offset, enNameLen);
     offset += enNameLen * 2;
     const attr = body[offset] || 0;
     offset += 1;
     const nextStyleId = body[offset] || 0;
     offset += 1;
-    const langId = offset + 2 <= body.length ? HwpParser._i16(body, offset) : 0;
-    offset += offset + 2 <= body.length ? 2 : 0;
-    const paraShapeId = offset + 2 <= body.length ? HwpParser._u16(body, offset) : 0;
-    offset += offset + 2 <= body.length ? 2 : 0;
+    const hasLangId = offset + 2 <= body.length;
+    const langId = hasLangId ? HwpParser._i16(body, offset) : 0;
+    offset += hasLangId ? 2 : 0;
+    const hasParaShapeId = offset + 2 <= body.length;
+    const paraShapeId = hasParaShapeId ? HwpParser._u16(body, offset) : 0;
+    offset += hasParaShapeId ? 2 : 0;
     const charShapeId = offset + 2 <= body.length ? HwpParser._u16(body, offset) : 0;
     return {
       name,
