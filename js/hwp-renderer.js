@@ -353,6 +353,32 @@ function getStackedHangulLabelLines(text) {
   return lines.filter(Boolean);
 }
 
+function isCompactTableHeaderRow(rowVisualIndex, cells) {
+  if (rowVisualIndex !== 0 || cells.length < 3 || cells.length > 6) return false;
+  return cells.every(cell => {
+    const text = getCellTextInline(cell);
+    if (!text || text.length > 18) return false;
+    if ((cell.rowSpan || 1) !== 1) return false;
+    return !(cell.paragraphs || []).some(block => block?.type === 'table');
+  });
+}
+
+function isGroupedRowLabelCell(cell, text, rawText) {
+  const normalized = String(text || '').replace(/\s+/g, '').trim();
+  if ((cell?.rowSpan || 1) <= 1) return false;
+  if ((cell?.colSpan || 1) !== 1) return false;
+  if ((cell?.col || 0) > 1) return false;
+  if (!normalized || normalized.length > 18) return false;
+  if (/[0-9()]/.test(normalized)) return false;
+  if ((cell?.paragraphs || []).some(block => block?.type === 'table')) return false;
+  const lineCount = String(rawText || text || '')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .length;
+  return lineCount <= 3;
+}
+
 function getParagraphText(para) {
   return (para?.texts || []).map(run => run.text || '').join('');
 }
@@ -1246,6 +1272,7 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     const rowLooksLikeOptions = rowVisualIndex === 0 && /고엽제후유/.test(rowTexts);
     const rowLooksLikeMeta = /접수번호|접수일시|처리기간/.test(rowTexts);
     const rowLooksLikePersonForm = /①성\s*명|②주민등록번호|③주\s*소/.test(rowTexts);
+    const rowLooksLikeCompactHeader = isCompactTableHeaderRow(rowVisualIndex, cells);
     const rowLooksLikeTopSpacer = usePrimaryFormLayout
       && rowVisualIndex <= 2
       && cells.length === 1
@@ -1260,6 +1287,7 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     if (row.syntheticRowRole) tr.dataset.rowRole = row.syntheticRowRole;
     else if (rowLooksLikeTitle) tr.dataset.rowRole = 'title';
     else if (rowLooksLikeMeta) tr.dataset.rowRole = 'meta';
+    else if (rowLooksLikeCompactHeader) tr.dataset.rowRole = 'header';
     else if (rowLooksLikePersonForm) tr.dataset.rowRole = 'person-form';
     else tr.dataset.rowRole = 'body';
 
@@ -1326,6 +1354,9 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
         && (cell.rowSpan || 1) === 1
         && (cell.col || 0) === 0
         && Boolean(stackedLabelLines);
+      const isGroupedLabelCell = !explicitCellRole
+        && !isStackedLabelCell
+        && isGroupedRowLabelCell(cell, text, rawText);
       const isFieldLabelCell = explicitCellRole === 'field-label'
         || /^[①-⑳⑴-⒇<]\s*/.test(text)
         || /^(학\s*력|직\s*업|월\s*소득)/.test(text);
@@ -1344,6 +1375,7 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       else if (isPeriodCell) td.dataset.role = 'process-period';
       else if (isMetaCell) td.dataset.role = 'meta';
       else if (isStackedLabelCell) td.dataset.role = 'stacked-label';
+      else if (isGroupedLabelCell) td.dataset.role = 'group-label';
       else if (isFieldLabelCell) td.dataset.role = 'field-label';
       else if (isFieldInlineNoteCell) td.dataset.role = 'field-inline-note';
       else td.dataset.role = 'body';
@@ -1356,9 +1388,11 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
         td.dataset.rowSpan = '2';
       }
 
-      const cellVerticalAlign = isStackedLabelCell
+      const cellVerticalAlign = (isStackedLabelCell || isGroupedLabelCell)
         ? 'middle'
-        : (cell.verticalAlign || (shouldMiddleCell ? 'middle' : 'top'));
+        : ((cell.verticalAlign === 'top' && (rowLooksLikeCompactHeader || shouldMiddleCell))
+          ? 'middle'
+          : (cell.verticalAlign || (shouldMiddleCell ? 'middle' : 'top')));
       td.style.verticalAlign = cellVerticalAlign;
 
       const [padL, padR, padT, padB] = cell.padding || [];
@@ -1396,13 +1430,14 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       content.className = 'hwp-table-cell-content';
       content.dataset.role = td.dataset.role || 'body';
       content.dataset.rowRole = tr.dataset.rowRole || 'body';
-      if (rowLooksLikeTitle) {
-        const innerHeight = Math.max(48, minRowHeight - topPx - bottomPx);
+      const shouldCenterContent = rowLooksLikeTitle || rowLooksLikeCompactHeader || isGroupedLabelCell;
+      if (shouldCenterContent) {
+        const innerHeight = Math.max(rowLooksLikeTitle ? 48 : 24, minRowHeight - topPx - bottomPx);
         content.style.minHeight = `${innerHeight}px`;
         content.style.display = 'flex';
         content.style.flexDirection = 'column';
         content.style.justifyContent = 'center';
-        if (isTitleLabelCell || isOptionCell || shouldCenterCell) {
+        if (isTitleLabelCell || isOptionCell || shouldCenterCell || rowLooksLikeCompactHeader || isGroupedLabelCell) {
           content.style.alignItems = 'center';
         } else {
           content.style.alignItems = 'stretch';

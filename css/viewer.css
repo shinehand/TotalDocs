@@ -481,6 +481,15 @@ html, body {
   vertical-align: middle;
 }
 
+.hwp-table-row[data-row-role="header"] > .hwp-table-cell {
+  vertical-align: middle;
+}
+
+.hwp-table-row[data-row-role="header"] > .hwp-table-cell .hwp-table-paragraph,
+.hwp-table-cell[data-role="group-label"] .hwp-table-paragraph {
+  text-align: center;
+}
+
 .hwp-table-cell[data-role="field-label"] {
   font-size: 11.8px;
   font-weight: 400;
