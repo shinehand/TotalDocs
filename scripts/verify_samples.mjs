@@ -38,7 +38,7 @@ function ensureFileExists(filePath, label) {
 
 function sleepSync(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return;
-  if (typeof SharedArrayBuffer === 'function' && typeof Atomics?.wait === 'function') {
+  if (typeof SharedArrayBuffer === 'function' && typeof Atomics === 'object' && typeof Atomics.wait === 'function') {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
   }
 }
