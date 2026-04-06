@@ -867,13 +867,13 @@ function applyPageStyle(pageEl, page, pageIndex) {
       pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWP_SCALE)))}px`;
     }
     if (margins.top > 0) {
-      pageEl.style.paddingTop = `${Math.max(22, Math.min(96, Math.round(margins.top * HWP_SCALE)))}px`;
+      pageEl.style.paddingTop = `${Math.max(22, Math.min(120, Math.round(margins.top * HWP_SCALE)))}px`;
     }
     if (margins.right > 0) {
       pageEl.style.paddingRight = `${Math.max(22, Math.min(120, Math.round(margins.right * HWP_SCALE)))}px`;
     }
     if (margins.bottom > 0) {
-      pageEl.style.paddingBottom = `${Math.max(22, Math.min(96, Math.round(margins.bottom * HWP_SCALE)))}px`;
+      pageEl.style.paddingBottom = `${Math.max(22, Math.min(120, Math.round(margins.bottom * HWP_SCALE)))}px`;
     }
     if (margins.left > 0) {
       pageEl.style.paddingLeft = `${Math.max(22, Math.min(120, Math.round(margins.left * HWP_SCALE)))}px`;
@@ -887,13 +887,31 @@ function applyPageStyle(pageEl, page, pageIndex) {
   const borderOffset = pageBorder?.offset || {};
   const margins = pageStyle.margins || {};
 
+  // HWP·HWPX 모두 HWPUNIT (1/7200 inch) 기준: 96 DPI 환산 스케일 = 1/75
+  const HWPX_SCALE = 1 / 75;
   pageEl.dataset.sourceFormat = 'hwpx';
-  pageEl.style.width = `${hwpPageUnitToPx(pageStyle.width, 680, 860, 794)}px`;
-  pageEl.style.minHeight = `${hwpPageUnitToPx(pageStyle.height, 980, 1280, 1123)}px`;
-  pageEl.style.paddingTop = `${hwpPageUnitToPx((margins.top || 0) + (borderOffset.top || 0), 22, 72, 28)}px`;
-  pageEl.style.paddingRight = `${hwpPageUnitToPx((margins.right || 0) + (borderOffset.right || 0), 28, 96, 54)}px`;
-  pageEl.style.paddingBottom = `${hwpPageUnitToPx((margins.bottom || 0) + (borderOffset.bottom || 0), 24, 80, 30)}px`;
-  pageEl.style.paddingLeft = `${hwpPageUnitToPx((margins.left || 0) + (borderOffset.left || 0), 28, 96, 56)}px`;
+  if (pageStyle.width > 0) {
+    pageEl.style.width = `${Math.max(680, Math.min(860, Math.round(pageStyle.width * HWPX_SCALE)))}px`;
+  }
+  if (pageStyle.height > 0) {
+    pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWPX_SCALE)))}px`;
+  }
+  const topVal = (margins.top || 0) + (borderOffset.top || 0);
+  if (topVal > 0) {
+    pageEl.style.paddingTop = `${Math.max(22, Math.min(120, Math.round(topVal * HWPX_SCALE)))}px`;
+  }
+  const rightVal = (margins.right || 0) + (borderOffset.right || 0);
+  if (rightVal > 0) {
+    pageEl.style.paddingRight = `${Math.max(22, Math.min(120, Math.round(rightVal * HWPX_SCALE)))}px`;
+  }
+  const bottomVal = (margins.bottom || 0) + (borderOffset.bottom || 0);
+  if (bottomVal > 0) {
+    pageEl.style.paddingBottom = `${Math.max(22, Math.min(120, Math.round(bottomVal * HWPX_SCALE)))}px`;
+  }
+  const leftVal = (margins.left || 0) + (borderOffset.left || 0);
+  if (leftVal > 0) {
+    pageEl.style.paddingLeft = `${Math.max(22, Math.min(120, Math.round(leftVal * HWPX_SCALE)))}px`;
+  }
 
   const borderStyle = pageBorder?.borderStyle;
   if (borderStyle) {
@@ -1299,8 +1317,9 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   if (tableBlock.sourceFormat) table.dataset.sourceFormat = tableBlock.sourceFormat;
   if (usePrimaryFormLayout) table.dataset.layout = 'first-page-primary';
   const isHwpxTable = tableBlock.sourceFormat === 'hwpx';
-  // HWPX 단위: 1/100 mm → px (≈1/26.45), HWP 단위: HWPUNIT (1/7200 inch) → px (≈1/75)
-  const TABLE_UNIT_SCALE = isHwpxTable ? (1 / 26.45) : (1 / 75);
+  // HWP·HWPX 모두 HWPUNIT (1/7200 inch) 기준 단위 사용 확인됨 (실제 HWPX XML 분석 기준)
+  // 96 DPI 환산 스케일 = 1/75 (1 HWPUNIT = 96/7200 ≈ 1/75 px)
+  const TABLE_UNIT_SCALE = 1 / 75;
   const cellSpacingPx = Math.max(0, Math.min(48, Math.round((Number(tableBlock.cellSpacing) || 0) * TABLE_UNIT_SCALE)));
   if (cellSpacingPx > 0) {
     wrap.dataset.cellSpacing = String(tableBlock.cellSpacing || 0);

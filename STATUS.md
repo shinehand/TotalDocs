@@ -24,14 +24,15 @@
   - `_extractSectionParas` / `_parseBodyText` / `_parseHwp5` 파이프라인으로 `sectionMeta` → `pageStyle` 전달
   - 각 HWP 페이지에 `page.pageStyle = { sourceFormat: 'hwp', width, height, margins }` 적용
   - `parser.worker.js`에 동일 로직 동기화
-- **`applyPageStyle` HWP 지원 추가 (이번 세션)**
+- **`applyPageStyle` HWP 지원 추가 및 HWPX 정확도 개선 (이번 세션)**
   - `sourceFormat === 'hwp'`일 때 HWPUNIT(1/75 px) 스케일로 용지 크기·여백 적용
-  - left/right 최대 120px, top/bottom 최대 96px 클램프
+  - HWPX도 1/75 스케일로 통일 (기존 1/106에서 수정, 실제 HWPX XML 검증 기반)
+  - 모든 여백 상한을 120px로 통일 (기존 72-96px에서 확대)
 - **표 셀 단위 변환 수정 (이번 세션)**
   - `isHwpxTable` 플래그를 행 루프 바깥으로 이동, `TABLE_UNIT_SCALE` 도입
-  - HWPX: 1/26.45 (1/100mm → px), HWP: 1/75 (HWPUNIT → px) 정확한 스케일 적용
-  - `cellSpacingPx`, 행높이(`rowHeightPx`/`cellHeightPx`/`contentHeightPx`), 셀패딩 모두 포맷별 스케일로 수정
-  - HWPX 셀패딩이 ~1-2px에서 ~5-7px로 개선; HWP 행높이가 more accurate
+  - HWP·HWPX 모두 HWPUNIT (1/7200 inch, 96DPI 기준 1/75 px) 단위 사용 확인 (실제 HWPX XML 분석)
+  - 기존 `1/106` 스케일에서 `1/75`로 수정: `cellSpacingPx`, 행높이, 셀높이, 셀패딩 전부 적용
+  - HWPX 셀패딩이 ~3px에서 ~4-7px로 개선 (예: 283 HWPUNIT = 1mm → 3.8px)
 
 ## 확인된 대표 결과
 

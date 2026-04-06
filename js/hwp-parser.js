@@ -2483,6 +2483,8 @@ const HwpParser = {
   },
 
   _parseHwpSecDef(body) {
+    // HWPTAG_SEC_DEF (tag 78): 섹션 정의 레코드 — 최소 36바이트 (4+4+4+4+4+4+4+4+4 = 36)
+    // offset 0: attributes, 4: paperWidth, 8: paperHeight, 12-35: margins (left/right/top/bottom/header/footer)
     if (!body || body.length < 36) return null;
     const paperWidth  = HwpParser._i32(body, 4);
     const paperHeight = HwpParser._i32(body, 8);
