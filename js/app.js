@@ -966,7 +966,7 @@ const HwpParser = {
 
     const total = blocks.reduce((sum, block) => {
       if (block.type === 'table') {
-        return sum + Math.max(3, Math.min(12, (block.rowCount || 1) * 2));
+        return sum + Math.max(3, Math.min(16, (block.rowCount || 1) * 2));
       }
 
       const text = HwpParser._blockText(block).trim();
