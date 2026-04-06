@@ -16,6 +16,7 @@ const VIEWER_URL = process.env.VIEWER_URL || 'http://127.0.0.1:4174/pages/viewer
 const SESSION_NAME = process.env.PLAYWRIGHT_CLI_SESSION || 'verify-current';
 const SAMPLE_DIR = path.join(ROOT_DIR, 'output', 'playwright', 'inputs');
 const SESSION_RETRY_LIMIT = Number(process.env.PLAYWRIGHT_SESSION_RETRIES || 6);
+const RETRY_BASE_DELAY_MS = 250;
 
 const HWP_SAMPLE = process.env.HWP_SAMPLE
   || path.join(SAMPLE_DIR, 'goyeopje.hwp');
@@ -39,16 +40,14 @@ function sleepSync(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return;
   if (typeof SharedArrayBuffer === 'function' && typeof Atomics?.wait === 'function') {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-    return;
   }
-  const end = Date.now() + ms;
-  while (Date.now() < end) {}
 }
 
 function isRetryableSessionError(output = '') {
-  const escapedSession = SESSION_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`connect ENOENT .*${escapedSession}|session .* not found|Target page, context or browser has been closed`, 'i')
-    .test(output);
+  const normalized = String(output).toLowerCase();
+  return normalized.includes(`connect enoent ${SESSION_NAME.toLowerCase()}`)
+    || (normalized.includes('session ') && normalized.includes(' not found'))
+    || normalized.includes('target page, context or browser has been closed');
 }
 
 function runPw(args, options = {}) {
@@ -71,7 +70,7 @@ function runPw(args, options = {}) {
       const stdout = error?.stdout?.toString?.() || '';
       const details = `${stdout}\n${stderr}`.trim();
       if (attempt < retries && isRetryableSessionError(details)) {
-        sleepSync(250 * (attempt + 1));
+        sleepSync(RETRY_BASE_DELAY_MS * (attempt + 1));
         continue;
       }
       if (throwOnError) {
