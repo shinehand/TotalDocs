@@ -82,10 +82,20 @@ function resolveParagraphListMarker(para, listStateRef = null) {
   return marker || `${currentValue}.`;
 }
 
+// 번호/글머리표 marker는 1~3자리 다단계 번호까지 겹치지 않도록 최소/최대 폭을 고정한다.
 const LIST_MARKER_MIN_WIDTH_EM = 1.8;
 const LIST_MARKER_MAX_WIDTH_EM = 4.2;
 const LIST_MARKER_BASE_WIDTH_EM = 1.4;
 const LIST_MARKER_CHAR_WIDTH_EM = 0.16;
+
+// 짧은 다열 표 첫 행은 보통 compact header 성격이 강해서 가운데 정렬 대상으로 본다.
+const COMPACT_TABLE_HEADER_MIN_CELLS = 3;
+const COMPACT_TABLE_HEADER_MAX_CELLS = 6;
+const COMPACT_TABLE_HEADER_MAX_TEXT_LENGTH = 18;
+
+// rowspan 라벨은 좌측 짧은 구분 텍스트만 가운데 정렬해야 일반 본문 셀을 건드리지 않는다.
+const GROUPED_ROW_LABEL_MAX_TEXT_LENGTH = 18;
+const GROUPED_ROW_LABEL_MAX_LINES = 3;
 
 function calculateListMarkerWidth(markerLength) {
   return Math.max(
@@ -354,10 +364,16 @@ function getStackedHangulLabelLines(text) {
 }
 
 function isCompactTableHeaderRow(rowVisualIndex, cells) {
-  if (rowVisualIndex !== 0 || cells.length < 3 || cells.length > 6) return false;
+  if (
+    rowVisualIndex !== 0
+    || cells.length < COMPACT_TABLE_HEADER_MIN_CELLS
+    || cells.length > COMPACT_TABLE_HEADER_MAX_CELLS
+  ) {
+    return false;
+  }
   return cells.every(cell => {
     const text = getCellTextInline(cell);
-    if (!text || text.length > 18) return false;
+    if (!text || text.length > COMPACT_TABLE_HEADER_MAX_TEXT_LENGTH) return false;
     if ((cell.rowSpan || 1) !== 1) return false;
     return !(cell.paragraphs || []).some(block => block?.type === 'table');
   });
@@ -368,7 +384,7 @@ function isGroupedRowLabelCell(cell, text, rawText) {
   if ((cell?.rowSpan || 1) <= 1) return false;
   if ((cell?.colSpan || 1) !== 1) return false;
   if ((cell?.col || 0) > 1) return false;
-  if (!normalized || normalized.length > 18) return false;
+  if (!normalized || normalized.length > GROUPED_ROW_LABEL_MAX_TEXT_LENGTH) return false;
   if (/[0-9()]/.test(normalized)) return false;
   if ((cell?.paragraphs || []).some(block => block?.type === 'table')) return false;
   const lineCount = String(rawText || text || '')
@@ -376,7 +392,7 @@ function isGroupedRowLabelCell(cell, text, rawText) {
     .map(line => line.trim())
     .filter(Boolean)
     .length;
-  return lineCount <= 3;
+  return lineCount <= GROUPED_ROW_LABEL_MAX_LINES;
 }
 
 function getParagraphText(para) {
