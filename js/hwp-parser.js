@@ -1036,6 +1036,9 @@ const HwpParser = {
         if (parsedBody.footerBlocks?.length) {
           pages[0].footerBlocks = parsedBody.footerBlocks.map(cloneParagraphBlock);
         }
+        if (parsedBody.pageStyle) {
+          pages.forEach(page => { page.pageStyle = parsedBody.pageStyle; });
+        }
       }
       return { meta: { pages: pages.length }, pages };
     }
@@ -2136,9 +2139,10 @@ const HwpParser = {
     const heights = saneSegs.map(seg => Math.max(Number(seg.height) || 0, Number(seg.textHeight) || 0));
     const totalHeight = heights.reduce((sum, value) => sum + value, 0);
     const avgHeight = totalHeight / heights.length;
+    // HWPUNIT (1/7200 inch) → px at 96 DPI: 1/75 scale
     return {
-      lineHeightPx: hwpPageUnitToPx(avgHeight, 11, 56, 0),
-      layoutHeightPx: hwpPageUnitToPx(totalHeight, 12, 320, 0),
+      lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 75))),
+      layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 75))),
     };
   },
 
@@ -2477,6 +2481,30 @@ const HwpParser = {
       return ['paper', 'page', 'absolute'][Number(code) || 0] || 'absolute';
     }
     return ['paper', 'page', 'column', 'para', 'absolute'][Number(code) || 0] || 'absolute';
+  },
+
+  _parseHwpSecDef(body) {
+    // HWPTAG_PAGE_DEF (tag 73): secd 컨트롤 내부의 페이지 정의 레코드 — 40바이트
+    // offset  0: paperWidth (HWPUNIT), 4: paperHeight (HWPUNIT)
+    // offset  8: marginLeft, 12: marginRight, 16: marginTop, 20: marginBottom
+    // offset 24: marginHeader, 28: marginFooter, 32: gutter, 36: flags
+    if (!body || body.length < 32) return null;
+    const paperWidth  = HwpParser._i32(body, 0);
+    const paperHeight = HwpParser._i32(body, 4);
+    if (paperWidth <= 0 || paperHeight <= 0) return null;
+    return {
+      sourceFormat: 'hwp',
+      width:  paperWidth,
+      height: paperHeight,
+      margins: {
+        left:   HwpParser._i32(body, 8),
+        right:  HwpParser._i32(body, 12),
+        top:    HwpParser._i32(body, 16),
+        bottom: HwpParser._i32(body, 20),
+        header: HwpParser._i32(body, 24),
+        footer: HwpParser._i32(body, 28),
+      },
+    };
   },
 
   _parseHwpObjectCommon(ctrlBody) {
@@ -3205,6 +3233,26 @@ const HwpParser = {
           continue;
         }
 
+        if (controlId === 'secd') {
+          pushParagraph();
+          if (extras && !extras.sectionMeta) {
+            let scanPos = rec.nextPos;
+            while (scanPos < data.length) {
+              const sub = HwpParser._readRecord(data, scanPos);
+              if (!sub) break;
+              if (sub.level <= rec.level) break;
+              if (sub.tagId === 73) {
+                const secDef = HwpParser._parseHwpSecDef(sub.body);
+                if (secDef) extras.sectionMeta = secDef;
+                break;
+              }
+              scanPos = sub.nextPos;
+            }
+          }
+          pos = HwpParser._skipControlSubtree(data, rec.nextPos, rec.level);
+          continue;
+        }
+
         pushParagraph();
         const subtree = HwpParser._parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
         if (subtree.blocks.length) {
@@ -3325,10 +3373,11 @@ const HwpParser = {
     let bestParas = [];
     let bestHeaderBlocks = [];
     let bestFooterBlocks = [];
+    let bestSectionMeta = null;
     let bestScore = 0;
 
     for (const { mode, bytes } of attempts) {
-      const extras = { headerBlocks: [], footerBlocks: [] };
+      const extras = { headerBlocks: [], footerBlocks: [], sectionMeta: null };
       const paras = HwpParser._parseHwpRecords(bytes, docInfo, extras);
       const score = HwpParser._scoreParas(paras);
       if (score > bestScore) {
@@ -3336,6 +3385,7 @@ const HwpParser = {
         bestParas = paras;
         bestHeaderBlocks = extras.headerBlocks;
         bestFooterBlocks = extras.footerBlocks;
+        bestSectionMeta = extras.sectionMeta || null;
       }
       if (score > 0) {
         console.log('[HWP] %s: %d단락 (%s)', sectionName, paras.length, mode);
@@ -3347,6 +3397,7 @@ const HwpParser = {
         paras: bestParas,
         headerBlocks: bestHeaderBlocks,
         footerBlocks: bestFooterBlocks,
+        sectionMeta: bestSectionMeta,
       };
     }
 
@@ -3357,11 +3408,11 @@ const HwpParser = {
       const score = HwpParser._scoreParas(paras);
       if (score > 0) {
         console.warn('[HWP] %s: 구조 파싱 실패 → 텍스트 블록 복구 (%s)', sectionName, mode);
-        return { paras, headerBlocks: [], footerBlocks: [] };
+        return { paras, headerBlocks: [], footerBlocks: [], sectionMeta: null };
       }
     }
 
-    return { paras: [], headerBlocks: [], footerBlocks: [] };
+    return { paras: [], headerBlocks: [], footerBlocks: [], sectionMeta: null };
   },
 
   /* ── BodyText/Section 스트림 파싱 ── */
@@ -3451,6 +3502,7 @@ const HwpParser = {
     const allParas = [];
     let headerBlocks = [];
     let footerBlocks = [];
+    let pageStyle = null;
     for (const sn of sectionNumbers) {
       const entry = entries['Section' + sn];
       if (!entry) continue;
@@ -3478,12 +3530,16 @@ const HwpParser = {
       if (!footerBlocks.length && parsed?.footerBlocks?.length) {
         footerBlocks = parsed.footerBlocks;
       }
+      if (!pageStyle && parsed?.sectionMeta) {
+        pageStyle = parsed.sectionMeta;
+      }
     }
 
     return allParas.length > 0 ? {
       paragraphs: allParas,
       headerBlocks,
       footerBlocks,
+      pageStyle,
     } : null;
   },
 

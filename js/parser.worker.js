@@ -1120,8 +1120,8 @@ function summarizeHwpLineSegs(lineSegs = []) {
   const totalHeight = heights.reduce((sum, value) => sum + value, 0);
   const avgHeight = totalHeight / heights.length;
   return {
-    lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 106))),
-    layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 106))),
+    lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 75))),
+    layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 75))),
   };
 }
 
@@ -1453,6 +1453,30 @@ function hwpObjectSizeRelTo(axis, code = 0) {
     return ['paper', 'page', 'absolute'][Number(code) || 0] || 'absolute';
   }
   return ['paper', 'page', 'column', 'para', 'absolute'][Number(code) || 0] || 'absolute';
+}
+
+function parseHwpSecDef(body) {
+  // HWPTAG_PAGE_DEF (tag 73): secd 컨트롤 내부의 페이지 정의 레코드 — 40바이트
+  // offset  0: paperWidth (HWPUNIT), 4: paperHeight (HWPUNIT)
+  // offset  8: marginLeft, 12: marginRight, 16: marginTop, 20: marginBottom
+  // offset 24: marginHeader, 28: marginFooter, 32: gutter, 36: flags
+  if (!body || body.length < 32) return null;
+  const paperWidth  = i32(body, 0);
+  const paperHeight = i32(body, 4);
+  if (paperWidth <= 0 || paperHeight <= 0) return null;
+  return {
+    sourceFormat: 'hwp',
+    width:  paperWidth,
+    height: paperHeight,
+    margins: {
+      left:   i32(body, 8),
+      right:  i32(body, 12),
+      top:    i32(body, 16),
+      bottom: i32(body, 20),
+      header: i32(body, 24),
+      footer: i32(body, 28),
+    },
+  };
 }
 
 function parseHwpObjectCommon(ctrlBody) {
@@ -2166,6 +2190,26 @@ function parseHwpBlockRange(data, startPos = 0, docInfo = null, stopLevel = null
         continue;
       }
 
+      if (controlId === 'secd') {
+        pushParagraph();
+        if (extras && !extras.sectionMeta) {
+          let scanPos = rec.nextPos;
+          while (scanPos < data.length) {
+            const sub = readRecord(data, scanPos);
+            if (!sub) break;
+            if (sub.level <= rec.level) break;
+            if (sub.tagId === 73) {
+              const secDef = parseHwpSecDef(sub.body);
+              if (secDef) extras.sectionMeta = secDef;
+              break;
+            }
+            scanPos = sub.nextPos;
+          }
+        }
+        pos = skipControlSubtree(data, rec.nextPos, rec.level);
+        continue;
+      }
+
       pushParagraph();
       const subtree = parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
       if (subtree.blocks.length) {
@@ -2338,10 +2382,11 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
   let bestParas = [];
   let bestHeaderBlocks = [];
   let bestFooterBlocks = [];
+  let bestSectionMeta = null;
   let bestScore = 0;
 
   for (const { mode, bytes } of attempts) {
-    const extras = { headerBlocks: [], footerBlocks: [] };
+    const extras = { headerBlocks: [], footerBlocks: [], sectionMeta: null };
     const paras = parseHwpRecords(bytes, docInfo, extras);
     const score = scoreParas(paras);
     if (score > bestScore) {
@@ -2349,6 +2394,7 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
       bestParas = paras;
       bestHeaderBlocks = extras.headerBlocks;
       bestFooterBlocks = extras.footerBlocks;
+      bestSectionMeta = extras.sectionMeta || null;
     }
     if (score > 0) {
       self.postMessage({ type: 'progress', msg: `${sectionName}: ${paras.length}개 단락 완료 (${mode})` });
@@ -2360,6 +2406,7 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
       paras: bestParas,
       headerBlocks: bestHeaderBlocks,
       footerBlocks: bestFooterBlocks,
+      sectionMeta: bestSectionMeta,
     };
   }
 
@@ -2370,11 +2417,11 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
       const score = scoreParas(paras);
       if (score > 0) {
         self.postMessage({ type: 'progress', msg: `${sectionName}: 텍스트 블록 복구 (${mode})` });
-        return { paras, headerBlocks: [], footerBlocks: [] };
+        return { paras, headerBlocks: [], footerBlocks: [], sectionMeta: null };
       }
     }
 
-  return { paras: [], headerBlocks: [], footerBlocks: [] };
+  return { paras: [], headerBlocks: [], footerBlocks: [], sectionMeta: null };
 }
 
 /* ════════════════════════════════════════════════════════
@@ -2473,6 +2520,7 @@ async function parseBodyText(b) {
   const allParas = [];
   let headerBlocks = [];
   let footerBlocks = [];
+  let pageStyle = null;
   for (const sn of sectionNumbers) {
     const entry = entries['Section' + sn];
     if (!entry) continue;
@@ -2498,12 +2546,16 @@ async function parseBodyText(b) {
     if (!footerBlocks.length && parsed?.footerBlocks?.length) {
       footerBlocks = parsed.footerBlocks;
     }
+    if (!pageStyle && parsed?.sectionMeta) {
+      pageStyle = parsed.sectionMeta;
+    }
   }
 
   return allParas.length > 0 ? {
     paragraphs: allParas,
     headerBlocks,
     footerBlocks,
+    pageStyle,
   } : null;
 }
 
@@ -2674,6 +2726,9 @@ self.onmessage = async ({ data }) => {
           }
           if (parsedBody.footerBlocks?.length) {
             pages[0].footerBlocks = parsedBody.footerBlocks;
+          }
+          if (parsedBody.pageStyle) {
+            pages.forEach(page => { page.pageStyle = parsedBody.pageStyle; });
           }
         }
         doc = { meta: { pages: pages.length }, pages };
