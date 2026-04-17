@@ -20,6 +20,7 @@
   --color-text:       #1e293b;
   --color-text-muted: #64748b;
   --header-height:    56px;
+  --wasm-toolbar-height: 38px;
   --sidebar-width:    160px;
   --status-height:    28px;
   --shadow-sm:        0 1px 3px rgba(0,0,0,.1);
@@ -215,6 +216,11 @@ html, body {
   left: 0; right: 0;
   display: flex;
   overflow: hidden;
+}
+
+/* WASM 툴바 표시 시 main-content 오프셋 조정 */
+body.wasm-toolbar-visible .main-content {
+  top: calc(var(--header-height) + var(--wasm-toolbar-height));
 }
 
 /* ── 사이드바 ────────────────────────────────── */
@@ -602,3 +608,124 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── rhwp WASM 렌더링 페이지 스타일 ───────── */
+.hwp-page-wasm {
+  padding: 0;
+  min-height: auto;
+  overflow: hidden;
+}
+
+.hwp-page-wasm svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 썸네일 WASM 미리보기 */
+.page-thumb-preview-wasm {
+  height: 90px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── WASM 보조 툴바 (줌 + 검색) ────────────────────────── */
+.wasm-toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--wasm-toolbar-height);
+  padding: 0 0.75rem;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  flex-shrink: 0;
+  gap: 0;
+  z-index: 10;
+}
+.wasm-toolbar.hidden { display: none; }
+
+.wasm-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 0.6rem;
+  height: 100%;
+}
+.wasm-toolbar-group + .wasm-toolbar-group { border-left: 1px solid #e0e0e0; }
+
+.wasm-tb-btn {
+  padding: 2px 8px;
+  background: transparent;
+  color: #555;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  min-width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.wasm-tb-btn:hover:not(:disabled) { background: #f0f0f0; border-color: #ccc; }
+.wasm-tb-btn:disabled { color: #ccc; cursor: not-allowed; }
+
+.wasm-zoom-level {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  min-width: 44px;
+  text-align: center;
+  user-select: none;
+}
+
+.wasm-search-group { flex: 1; max-width: 320px; }
+
+.wasm-search-input {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 12px;
+  width: 160px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.wasm-search-input:focus { border-color: #3b82f6; }
+
+.wasm-search-info {
+  font-size: 11px;
+  color: #666;
+  min-width: 48px;
+  text-align: center;
+  user-select: none;
+}
+.wasm-search-info.hidden { display: none; }
+.wasm-search-clear.hidden { display: none; }
+
+/* ── Canvas 페이지 래퍼 ──────────────────────────────────── */
+.hwp-page-canvas {
+  padding: 0;
+  min-height: auto;
+  overflow: hidden;
+}
+
+.hwp-page-canvas canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+/* 썸네일 Canvas 미리보기 */
+.page-thumb-preview-canvas {
+  height: 90px;
+  overflow: hidden;
+  background: #f8f8f8;
+}
+.page-thumb-preview-canvas img {
+  width: 100%;
+  height: auto;
+  display: block;
+}

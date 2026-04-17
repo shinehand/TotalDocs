@@ -166,7 +166,11 @@ const HwpExporter = {
     if (!ensureDocumentActionAllowed('내보내기')) return false;
     const w = window.open('','_blank','width=900,height=700');
     if (!w) { alert('팝업 차단 해제 후 재시도하세요.'); return false; }
-    w.document.write(this._wrap(getCurrentDocumentHtml()));
+    // WASM 모드: 현재 캔버스 HTML(SVG 포함) 그대로 인쇄
+    const bodyContent = state.wasmRenderResult
+      ? UI.documentCanvas.innerHTML
+      : getCurrentDocumentHtml();
+    w.document.write(this._wrap(bodyContent));
     w.document.close();
     w.onload = () => { w.focus(); w.print(); w.onafterprint = ()=>w.close(); };
     return true;
@@ -436,10 +440,23 @@ const UI = {
   statusFileInfo: $('statusFileInfo'),
   statusMode:     $('statusMode'),
   fileName:       $('fileName'),
+  // WASM 보조 툴바
+  wasmToolbar:    $('wasmToolbar'),
+  btnZoomOut:     $('btnZoomOut'),
+  btnZoomIn:      $('btnZoomIn'),
+  btnZoomFit:     $('btnZoomFit'),
+  zoomLevel:      $('zoomLevel'),
+  wasmSearchInput:$('wasmSearchInput'),
+  btnSearchPrev:  $('btnSearchPrev'),
+  btnSearchNext:  $('btnSearchNext'),
+  wasmSearchInfo: $('wasmSearchInfo'),
+  btnSearchClear: $('btnSearchClear'),
 };
 
 const state = {
   doc: null,
+  wasmRenderResult: null,
+  wasmBuffer: null,
   filename: '',
   mode: 'view',
   currentPage: 0,
@@ -453,6 +470,12 @@ const state = {
   documentLockReason: '',
   fileHandle: null,
   fileSource: '',
+  // WASM 줌 상태
+  wasmZoom: 1.0,
+  wasmZoomTimer: null,
+  // WASM 검색 상태
+  wasmSearchResults: [],
+  wasmSearchIndex: -1,
 };
 
 function getFilenameExtension(name = '') {
@@ -470,6 +493,10 @@ function setCurrentFilename(name) {
 function updateFileInfoFromSize(sizeBytes) {
   if (!Number.isFinite(sizeBytes)) return;
   UI.statusFileInfo.textContent = `${(sizeBytes/1024).toFixed(1)} KB | ${state.doc?.meta?.pages || state.renderedPages || 1}페이지`;
+}
+
+function hasLoadedDocument() {
+  return Boolean(state.doc || state.wasmRenderResult);
 }
 
 function getSaveCurrentDisabledReason() {
@@ -494,7 +521,7 @@ function getSaveAsDisabledReason(format = UI.saveAsFormat?.value || 'hwpx') {
 }
 
 function getPrintDisabledReason() {
-  if (!state.doc) return '인쇄할 문서가 없습니다.';
+  if (!hasLoadedDocument()) return '인쇄할 문서가 없습니다.';
   if (state.documentLocked) return state.documentLockReason || '현재 문서는 인쇄할 수 없습니다.';
   return '';
 }
@@ -530,6 +557,7 @@ function applyDocumentActionState() {
   const saveAsReason = getSaveAsDisabledReason();
   const printReason = getPrintDisabledReason();
 
+  // WASM 모드에서는 편집 모드 비활성화 (편집은 기존 파서 기반만 지원)
   UI.btnEditMode.disabled = !state.doc || locked;
   UI.btnSaveCurrent.disabled = Boolean(saveCurrentReason);
   UI.btnSaveAs.disabled = Boolean(saveAsReason);
@@ -543,7 +571,7 @@ function applyDocumentActionState() {
 }
 
 function ensureDocumentActionAllowed(actionLabel) {
-  if (!state.doc) {
+  if (!hasLoadedDocument()) {
     showError(`${actionLabel}할 문서가 없습니다.`);
     return false;
   }
@@ -614,11 +642,240 @@ function parseWithWorker(buffer, filename) {
   });
 }
 
+/* ── WASM 렌더링 (rhwp 기반 — Canvas 렌더링) ── */
+const WASM_INIT_TIMEOUT_MS = 10000; // WASM 초기화 최대 대기 시간 (10초)
+const ZOOM_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3.0;
+
+async function tryWasmRender(buffer, filename) {
+  const renderer = window.RhwpWasmRenderer;
+  if (!renderer) return null;
+
+  // WASM 초기화 대기
+  let waited = 0;
+  while (!renderer.isReady() && waited < WASM_INIT_TIMEOUT_MS) {
+    await new Promise(r => setTimeout(r, 100));
+    waited += 100;
+  }
+  if (!renderer.isReady()) return null;
+
+  return renderer.renderDocument(buffer, state.wasmZoom);
+}
+
+/**
+ * WASM Canvas 결과를 뷰어에 렌더링한다.
+ * pages 배열은 {canvas, width, height, index} 구조.
+ */
+function renderWasmPages(result) {
+  const { pageCount, pages } = result;
+  UI.documentCanvas.innerHTML = '';
+  UI.pageThumbnails.innerHTML = '';
+  state.renderedPages = pageCount;
+
+  pages.forEach(({ canvas, index: pi }) => {
+    // 페이지 래퍼
+    const pageEl = document.createElement('div');
+    pageEl.className = 'hwp-page hwp-page-canvas';
+    pageEl.id = 'page-' + pi;
+    pageEl.dataset.pageIndex = String(pi);
+    if (pi === 0) pageEl.dataset.pageRole = 'first';
+
+    // Canvas 크기를 뷰어 폭에 맞게 CSS로 조정 (WASM 렌더링 해상도는 유지)
+    canvas.style.maxWidth = '100%';
+    canvas.style.height = 'auto';
+    canvas.style.display = 'block';
+    pageEl.appendChild(canvas);
+
+    UI.documentCanvas.appendChild(pageEl);
+
+    // 사이드바 썸네일 — canvas를 toDataURL로 변환하여 <img> 삽입
+    const th = document.createElement('div');
+    th.className = 'page-thumb' + (pi === 0 ? ' active' : '');
+    th.dataset.page = pi;
+    th.onclick = () => scrollToPage(pi);
+
+    const pv = document.createElement('div');
+    pv.className = 'page-thumb-preview page-thumb-preview-canvas';
+
+    // 썸네일 이미지 생성 (비동기 — canvas 렌더 완료 후)
+    requestAnimationFrame(() => {
+      try {
+        const thumbImg = document.createElement('img');
+        thumbImg.src = canvas.toDataURL('image/jpeg', 0.6);
+        thumbImg.alt = (pi + 1) + ' 페이지';
+        thumbImg.style.cssText = 'width:100%;height:auto;display:block;';
+        pv.appendChild(thumbImg);
+      } catch (e) { /* cross-origin 등 무시 */ }
+    });
+
+    th.appendChild(pv);
+    th.appendChild(document.createTextNode((pi + 1) + ' 페이지'));
+    UI.pageThumbnails.appendChild(th);
+  });
+
+  updateStatusBar();
+  updateZoomUI();
+}
+
+/* ── WASM 줌 ── */
+function updateZoomUI() {
+  if (!UI.zoomLevel) return;
+  UI.zoomLevel.textContent = Math.round(state.wasmZoom * 100) + '%';
+}
+
+async function applyWasmZoom(newZoom) {
+  newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+  if (Math.abs(newZoom - state.wasmZoom) < 0.001) return;
+  state.wasmZoom = newZoom;
+  updateZoomUI();
+
+  // 줌 변경 시 재렌더 (디바운스 100ms)
+  clearTimeout(state.wasmZoomTimer);
+  state.wasmZoomTimer = setTimeout(async () => {
+    if (!state.wasmRenderResult) return;
+    const renderer = window.RhwpWasmRenderer;
+    if (!renderer) return;
+    showLoading('줌 재렌더 중...');
+    try {
+      const result = await renderer.rerenderAtZoom(state.wasmZoom);
+      if (result) {
+        state.wasmRenderResult = result;
+        renderWasmPages(result);
+      }
+    } catch (e) {
+      console.warn('[APP] 줌 재렌더 실패:', e.message);
+    } finally {
+      hideLoading();
+    }
+  }, 100);
+}
+
+function wasmZoomIn() {
+  const next = ZOOM_STEPS.find(s => s > state.wasmZoom + 0.01);
+  applyWasmZoom(next || ZOOM_MAX);
+}
+function wasmZoomOut() {
+  const prev = [...ZOOM_STEPS].reverse().find(s => s < state.wasmZoom - 0.01);
+  applyWasmZoom(prev || ZOOM_MIN);
+}
+function wasmZoomFit() {
+  // 뷰어 패널 너비 기준으로 줌 계산
+  const panelWidth = UI.viewerPanel?.clientWidth || 860;
+  const firstCanvas = UI.documentCanvas.querySelector('canvas');
+  if (!firstCanvas) { applyWasmZoom(1.0); return; }
+  // canvas.width는 실제 렌더 픽셀 (zoom=1 기준 ~794px for A4)
+  const baseWidth = firstCanvas.width / state.wasmZoom;
+  const fit = Math.min(1.5, (panelWidth - 48) / baseWidth);
+  applyWasmZoom(Math.max(ZOOM_MIN, fit));
+}
+
+/* ── WASM 텍스트 검색 ── */
+let _wasmSearchDebounce = null;
+
+function performWasmSearch(query) {
+  clearTimeout(_wasmSearchDebounce);
+  _wasmSearchDebounce = setTimeout(() => {
+    const renderer = window.RhwpWasmRenderer;
+    if (!renderer || !state.wasmRenderResult) return;
+
+    if (!query) {
+      clearWasmSearch();
+      return;
+    }
+
+    const results = renderer.searchText(query, false);
+    state.wasmSearchResults = results;
+    state.wasmSearchIndex = results.length > 0 ? 0 : -1;
+    updateWasmSearchUI();
+    if (results.length > 0) scrollToWasmSearchResult(0);
+  }, 300);
+}
+
+function clearWasmSearch() {
+  state.wasmSearchResults = [];
+  state.wasmSearchIndex = -1;
+  updateWasmSearchUI();
+}
+
+function updateWasmSearchUI() {
+  if (!UI.wasmSearchInfo) return;
+  const count = state.wasmSearchResults.length;
+  const idx = state.wasmSearchIndex;
+  const hasQuery = !!(UI.wasmSearchInput?.value);
+
+  if (count === 0) {
+    UI.wasmSearchInfo.textContent = hasQuery ? '없음' : '';
+    UI.wasmSearchInfo.classList.toggle('hidden', !hasQuery);
+    if (UI.btnSearchPrev) UI.btnSearchPrev.disabled = true;
+    if (UI.btnSearchNext) UI.btnSearchNext.disabled = true;
+    UI.btnSearchClear?.classList.toggle('hidden', !hasQuery);
+  } else {
+    UI.wasmSearchInfo.textContent = (idx + 1) + ' / ' + count;
+    UI.wasmSearchInfo.classList.remove('hidden');
+    if (UI.btnSearchPrev) UI.btnSearchPrev.disabled = (idx <= 0);
+    if (UI.btnSearchNext) UI.btnSearchNext.disabled = (idx >= count - 1);
+    UI.btnSearchClear?.classList.remove('hidden');
+  }
+}
+
+function scrollToWasmSearchResult(idx) {
+  const result = state.wasmSearchResults[idx];
+  if (!result || result.page == null) return;
+  scrollToPage(result.page);
+}
+
 /* ── 버퍼 처리 (공통 코어) ── */
 async function processBuffer(buffer, filename, sizeBytes, options = {}) {
   showLoading(`파싱 중... (${(sizeBytes/1024).toFixed(0)} KB)`);
-  let doc;
 
+  // 1차: rhwp WASM 렌더링 시도 (HWP/HWPX 모두 지원, 훨씬 정확한 레이아웃)
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  let wasmResult = null;
+  if (ext === 'hwp' || ext === 'hwpx') {
+    try {
+      showLoading('WASM 렌더링 중...');
+      wasmResult = await tryWasmRender(buffer.slice(0), filename);
+    } catch (e) {
+      console.warn('[APP] WASM 렌더링 실패, 기존 파서로 폴백:', e.message);
+    }
+  }
+
+  if (wasmResult) {
+    // WASM 렌더링 성공 — state 세팅 (doc은 null, wasmRenderResult 보관)
+    state.doc = null;
+    state.wasmRenderResult = wasmResult;
+    state.wasmBuffer = buffer;
+    state.filename = filename;
+    state.mode = 'view';
+    state.currentPage = 0;
+    state.renderedPages = wasmResult.pageCount;
+    state.editedDoc = null;
+    state.editedHtml = '';
+    state.editedDelta = null;
+    state.editBaseline = '';
+    state.hasUnsavedChanges = false;
+    state.documentLocked = false;
+    state.documentLockReason = '';
+    state.fileHandle = options.fileHandle || null;
+    state.fileSource = options.fileSource || '';
+    setCurrentFilename(filename);
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+      chrome.runtime.sendMessage({ type: 'ADD_RECENT_HWP_FILE', filename }).catch((err) => {
+        console.warn('[APP] 최근 파일 저장 실패:', err?.message || err);
+      });
+    }
+    hideLoading();
+    renderHWP(null, wasmResult);
+    updateUiAfterLoad(filename, sizeBytes);
+    // WASM 툴바 표시 + body 클래스로 레이아웃 조정
+    UI.wasmToolbar?.classList.remove('hidden');
+    document.body.classList.add('wasm-toolbar-visible');
+    return;
+  }
+
+  // 2차: 기존 JS 파서 (OWPML 또는 WASM 실패 시 폴백)
+  let doc;
   try {
     doc = await parseWithWorker(buffer, filename);
   } catch (e) {
@@ -639,6 +896,11 @@ async function processBuffer(buffer, filename, sizeBytes, options = {}) {
   }
 
   state.doc = doc;
+  state.wasmRenderResult = null;
+  state.wasmBuffer = null;
+  // 기존 파서로 렌더링 시 WASM 툴바 숨김
+  UI.wasmToolbar?.classList.add('hidden');
+  document.body.classList.remove('wasm-toolbar-visible');
   state.filename = filename;
   state.mode = 'view';
   state.currentPage = 0;
@@ -800,8 +1062,12 @@ function renderDocument(doc) {
   updateStatusBar();
 }
 
-function renderHWP(data) {
-  renderDocument(data);
+function renderHWP(data, wasmResult) {
+  if (wasmResult) {
+    renderWasmPages(wasmResult);
+  } else {
+    renderDocument(data);
+  }
   state.currentPage = 0;
   UI.viewerPanel.scrollTop = 0;
   UI.documentCanvas.scrollTop = 0;
@@ -989,7 +1255,84 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.key==='Escape' && state.mode==='edit') enterViewMode();
+
+  // WASM 줌 단축키 (Ctrl+= / Ctrl+- / Ctrl+0)
+  if (state.wasmRenderResult) {
+    if (e.ctrlKey && (e.key === '=' || e.key === '+')) { e.preventDefault(); wasmZoomIn(); }
+    if (e.ctrlKey && e.key === '-') { e.preventDefault(); wasmZoomOut(); }
+    if (e.ctrlKey && e.key === '0') { e.preventDefault(); applyWasmZoom(1.0); }
+    // Ctrl+F: 검색 포커스
+    if (e.ctrlKey && e.key === 'f') { e.preventDefault(); UI.wasmSearchInput?.focus(); }
+  }
 });
+
+// WASM 보조 툴바 이벤트 리스너
+if (UI.btnZoomIn)  UI.btnZoomIn.onclick  = wasmZoomIn;
+if (UI.btnZoomOut) UI.btnZoomOut.onclick = wasmZoomOut;
+if (UI.btnZoomFit) UI.btnZoomFit.onclick = wasmZoomFit;
+
+// Ctrl+휠 줌
+UI.viewerPanel?.addEventListener('wheel', e => {
+  if (!e.ctrlKey || !state.wasmRenderResult) return;
+  e.preventDefault();
+  if (e.deltaY < 0) wasmZoomIn(); else wasmZoomOut();
+}, { passive: false });
+
+if (UI.wasmSearchInput) {
+  UI.wasmSearchInput.addEventListener('input', () => {
+    performWasmSearch(UI.wasmSearchInput.value.trim());
+  });
+  UI.wasmSearchInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const count = state.wasmSearchResults.length;
+      if (!count) return;
+      if (e.shiftKey) {
+        if (state.wasmSearchIndex > 0) {
+          state.wasmSearchIndex--;
+          updateWasmSearchUI();
+          scrollToWasmSearchResult(state.wasmSearchIndex);
+        }
+      } else {
+        if (state.wasmSearchIndex < count - 1) {
+          state.wasmSearchIndex++;
+          updateWasmSearchUI();
+          scrollToWasmSearchResult(state.wasmSearchIndex);
+        }
+      }
+    }
+    if (e.key === 'Escape') {
+      UI.wasmSearchInput.value = '';
+      clearWasmSearch();
+      UI.wasmSearchInput.blur();
+    }
+  });
+}
+if (UI.btnSearchPrev) {
+  UI.btnSearchPrev.onclick = () => {
+    if (state.wasmSearchIndex > 0) {
+      state.wasmSearchIndex--;
+      updateWasmSearchUI();
+      scrollToWasmSearchResult(state.wasmSearchIndex);
+    }
+  };
+}
+if (UI.btnSearchNext) {
+  UI.btnSearchNext.onclick = () => {
+    const count = state.wasmSearchResults.length;
+    if (state.wasmSearchIndex < count - 1) {
+      state.wasmSearchIndex++;
+      updateWasmSearchUI();
+      scrollToWasmSearchResult(state.wasmSearchIndex);
+    }
+  };
+}
+if (UI.btnSearchClear) {
+  UI.btnSearchClear.onclick = () => {
+    if (UI.wasmSearchInput) UI.wasmSearchInput.value = '';
+    clearWasmSearch();
+  };
+}
 
 console.log('[HWP Viewer] app.js 로드 완료 ✓');
 

@@ -10,6 +10,106 @@
   <link href="../lib/quill.snow.css" rel="stylesheet" />
   <link rel="stylesheet" href="../css/viewer.css" />
   <link rel="stylesheet" href="../css/editor.css" />
+
+  <script>
+  // ── 한글 웹폰트 프리로드 (rhwp editor.html 방식) ──────────────────────────
+  // HWP 문서에서 자주 사용되는 폰트를 미리 로드
+  // Canvas measureTextWidth의 정확도를 높이고 렌더링 품질을 개선한다.
+  (function() {
+    const CDN_HAMCHOB_R = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2104@1.0/HANBatang.woff';
+    const CDN_HAMCHOB_B = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2104@1.0/HANBatangB.woff';
+    const CDN_HAMCHOD_R = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_four@1.0/HCRDotum.woff';
+
+    const fonts = [
+      // 함초롬/한컴 폰트 (CDN)
+      { name: '함초롬돋움',  file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '함초롬바탕',  file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '함초롱돋움',  file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '함초롱바탕',  file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '한컴돋움',    file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '한컴바탕',    file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '새돋움',      file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '새바탕',      file: CDN_HAMCHOB_R, format: 'woff' },
+      // HY 폰트 → Noto 대체
+      { name: 'HY헤드라인M',      file: '../lib/fonts/NotoSansKR-Bold.woff2' },
+      { name: 'HYHeadLine M',     file: '../lib/fonts/NotoSansKR-Bold.woff2' },
+      { name: 'HYHeadLine Medium',file: '../lib/fonts/NotoSansKR-Bold.woff2' },
+      { name: 'HY견고딕',         file: '../lib/fonts/NotoSansKR-Bold.woff2' },
+      { name: 'HYGothic-Extra',   file: '../lib/fonts/NotoSansKR-Bold.woff2' },
+      { name: 'HY그래픽',         file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'HYGraphic-Medium', file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'HY그래픽M',        file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'HY견명조',         file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'HYMyeongJo-Extra', file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'HY신명조',         file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'HY중고딕',         file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      // 시스템 폰트 대체
+      { name: 'Malgun Gothic', file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: '맑은 고딕',     file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: '돋움',          file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: '돋움체',        file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: '굴림',          file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: '바탕',          file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '바탕체',        file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '궁서',          file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '궁서체',        file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '나눔고딕',      file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: '나눔명조',      file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'Noto Sans KR',  file: '../lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'Noto Serif KR', file: '../lib/fonts/NotoSerifKR-Regular.woff2' },
+    ];
+
+    // 1) CSS @font-face 규칙 생성 (Canvas 2D 호환)
+    const style = document.createElement('style');
+    style.textContent = fonts.map(f => {
+      const fmt = f.format || 'woff2';
+      return `@font-face { font-family: "${f.name}"; src: url("${f.file}") format("${fmt}"); font-display: block; }`;
+    }).join('\n');
+    document.head.appendChild(style);
+
+    // 2) FontFace API로 폰트 데이터를 즉시 로드 (네트워크 요청 트리거)
+    let loadedCount = 0, failedCount = 0;
+    globalThis._fontLoadPromise = Promise.all(fonts.map(f => {
+      const fmt = f.format || 'woff2';
+      const face = new FontFace(f.name, `url(${f.file}) format('${fmt}')`);
+      return face.load().then(loadedFace => {
+        document.fonts.add(loadedFace);
+        loadedCount++;
+        return loadedFace;
+      }).catch(e => {
+        failedCount++;
+        return null;
+      });
+    })).then(async () => {
+      await document.fonts.ready;
+      console.log(`[폰트] ${loadedCount}개 로드 완료, ${failedCount}개 실패`);
+    });
+  })();
+
+  // ── measureTextWidth LRU 캐시 (WASM용) ─────────────────────────────────────
+  // rhwp-wasm-renderer.js와 중복 방지: 여기서 먼저 정의하면 모듈 로드 전에도 동작
+  (function() {
+    if (typeof globalThis.measureTextWidth !== 'undefined') return;
+    let ctx = null, lastFont = '';
+    const cache = new Map();
+    const MAX = 256, EVICT = 64;
+    globalThis.measureTextWidth = function(font, text) {
+      const key = font + '\0' + text;
+      if (cache.has(key)) {
+        const v = cache.get(key); cache.delete(key); cache.set(key, v); return v;
+      }
+      if (!ctx) ctx = document.createElement('canvas').getContext('2d');
+      if (font !== lastFont) { ctx.font = font; lastFont = font; }
+      const w = ctx.measureText(text).width;
+      if (cache.size >= MAX) {
+        const iter = cache.keys();
+        for (let i = 0; i < EVICT; i++) { const k = iter.next().value; if (k) cache.delete(k); }
+      }
+      cache.set(key, w);
+      return w;
+    };
+  })();
+  </script>
 </head>
 <body>
 
@@ -40,6 +140,23 @@
   </div>
   <input type="file" id="fileInput" accept=".hwp,.hwpx,.owpml" style="display:none" />
 </header>
+
+<!-- ───────────── WASM 뷰어 보조 툴바 (줌 + 검색) ───────────── -->
+<div class="wasm-toolbar hidden" id="wasmToolbar">
+  <div class="wasm-toolbar-group">
+    <button class="wasm-tb-btn" id="btnZoomOut" title="축소 (Ctrl+-)">&#8722;</button>
+    <span class="wasm-zoom-level" id="zoomLevel">100%</span>
+    <button class="wasm-tb-btn" id="btnZoomIn"  title="확대 (Ctrl++)">&#43;</button>
+    <button class="wasm-tb-btn" id="btnZoomFit" title="페이지 너비에 맞춤">맞춤</button>
+  </div>
+  <div class="wasm-toolbar-group wasm-search-group">
+    <input type="text" class="wasm-search-input" id="wasmSearchInput" placeholder="검색 (Ctrl+F)…" />
+    <button class="wasm-tb-btn" id="btnSearchPrev" disabled title="이전 결과">&#9650;</button>
+    <button class="wasm-tb-btn" id="btnSearchNext" disabled title="다음 결과">&#9660;</button>
+    <span class="wasm-search-info hidden" id="wasmSearchInfo">0 / 0</span>
+    <button class="wasm-tb-btn wasm-search-clear hidden" id="btnSearchClear" title="검색 초기화">&#10005;</button>
+  </div>
+</div>
 
 <!-- ───────────── 드래그&드롭 업로드 존 ───────────── -->
 <div class="drop-zone" id="dropZone">
@@ -98,6 +215,10 @@
 <script src="../lib/quill.min.js"></script>
 <script src="../lib/jszip.min.js"></script>
 <script src="../lib/pako.min.js"></script>
+<!-- 폰트 치환 모듈 (전역 FontSubstitution 객체 등록) -->
+<script src="../js/font_substitution.js"></script>
+<!-- rhwp WASM 렌더러 (ES module) — app.js보다 먼저 선언, 초기화는 비동기 -->
+<script type="module" src="../js/rhwp-wasm-renderer.js"></script>
 <script src="../js/hwp-parser.js"></script>
 <script src="../js/hwp-renderer.js"></script>
 <script src="../js/app.js"></script>
