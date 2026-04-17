@@ -166,7 +166,11 @@ const HwpExporter = {
     if (!ensureDocumentActionAllowed('내보내기')) return false;
     const w = window.open('','_blank','width=900,height=700');
     if (!w) { alert('팝업 차단 해제 후 재시도하세요.'); return false; }
-    w.document.write(this._wrap(getCurrentDocumentHtml()));
+    // WASM 모드: 현재 캔버스 HTML(SVG 포함) 그대로 인쇄
+    const bodyContent = state.wasmRenderResult
+      ? UI.documentCanvas.innerHTML
+      : getCurrentDocumentHtml();
+    w.document.write(this._wrap(bodyContent));
     w.document.close();
     w.onload = () => { w.focus(); w.print(); w.onafterprint = ()=>w.close(); };
     return true;
@@ -440,6 +444,8 @@ const UI = {
 
 const state = {
   doc: null,
+  wasmRenderResult: null,
+  wasmBuffer: null,
   filename: '',
   mode: 'view',
   currentPage: 0,
@@ -472,6 +478,10 @@ function updateFileInfoFromSize(sizeBytes) {
   UI.statusFileInfo.textContent = `${(sizeBytes/1024).toFixed(1)} KB | ${state.doc?.meta?.pages || state.renderedPages || 1}페이지`;
 }
 
+function hasLoadedDocument() {
+  return Boolean(state.doc || state.wasmRenderResult);
+}
+
 function getSaveCurrentDisabledReason() {
   if (!state.doc) return '저장할 문서가 없습니다.';
   if (state.documentLocked) return state.documentLockReason || '현재 문서는 저장할 수 없습니다.';
@@ -494,7 +504,7 @@ function getSaveAsDisabledReason(format = UI.saveAsFormat?.value || 'hwpx') {
 }
 
 function getPrintDisabledReason() {
-  if (!state.doc) return '인쇄할 문서가 없습니다.';
+  if (!hasLoadedDocument()) return '인쇄할 문서가 없습니다.';
   if (state.documentLocked) return state.documentLockReason || '현재 문서는 인쇄할 수 없습니다.';
   return '';
 }
@@ -530,6 +540,7 @@ function applyDocumentActionState() {
   const saveAsReason = getSaveAsDisabledReason();
   const printReason = getPrintDisabledReason();
 
+  // WASM 모드에서는 편집 모드 비활성화 (편집은 기존 파서 기반만 지원)
   UI.btnEditMode.disabled = !state.doc || locked;
   UI.btnSaveCurrent.disabled = Boolean(saveCurrentReason);
   UI.btnSaveAs.disabled = Boolean(saveAsReason);
@@ -543,7 +554,7 @@ function applyDocumentActionState() {
 }
 
 function ensureDocumentActionAllowed(actionLabel) {
-  if (!state.doc) {
+  if (!hasLoadedDocument()) {
     showError(`${actionLabel}할 문서가 없습니다.`);
     return false;
   }
@@ -614,11 +625,118 @@ function parseWithWorker(buffer, filename) {
   });
 }
 
+/* ── WASM 렌더링 (rhwp 기반) ── */
+async function tryWasmRender(buffer, filename) {
+  const renderer = window.RhwpWasmRenderer;
+  if (!renderer) return null;
+
+  // WASM 초기화 대기 (최대 10초)
+  let waited = 0;
+  while (!renderer.isReady() && waited < 10000) {
+    await new Promise(r => setTimeout(r, 100));
+    waited += 100;
+  }
+  if (!renderer.isReady()) return null;
+
+  return renderer.renderDocument(buffer);
+}
+
+function renderWasmPages(result, filename) {
+  const { pageCount, pages } = result;
+  UI.documentCanvas.innerHTML = '';
+  UI.pageThumbnails.innerHTML = '';
+  state.renderedPages = pageCount;
+
+  pages.forEach(({ svg, index: pi }) => {
+    const pageEl = document.createElement('div');
+    pageEl.className = 'hwp-page hwp-page-wasm';
+    pageEl.id = 'page-' + pi;
+    pageEl.dataset.pageIndex = String(pi);
+    if (pi === 0) pageEl.dataset.pageRole = 'first';
+    pageEl.innerHTML = svg;
+
+    // SVG를 뷰포트에 맞게 스케일 조정
+    const svgEl = pageEl.querySelector('svg');
+    if (svgEl) {
+      svgEl.style.maxWidth = '100%';
+      svgEl.style.height = 'auto';
+      svgEl.style.display = 'block';
+    }
+
+    UI.documentCanvas.appendChild(pageEl);
+
+    // 사이드바 썸네일
+    const th = document.createElement('div');
+    th.className = 'page-thumb' + (pi === 0 ? ' active' : '');
+    th.dataset.page = pi;
+    th.onclick = () => scrollToPage(pi);
+    const pv = document.createElement('div');
+    pv.className = 'page-thumb-preview page-thumb-preview-wasm';
+
+    // 썸네일에 미니 SVG 삽입 (SVG 내용이 있으면 복사, 없으면 페이지 번호만)
+    if (svg && svg.length < 500000) {
+      const miniWrapper = document.createElement('div');
+      miniWrapper.style.cssText = 'transform:scale(0.13);transform-origin:top left;width:770%;pointer-events:none;overflow:hidden;';
+      miniWrapper.innerHTML = svg;
+      pv.appendChild(miniWrapper);
+      pv.style.overflow = 'hidden';
+    }
+    th.appendChild(pv);
+    th.appendChild(document.createTextNode((pi + 1) + ' 페이지'));
+    UI.pageThumbnails.appendChild(th);
+  });
+
+  updateStatusBar();
+}
+
 /* ── 버퍼 처리 (공통 코어) ── */
 async function processBuffer(buffer, filename, sizeBytes, options = {}) {
   showLoading(`파싱 중... (${(sizeBytes/1024).toFixed(0)} KB)`);
-  let doc;
 
+  // 1차: rhwp WASM 렌더링 시도 (HWP/HWPX 모두 지원, 훨씬 정확한 레이아웃)
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  let wasmResult = null;
+  if (ext === 'hwp' || ext === 'hwpx') {
+    try {
+      showLoading('WASM 렌더링 중...');
+      wasmResult = await tryWasmRender(buffer.slice(0), filename);
+    } catch (e) {
+      console.warn('[APP] WASM 렌더링 실패, 기존 파서로 폴백:', e.message);
+    }
+  }
+
+  if (wasmResult) {
+    // WASM 렌더링 성공 — state 세팅 (doc은 null, wasmRenderResult 보관)
+    state.doc = null;
+    state.wasmRenderResult = wasmResult;
+    state.wasmBuffer = buffer;
+    state.filename = filename;
+    state.mode = 'view';
+    state.currentPage = 0;
+    state.renderedPages = wasmResult.pageCount;
+    state.editedDoc = null;
+    state.editedHtml = '';
+    state.editedDelta = null;
+    state.editBaseline = '';
+    state.hasUnsavedChanges = false;
+    state.documentLocked = false;
+    state.documentLockReason = '';
+    state.fileHandle = options.fileHandle || null;
+    state.fileSource = options.fileSource || '';
+    setCurrentFilename(filename);
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+      chrome.runtime.sendMessage({ type: 'ADD_RECENT_HWP_FILE', filename }).catch((err) => {
+        console.warn('[APP] 최근 파일 저장 실패:', err?.message || err);
+      });
+    }
+    hideLoading();
+    renderHWP(null, wasmResult);
+    updateUiAfterLoad(filename, sizeBytes);
+    return;
+  }
+
+  // 2차: 기존 JS 파서 (OWPML 또는 WASM 실패 시 폴백)
+  let doc;
   try {
     doc = await parseWithWorker(buffer, filename);
   } catch (e) {
@@ -639,6 +757,8 @@ async function processBuffer(buffer, filename, sizeBytes, options = {}) {
   }
 
   state.doc = doc;
+  state.wasmRenderResult = null;
+  state.wasmBuffer = null;
   state.filename = filename;
   state.mode = 'view';
   state.currentPage = 0;
@@ -800,8 +920,12 @@ function renderDocument(doc) {
   updateStatusBar();
 }
 
-function renderHWP(data) {
-  renderDocument(data);
+function renderHWP(data, wasmResult) {
+  if (wasmResult) {
+    renderWasmPages(wasmResult);
+  } else {
+    renderDocument(data);
+  }
   state.currentPage = 0;
   UI.viewerPanel.scrollTop = 0;
   UI.documentCanvas.scrollTop = 0;

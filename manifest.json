@@ -18,7 +18,8 @@
     }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "side_panel": {
     "default_path": "sidepanel.html"
@@ -42,11 +43,14 @@
       "js": [
         "content_script.js"
       ],
+      "css": [
+        "css/content-script.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; worker-src 'self';"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';"
   },
   "web_accessible_resources": [
     {
@@ -55,6 +59,7 @@
         "css/*",
         "js/*",
         "lib/*",
+        "sw/*",
         "icons/*"
       ],
       "matches": [

@@ -1,0 +1,101 @@
+/* ChromeHWP Content Script — HWP 링크 배지 + 호버 카드 스타일
+ * MIT License 참조: rhwp-chrome/content-script.css (Edward Kim)
+ */
+
+/* ── HWP 링크 배지 ── */
+.chromehwp-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 5px;
+  background: #1251a3;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: sans-serif;
+  border-radius: 3px;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.chromehwp-badge:hover {
+  background: #0d3d82;
+}
+
+/* ── 호버 카드 ── */
+.chromehwp-hover-card {
+  position: absolute;
+  z-index: 2147483647;
+  width: 260px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.chromehwp-hover-card:hover {
+  box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+}
+
+.chromehwp-hover-title {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #111827;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.chromehwp-hover-meta {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+/* ── 썸네일 ── */
+.chromehwp-hover-thumb {
+  width: 100%;
+  max-height: 140px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #f3f4f6;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chromehwp-hover-thumb img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.chromehwp-thumb-loading {
+  min-height: 60px;
+}
+
+.chromehwp-thumb-spinner {
+  font-size: 20px;
+}
+
+/* ── 푸터 ── */
+.chromehwp-hover-action {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #1251a3;
+  font-weight: 600;
+  text-align: center;
+}

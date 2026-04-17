@@ -271,4 +271,63 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     });
     return true;
   }
+
+  // content-script에서 HWP 링크 클릭 → 뷰어로 열기
+  if (msg.type === 'open-hwp') {
+    const url = String(msg.url || '').trim();
+    if (!url) {
+      sendResponse({ ok: false, error: 'URL이 없습니다.' });
+      return false;
+    }
+    openRemoteHwpInViewer(url, 'content-script-badge').then(() => {
+      sendResponse({ ok: true });
+    }).catch(err => {
+      sendResponse({ ok: false, error: err?.message || '파일 열기 실패' });
+    });
+    return true;
+  }
+
+  // CORS 우회 파일 fetch (뷰어 탭 → 서비스 워커)
+  // Service Worker의 fetch는 host_permissions에 의해 CORS 제한 없음
+  if (msg.type === 'FETCH_FILE') {
+    const url = String(msg.url || '').trim();
+    if (!url) {
+      sendResponse({ error: 'URL이 필요합니다.' });
+      return false;
+    }
+    (async () => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          sendResponse({ error: `HTTP ${response.status}: ${response.statusText}` });
+          return;
+        }
+        const buffer = await response.arrayBuffer();
+        sendResponse({ data: Array.from(new Uint8Array(buffer)) });
+      } catch (err) {
+        sendResponse({ error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  // HWP 링크 썸네일 추출 (content-script → service worker)
+  if (msg.type === 'EXTRACT_THUMBNAIL') {
+    const url = String(msg.url || '').trim();
+    if (!url) {
+      sendResponse({ error: 'URL이 필요합니다.' });
+      return false;
+    }
+    (async () => {
+      try {
+        const { extractThumbnailFromUrl } = await import('./sw/thumbnail-extractor.js');
+        const result = await extractThumbnailFromUrl(url);
+        sendResponse(result || { error: 'PrvImage not found' });
+      } catch (err) {
+        sendResponse({ error: err.message });
+      }
+    })();
+    return true;
+  }
 });
+
