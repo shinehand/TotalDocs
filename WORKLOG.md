@@ -104,9 +104,9 @@
     - 검증 아티팩트: `.playwright-cli/page-2026-03-29T02-48-17-102Z.png`
 
 - 요청: HWP/HWPX 어떤 계열 파일도 더 안정적으로 열리도록 일반화하고, 실제 샘플 `.hwp` / `.hwpx` 파일로 다시 검증
-- 반영한 내용:
-  - `js/app.js`
-    - HWPX 셀 안의 중첩 표를 더 이상 평문으로 눌러버리지 않고 블록 구조로 유지
+  - 반영한 내용:
+    - `js/app.js`
+      - HWPX 셀 안의 중첩 표를 더 이상 평문으로 눌러버리지 않고 블록 구조로 유지
     - HWPX의 큰 레이아웃용 외곽 표를 문단 흐름 + 실제 표 블록으로 선형화하는 휴리스틱 추가
     - `Ⅰ / Ⅱ / Ⅲ ...` 같은 구획 제목 행은 단락형 헤더로 정리하고, 실제 다열 행은 작은 표 블록으로 유지
     - HWPX 표 행 높이를 원본 raw height 대신 내용 기반 weight로 다시 계산해 과도한 페이지 분리를 줄임
@@ -115,9 +115,28 @@
   - `css/viewer.css`
     - 셀 내부 중첩 표 렌더링용 `.hwp-table-nested` 여백 규칙 추가
   - `HwpExporter._wrap()` 인라인 스타일도 동일한 중첩 표 규칙으로 동기화
-- 검증:
-  - `node --check js/app.js`
-  - Playwright로 `http://127.0.0.1:4174/pages/viewer.html` 실파일 업로드 검증
+  - 검증:
+    - `node --check js/app.js`
+    - Playwright로 `http://127.0.0.1:4174/pages/viewer.html` 실파일 업로드 검증
+
+## 2026-04-14
+
+- 요청: Planning Team member 3로서 공식 PDF 2종을 읽고, 수식/차트의 full-fidelity 요건과 즉시 구현 우선순위를 정리
+- 분석 대상:
+  - `/Users/shinehandmac/Downloads/한글문서파일형식_수식_revision1.3.pdf`
+  - `/Users/shinehandmac/Downloads/한글문서파일형식_차트_revision1.2.pdf`
+- 핵심 확인 사항:
+  - 수식 문서는 `Equation Editor`의 명령어 집합, 글꼴 전환, 항 묶기, 줄바꿈, 빈칸 처리, 분수/제곱근/행렬/합·극한/조합 같은 템플릿 기반 조합식을 정의한다.
+  - 수식 fidelity의 본질은 단순 텍스트 파싱이 아니라, 기호 위치와 크기, 상하 첨자, 분수선, 괄호 크기, 행렬 정렬, `scale`/`rm`/`bold`/`cases`/`pile`/`eqalign` 같은 명령의 레이아웃 해석이다.
+  - 차트 문서는 `VtChart` 루트와 `ChartObj` 트리, `Axis`/`Legend`/`Plot`/`DataGrid`/`Title`/`Fill`/`Brush`/`View3D`/각종 `Constants`를 매우 세분화해서 정의한다.
+  - 차트 fidelity의 본질은 표면적인 막대/선/파이 그림보다, 객체 트리, 속성 상속, 축 스케일, 범례, 라벨, 색/브러시/그라데이션, 2D/3D 분기, 그림자/패턴/각종 상수 매핑을 유지하는 데 있다.
+- 즉시 권장 우선순위:
+  - 수식은 `OVER`, `SQRT`, `MATRIX`, `SUM`, `BIGG`, `LEFT/RIGHT`, `lim`, `cases`, `pile`, `eqalign` 같은 핵심 템플릿을 실제 렌더링하는 쪽이 우선이다.
+  - 차트는 먼저 `VtChart`-기반 트리와 주요 축/범례/데이터/텍스트 속성을 보존하고, 시각 출력은 단계적으로 고도화하는 편이 효율적이다.
+  - 즉시 미루어도 되는 항목은 희귀한 상수 풀 커버리지, 특수 3D 장식, 상세 인쇄 옵션, 매우 드문 차트 변형과 부수 객체들이다.
+- 결론:
+  - 원본 그대로 보이게 하려면 수식은 “명령 해석 + 수학 레이아웃 엔진” 수준이 필요하고, 차트는 “객체 그래프 직렬화/역직렬화 + SVG/Canvas 렌더러”에 가까운 접근이 필요하다.
+  - 초기 viewer fidelity 목표에서는 수식/차트의 구조와 대표 형태를 먼저 맞추고, 아주 세부적인 인쇄/장식 상수는 후순위로 둬야 한다.
     - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/inputs/goyeopje.hwp`
       - `3페이지` 유지
       - 첫 페이지 신청서 양식이 표/칸 구조로 유지되는 것 확인
@@ -741,3 +760,154 @@
   - 커밋 전에 최근 핵심 로직(개체 배치, 표 열폭 계산, 세로 라벨 보정)에 한글 주석 보강
   - 공식 형식 PDF 5종을 `docs/hwp-spec/`로 복사하고, 테스트 샘플 목록을 `docs/hwp-assets.md`에 정리
   - 추가 검증용 양식 샘플 `output/playwright/inputs/goyeopje-full-2024.hwp` 추가
+
+## 2026-04-14
+
+- 공식 PDF 구조 검토
+  - 대상:
+    - `/Users/shinehandmac/Downloads/한글문서파일형식3.0_HWPML_revision1.2.pdf`
+    - `/Users/shinehandmac/Downloads/한글문서파일형식_배포용문서_revision1.2.pdf`
+  - 핵심 확인 사항:
+    - HWPML 루트는 `Version`, `SubVersion`, `Style2` 속성을 가지며 `HEAD`, `BODY`, `TAIL` 순서의 전체 구조를 따른다.
+    - `HEAD/MAPPINGTABLE` 아래의 참조 테이블은 렌더 fidelity의 핵심이며 `BINDATALIST`, `FACENAMELIST`, `BORDERFILLLIST`, `CHARSHAPELIST`, `TABDEFLIST`, `NUMBERINGLIST`, `BULLETLIST`, `PARASHAPELIST`, `STYLELIST`, `MEMOSHAPELIST`를 반드시 보존해야 한다.
+    - `BINITEM`은 `Type="Link"`일 때 `APath`, `RPath`가 필수이고, `Type="Embedding"`일 때 `BinData`, `Format`이 필수이며, `Storage`는 OLE 저장 경로다.
+    - `CHARSHAPE`, `PARASHAPE`, `STYLE`는 모두 `Id` 참조 기반이라서 숫자 인덱스 재매핑이나 누락이 곧바로 스타일 붕괴로 이어진다.
+    - `TAIL/XMLTEMPLATE`는 `SCHEMA`와 `INSTANCE` 문자열을 담으므로, XML 연계/재내보내기에서 버리면 round-trip 정보가 깨진다.
+    - 배포용 문서는 `ViewText/Section*`, `Scripts/*`, `DocHistory/*` 스트림을 암호화하고, `HWPTAG_DISTRIBUTE_DOC_DATA` 256바이트 레코드로 seed, SHA1 기반 해시, 옵션 플래그를 유도한다.
+  - 코드베이스 영향:
+    - 현재 파서/렌더러는 스타일 목록과 바이너리 참조를 유지하는 쪽은 맞지만, `XMLTEMPLATE`와 배포용 문서 복호화 경로는 별도 보강 여지가 크다.
+    - 다음 구현 우선순위는 `MAPPINGTABLE` 참조 보존, `BINITEM` 조건부 필수 속성 처리, 배포용 문서 스트림 복호화 지원 여부 판단이다.
+
+- 프로젝트 구조 파악
+  - 목적:
+    - 크롬 확장에서 `.hwp`, `.hwpx`, `.owpml` 문서를 열람하고, 제한적인 편집과 저장/내보내기를 제공하는 구조임
+  - 현재 실제 런타임 경로:
+    - 확장 진입: `manifest.json`
+    - 백그라운드/브리지: `background.js`
+    - 업로드 팝업: `popup.html`, `popup.js`
+    - 링크 수집: `content_script.js`
+    - 메인 뷰어: `pages/viewer.html`
+    - 핵심 로직: `js/hwp-parser.js`, `js/hwp-renderer.js`, `js/app.js`
+    - HWP worker 파싱: `js/parser.worker.js`
+  - 실제 동작 흐름:
+    - 팝업 업로드 또는 웹 링크/컨텍스트 메뉴 진입
+    - `background.js`가 세션 저장소/최근 파일 목록을 관리하고 `viewer.html`을 열어 줌
+    - `js/app.js`의 `processBuffer()`가 문서를 읽고 `parseWithWorker()`로 파싱 시작
+    - `.hwp`는 기본적으로 `js/parser.worker.js`에서 파싱하고, `.hwpx`/`.owpml`은 메인 스레드 `HwpParser` 경로를 사용
+    - 파싱 결과는 `js/hwp-renderer.js`를 통해 DOM 페이지로 렌더됨
+  - 편집/저장 모델:
+    - 편집기는 Quill 기반이며 `js/app.js` 내부 `HwpEditor` 래퍼를 사용
+    - 현재 덮어쓰기는 `hwpx`/`owpml`만 지원하고, `.hwp` 바이너리 저장은 미지원 상태
+    - HTML/PDF/HWPX/OWPML 내보내기 로직도 `js/app.js` 내부 `HwpExporter`에 포함되어 있음
+  - 보조 경로:
+    - `sidepanel.html`, `sidepanel.js`는 최근 파일/현재 페이지 HWP 링크 목록 확인용 보조 UI
+    - `js/editor.js`, `js/exporter.js`, `js/viewer.js`는 module 스타일 분리본이지만 현재 `pages/viewer.html`에서 로드되지 않음
+    - 현재 기준으로는 미사용 또는 이전 구조 잔재일 가능성이 높음
+  - 문서/검증 자산:
+    - 현재 상태 요약: `STATUS.md`
+    - 남은 작업 목록: `BACKLOG.md`
+    - 렌더링 지원 범위: `docs/rendering-status.md`
+    - 최소 스모크 검증: `scripts/verify_samples.mjs`
+    - 형식 레퍼런스: `docs/hwp-spec/`
+  - 구조 메모:
+    - 저장소에 `package.json`이 없어서 빌드 단계 없는 plain JS 크롬 확장 프로젝트로 보임
+    - HWP 파서 로직은 `js/hwp-parser.js`와 `js/parser.worker.js` 양쪽에 상당 부분 동기화돼 있어 drift 위험이 남아 있음
+- 확인:
+  - `git status --short`
+    - 작업 시작 시 기준으로 워킹트리는 비어 있었음
+  - 문법 확인:
+    - `node --check background.js`
+    - `node --check popup.js`
+    - `node --check content_script.js`
+    - `node --check js/app.js`
+    - `node --check js/hwp-parser.js`
+    - `node --check js/hwp-renderer.js`
+    - `node --check js/parser.worker.js`
+    - 모두 통과
+  - 미실행:
+    - `node scripts/verify_samples.mjs`는 이번 세션에서 실행하지 않았음
+    - 뷰어 서버(`http://127.0.0.1:4174`)와 Playwright 세션 준비가 필요한 스모크 검증이라, 구조 파악 범위에서는 코드/문서 확인까지만 진행
+
+- 추가 반영: 공식 형식 문서 기반 fidelity 1차 정리 및 구현 시작
+  - 사전 회의:
+    - 다운로드 폴더의 공식 PDF 5종과 샘플 문서를 기준으로 역할별 분석을 진행했고, 회의 결과를 `docs/fidelity-meeting-2026-04-14.md`에 정리
+    - 공통 결론:
+      - `구역/페이지`, `문단/글자 모양`, `표`, `그림·OLE·배치 개체`가 원본 fidelity의 핵심
+      - 현재 코드는 일부 구간에서 readability 중심 휴리스틱을 사용하고 있어 원본 구조 보존과 충돌
+      - Playwright 회귀 스크립트는 `verify-current` 세션 여는 방식이 잘못되어 자동 검증이 불안정
+  - 반영 내용:
+    - `js/hwp-parser.js`
+      - HWPX `charPr`에서 `shadeColor`, `underlineColor`, `underlineShape`, `strikeout`, `shadow`, `outline` 정보를 보존하도록 확장
+      - HWP `charShape`에서 `strike`, `superscript`, `subscript` 비트를 보존하도록 확장
+      - HWPX 표를 문단 흐름으로 바꾸던 `_hwpxShouldFlattenTable`, `_hwpxShouldLinearizeTable` 적용을 제거해 원본 표 구조를 기본적으로 유지하도록 변경
+      - `_run()` 기본값에 새 텍스트 시각 속성 필드를 추가
+    - `js/parser.worker.js`
+      - HWP worker 경로도 `strike`, `superscript`, `subscript`와 새 런 기본 필드를 동일하게 반영
+    - `js/hwp-renderer.js`
+      - `underline + strike-through` 동시 표현, decoration color/style, `shadeColor`, superscript/subscript, shadow 렌더를 추가
+    - `scripts/verify_samples.mjs`
+      - Playwright를 `PLAYWRIGHT_CLI_SESSION` 환경변수 대신 `-s=verify-current`로 호출하도록 수정
+      - 최신 CLI의 인라인 YAML snapshot 출력도 읽을 수 있도록 보강
+    - `scripts/playwright_smoke.sh`
+      - 동일하게 `-s=verify-current` 직접 전달 방식으로 수정
+  - 검증:
+    - 문법:
+      - `node --check js/hwp-parser.js`
+      - `node --check js/hwp-renderer.js`
+      - `node --check js/parser.worker.js`
+      - `node --check scripts/verify_samples.mjs`
+      - `bash -n scripts/playwright_smoke.sh`
+    - 자동 회귀:
+      - `node scripts/verify_samples.mjs` 통과
+      - `bash scripts/playwright_smoke.sh` 통과
+    - 추가 확인:
+      - 다운로드 샘플과 저장소 `output/playwright/inputs/` 샘플이 SHA-256 기준 동일 파일임을 확인
+
+## 2026-04-14
+
+- 요청: 공식 PDF `한글문서파일형식_5.0_revision1.3.pdf` 기준으로 HWP 원본 충실도에 중요한 섹션을 분석하고, 현재 프로젝트의 누락/위험 항목을 기획 관점에서 정리
+- 분석 범위:
+  - `4.2.6 글자 모양`
+  - `4.2.10 문단 모양`
+  - `4.3.9.1 표 개체`
+  - `4.3.9.2 그리기 개체/개체 요소`
+  - `4.3.9.4 그림 개체`
+  - `4.3.9.5 OLE 개체`
+  - `4.3.10.1 구역 정의 / 용지 설정`
+  - `4.3.10.2 단 정의`
+- 핵심 결론:
+  - 현재 프로젝트는 `page width/height/margins`, `align`, `charShape`, `paraShape`, `table basic geometry`, `object wrap/position`의 일부만 반영하고 있음
+  - 원문 fidelity에 특히 위험한 항목은 `page border/background`, `multi-column section`, `paragraph border inset`, `char shape shadow/strike/border fill`, `picture crop/effects`, `OLE type/extent`, `table valid-zone/title-repeat`, `object rotation/group/rendering matrix`
+  - 따라서 첫 우선순위는 “페이지/구역 정의를 실제 레이아웃 엔진에 연결”하고, 그 다음 “표/그림/OLE의 보이는 속성”을 보완하는 것이 적절함
+- 메모:
+  - 이 결과는 planning team member 1의 1차 정리이며, 이후 팀 회의용 의제 초안으로 사용 가능
+
+- 추가 반영: HWP 섹션별 페이지 생성 1차 적용
+  - 배경:
+    - 이전 턴에서 fidelity 우선순위를 `구역/페이지 -> 표/개체 -> 수식/차트`로 정리했고, 이번 턴은 그 중 `HWP 섹션(page/section) 경계 보존`을 먼저 진행
+    - 중간에 `pageStyle.height/margins`를 pagination budget에 직접 연결하는 실험도 했지만, 다운로드 샘플에서 과분할(예: HWPX 5페이지 -> 9페이지)이 즉시 발생해 이번 반영에서는 제외
+  - 반영 내용:
+    - `js/hwp-parser.js`
+      - HWP `BodyText` 파싱 결과에 `sections` 배열을 추가해 섹션별 `paragraphs/headerBlocks/footerBlocks/pageStyle`를 유지
+      - `_parseHwp5()`에서 전체 문서를 한 번에 paginate하지 않고, 섹션 단위로 페이지를 생성한 뒤 각 페이지에 해당 섹션의 `pageStyle`과 `sectionIndex/sectionPageIndex`를 부여
+      - 공통 빈 단락 정리 로직을 `_cleanBlocksForPagination()` / `_paginateSectionBlocks()`로 정리
+    - `js/parser.worker.js`
+      - worker 경로도 동일하게 `sections`를 유지하고, 섹션별 페이지 생성으로 동기화
+      - worker 결과 페이지에도 `pageStyle`, `sectionIndex`, `sectionPageIndex`를 부여
+    - `scripts/verify_samples.mjs`
+      - 인라인 YAML snapshot 외에 bare YAML 형태도 읽도록 보강
+      - snapshot 경로를 찾지 못할 때 CLI 출력 일부를 같이 노출하도록 변경해 진단성을 높임
+  - 검증 메모:
+    - `node --check js/hwp-parser.js`
+    - `node --check js/parser.worker.js`
+    - `node --check scripts/verify_samples.mjs`
+    - `node scripts/verify_samples.mjs` 통과
+    - `bash scripts/playwright_smoke.sh` 통과
+    - 주의:
+      - `verify_samples.mjs`와 `playwright_smoke.sh`는 기본적으로 같은 Playwright 세션명(`verify-current`)을 사용하므로 병렬 실행하면 충돌함
+      - 실제 검증은 순차 실행 기준으로 확인
+  - 다음 시작 지점:
+    - HWP `header/footer first/odd/even` 규칙
+    - HWP `쪽번호 시작 번호/숨김` 규칙
+    - `pageStyle.height/margins` 기반 pagination은 과분할 문제를 재검증한 뒤 재도입 여부 판단
+    - 구체 우선순위는 `BACKLOG.md`의 `Next Session Start` 섹션 참조

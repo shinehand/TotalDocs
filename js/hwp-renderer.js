@@ -5,6 +5,27 @@
  */
 
 /* ── 뷰어 렌더링 ── */
+function textDecorationStyleFromShape(shape = '') {
+  switch (String(shape || '').trim().toUpperCase()) {
+    case 'DOT':
+    case 'DOTTED':
+      return 'dotted';
+    case 'DASH':
+    case 'DASHED':
+    case 'LONG_DASH':
+    case 'LONG-DASH':
+    case 'DASH_DOT':
+    case 'DASH-DOT':
+    case 'DASH_DOT_DOT':
+    case 'DASH-DOT-DOT':
+      return 'dashed';
+    case 'DOUBLE':
+      return 'double';
+    default:
+      return 'solid';
+  }
+}
+
 function appendRunSpan(parent, run) {
   if (run.type === 'image' && run.src) {
     const img = document.createElement('img');
@@ -34,19 +55,44 @@ function appendRunSpan(parent, run) {
   const span = document.createElement('span');
   span.textContent = run.text;
   const effectiveFontSize = resolveRunFontSize(run);
+  const decorationLines = [];
   if (run.bold)      span.style.fontWeight = 'bold';
   if (run.italic)    span.style.fontStyle = 'italic';
-  if (run.underline) span.style.textDecoration = 'underline';
+  if (run.underline) decorationLines.push('underline');
+  if (run.strike) decorationLines.push('line-through');
   if (effectiveFontSize > 0) span.style.fontSize = `${effectiveFontSize}pt`;
   if (run.fontName)  span.style.fontFamily = `'${run.fontName}', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
   if (run.color && run.color !== '#000000') span.style.color = run.color;
+  if (decorationLines.length) {
+    span.style.textDecorationLine = decorationLines.join(' ');
+    span.style.textDecorationStyle = textDecorationStyleFromShape(run.underlineShape || run.strikeShape || '');
+    const decorationColor = run.underline
+      ? (run.underlineColor || run.strikeColor || '')
+      : (run.strikeColor || '');
+    if (decorationColor) span.style.textDecorationColor = decorationColor;
+  }
+  if (run.shadeColor) {
+    span.style.backgroundColor = run.shadeColor;
+  }
   if (Number.isFinite(run.letterSpacing) && run.letterSpacing !== 0) {
     const letterSpacing = Math.max(-0.5, Math.min(0.5, run.letterSpacing / 100));
     span.style.letterSpacing = `${letterSpacing}em`;
   }
+  if (run.superscript) {
+    span.style.verticalAlign = 'super';
+    span.style.fontSize = `${Math.max(7, Math.round(effectiveFontSize * 0.85 * 10) / 10)}pt`;
+  } else if (run.subscript) {
+    span.style.verticalAlign = 'sub';
+    span.style.fontSize = `${Math.max(7, Math.round(effectiveFontSize * 0.85 * 10) / 10)}pt`;
+  }
   if (Number.isFinite(run.offsetY) && run.offsetY !== 0) {
     span.style.position = 'relative';
     span.style.top = `${Math.max(-1, Math.min(1, run.offsetY / 100))}em`;
+  }
+  if (run.shadowType && run.shadowType !== 'NONE' && run.shadowColor) {
+    const shadowX = Math.max(-4, Math.min(4, Math.round((Number(run.shadowOffsetX) || 0) / 4)));
+    const shadowY = Math.max(-4, Math.min(4, Math.round((Number(run.shadowOffsetY) || 0) / 4)));
+    span.style.textShadow = `${shadowX}px ${shadowY}px 0 ${run.shadowColor}`;
   }
   if (Number.isFinite(run.scaleX) && run.scaleX > 0 && run.scaleX !== 100) {
     span.style.display = 'inline-block';

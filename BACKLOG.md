@@ -16,6 +16,24 @@
 - 운영:
   - Playwright 검증은 가능하고 단일 세션 스모크 스크립트가 추가되었지만, 샘플 범위와 골든 비교 기준은 아직 약함.
 
+## Next Session Start
+
+- 바로 이어서 할 일:
+  - `HWP header/footer`의 `first/odd/even` 적용 규칙을 실제 페이지 단위로 붙이기
+  - `쪽번호(page number)`의 섹션 시작 번호와 숨김 규칙을 HWP 쪽에도 반영하기
+  - `section pageStyle`을 렌더 단계에서 더 직접적으로 활용할 수 있는지 확인하기
+- 이번 턴에서 보류한 것:
+  - `pageStyle.height/margins`를 pagination budget에 직접 반영하는 실험
+  - 이유: 다운로드 샘플 기준으로 즉시 과분할이 발생했고, 단위 해석을 다시 검증해야 함
+- 다음 시작 시 체크포인트:
+  - `js/hwp-parser.js`의 `sections` 수집 경로
+  - `js/parser.worker.js`의 동일 섹션 처리 경로
+  - HWP section control에서 `secd`, `head`, `foot` 외에 page-number 관련 레코드가 더 있는지 재확인
+- 완료 기준:
+  - `goyeopje.hwp` 3페이지 유지
+  - `attachment-sale-notice.hwp` 14페이지 유지
+  - header/footer/page number 적용이 원본과 더 가깝게 보일 것
+
 ## P0
 
 ### 1. HWP 개체/도형 앵커 복원

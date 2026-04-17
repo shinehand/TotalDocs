@@ -40,8 +40,8 @@ const HwpParser = {
     for (let i = 0; i < keys.length; i++) {
       const xml = await zip.files[keys[i]].async('string');
       const sectionData = HwpParser._hwpxSectionData(xml, header);
-      const sectionPages = HwpParser._paginate(sectionData.blocks, 46);
       const sectionMeta = sectionData.sectionMeta || {};
+      const sectionPages = HwpParser._paginate(sectionData.blocks, 46);
       const visibility = sectionMeta.visibility || {};
       const sectionStartPageNum = Math.max(1, Number(sectionMeta.startPageNum) || (pages.length + 1));
 
@@ -207,6 +207,9 @@ const HwpParser = {
         if (!Number.isFinite(id)) return;
         const fontRefEl = HwpParser._hwpxFirstChild(node, 'fontRef');
         const underlineEl = HwpParser._hwpxFirstChild(node, 'underline');
+        const strikeoutEl = HwpParser._hwpxFirstChild(node, 'strikeout');
+        const shadowEl = HwpParser._hwpxFirstChild(node, 'shadow');
+        const outlineEl = HwpParser._hwpxFirstChild(node, 'outline');
         const ratioEl = HwpParser._hwpxFirstChild(node, 'ratio');
         const spacingEl = HwpParser._hwpxFirstChild(node, 'spacing');
         const relSzEl = HwpParser._hwpxFirstChild(node, 'relSz');
@@ -217,9 +220,20 @@ const HwpParser = {
             ? Math.round((HwpParser._hwpxAttrNum(node, 'height', 0) / 100) * 10) / 10
             : 0,
           color: HwpParser._hwpxNormalizeColor(node.getAttribute('textColor')),
+          shadeColor: HwpParser._hwpxNormalizeColor(node.getAttribute('shadeColor')),
           bold: Boolean(HwpParser._hwpxFirstChild(node, 'bold')),
           italic: Boolean(HwpParser._hwpxFirstChild(node, 'italic')),
           underline: (underlineEl?.getAttribute?.('type') || 'NONE') !== 'NONE',
+          underlineColor: HwpParser._hwpxNormalizeColor(underlineEl?.getAttribute?.('color')),
+          underlineShape: String(underlineEl?.getAttribute?.('shape') || '').trim().toUpperCase(),
+          strike: (strikeoutEl?.getAttribute?.('shape') || 'NONE') !== 'NONE',
+          strikeColor: HwpParser._hwpxNormalizeColor(strikeoutEl?.getAttribute?.('color')),
+          strikeShape: String(strikeoutEl?.getAttribute?.('shape') || '').trim().toUpperCase(),
+          outlineType: String(outlineEl?.getAttribute?.('type') || '').trim().toUpperCase(),
+          shadowType: String(shadowEl?.getAttribute?.('type') || '').trim().toUpperCase(),
+          shadowColor: HwpParser._hwpxNormalizeColor(shadowEl?.getAttribute?.('color')),
+          shadowOffsetX: HwpParser._hwpxAttrNum(shadowEl, 'offsetX', 0),
+          shadowOffsetY: HwpParser._hwpxAttrNum(shadowEl, 'offsetY', 0),
           scaleX: HwpParser._hwpxCharAttrNum(ratioEl, 100),
           letterSpacing: HwpParser._hwpxCharAttrNum(spacingEl, 0),
           relSize: HwpParser._hwpxCharAttrNum(relSzEl, 100),
@@ -837,14 +851,6 @@ const HwpParser = {
       return [];
     }
 
-    if (HwpParser._hwpxShouldFlattenTable(table)) {
-      return HwpParser._hwpxTableToFlowBlocks(table);
-    }
-
-    if (HwpParser._hwpxShouldLinearizeTable(table)) {
-      return HwpParser._hwpxTableToFlowBlocks(table);
-    }
-
     return [table];
   },
 
@@ -1021,14 +1027,33 @@ const HwpParser = {
     catch(e) { console.warn('[HWP] BodyText 파싱 실패:', e); }
 
     if (parsedBody?.paragraphs?.length) {
-      const cleaned = [];
-      let emptyRun = 0;
-      for (const p of parsedBody.paragraphs) {
-        const isEmpty = !HwpParser._blockText(p).trim();
-        if (isEmpty) { if (++emptyRun <= 2) cleaned.push(p); }
-        else { emptyRun = 0; cleaned.push(p); }
+      if (parsedBody.sections?.length) {
+        const pages = [];
+        parsedBody.sections.forEach((section, sectionIndex) => {
+          const sectionPages = HwpParser._paginateSectionBlocks(
+            section.paragraphs || [],
+            48,
+            section.pageStyle,
+          );
+          sectionPages.forEach((page, sectionPageIndex) => {
+            page.headerBlocks = (section.headerBlocks || []).map(cloneParagraphBlock);
+            page.footerBlocks = (section.footerBlocks || []).map(cloneParagraphBlock);
+            page.pageStyle = clonePageStyle(section.pageStyle);
+            page.sectionIndex = sectionIndex;
+            page.sectionOrder = section.order ?? sectionIndex;
+            page.sectionPageIndex = sectionPageIndex;
+            page.index = pages.length;
+            pages.push(page);
+          });
+        });
+        return { meta: { pages: pages.length }, pages };
       }
-      const pages = HwpParser._paginate(cleaned, 48);
+
+      const pages = HwpParser._paginateSectionBlocks(
+        parsedBody.paragraphs,
+        48,
+        parsedBody.pageStyle,
+      );
       if (pages.length) {
         if (parsedBody.headerBlocks?.length) {
           pages[0].headerBlocks = parsedBody.headerBlocks.map(cloneParagraphBlock);
@@ -1871,6 +1896,9 @@ const HwpParser = {
       bold: Boolean(attr & (1 << 1)),
       italic: Boolean(attr & 1),
       underline: ((attr >> 2) & 0x3) !== 0,
+      strike: Boolean((attr >> 18) & 0x7),
+      superscript: Boolean(attr & (1 << 15)),
+      subscript: Boolean(attr & (1 << 16)),
       scaleX,
       letterSpacing,
       relSize,
@@ -3500,6 +3528,7 @@ const HwpParser = {
     }
 
     const allParas = [];
+    const sections = [];
     let headerBlocks = [];
     let footerBlocks = [];
     let pageStyle = null;
@@ -3533,6 +3562,15 @@ const HwpParser = {
       if (!pageStyle && parsed?.sectionMeta) {
         pageStyle = parsed.sectionMeta;
       }
+      if (parsed?.paras?.length) {
+        sections.push({
+          order: sn,
+          paragraphs: parsed.paras,
+          headerBlocks: parsed.headerBlocks || [],
+          footerBlocks: parsed.footerBlocks || [],
+          pageStyle: parsed.sectionMeta || null,
+        });
+      }
     }
 
     return allParas.length > 0 ? {
@@ -3540,6 +3578,7 @@ const HwpParser = {
       headerBlocks,
       footerBlocks,
       pageStyle,
+      sections,
     } : null;
   },
 
@@ -3671,6 +3710,27 @@ const HwpParser = {
     };
   },
 
+  _cleanBlocksForPagination(blocks = []) {
+    const cleaned = [];
+    let emptyRun = 0;
+    for (const block of blocks || []) {
+      const isEmpty = !HwpParser._blockText(block).trim();
+      if (isEmpty) {
+        if (++emptyRun <= 2) cleaned.push(block);
+        continue;
+      }
+      emptyRun = 0;
+      cleaned.push(block);
+    }
+    return cleaned;
+  },
+
+  _paginateSectionBlocks(blocks, fallbackWeight = 46, pageStyle = null) {
+    const cleaned = HwpParser._cleanBlocksForPagination(blocks);
+    void pageStyle;
+    return HwpParser._paginate(cleaned, fallbackWeight);
+  },
+
   _paginate(paras, n) {
     if (!paras.length) return [{ index:0, paragraphs:[] }];
     const expanded = paras.flatMap(para => (
@@ -3704,6 +3764,11 @@ const HwpParser = {
     return Object.assign(
       { text: text||'', bold:false, italic:false, underline:false,
         fontSize:11, fontName:'Malgun Gothic', color:'#000000',
+        shadeColor:'', underlineColor:'', underlineShape:'',
+        strike:false, strikeColor:'', strikeShape:'',
+        superscript:false, subscript:false,
+        shadowType:'', shadowColor:'', shadowOffsetX:0, shadowOffsetY:0,
+        outlineType:'',
         scaleX:100, letterSpacing:0, relSize:100, offsetY:0 },
       opts
     );

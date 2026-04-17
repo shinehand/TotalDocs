@@ -30,6 +30,11 @@ function run(text, opts) {
   return Object.assign(
     { text: text||'', bold:false, italic:false, underline:false,
       fontSize:11, fontName:'Malgun Gothic', color:'#000000',
+      shadeColor:'', underlineColor:'', underlineShape:'',
+      strike:false, strikeColor:'', strikeShape:'',
+      superscript:false, subscript:false,
+      shadowType:'', shadowColor:'', shadowOffsetX:0, shadowOffsetY:0,
+      outlineType:'',
       scaleX:100, letterSpacing:0, relSize:100, offsetY:0 },
     opts
   );
@@ -62,6 +67,27 @@ function paginate(paras, n) {
   }
 
   return pages;
+}
+
+function cleanBlocksForPagination(blocks = []) {
+  const cleaned = [];
+  let emptyRun = 0;
+  for (const block of blocks || []) {
+    const isEmpty = !blockText(block).trim();
+    if (isEmpty) {
+      if (++emptyRun <= 2) cleaned.push(block);
+      continue;
+    }
+    emptyRun = 0;
+    cleaned.push(block);
+  }
+  return cleaned;
+}
+
+function paginateSectionBlocks(blocks, fallbackWeight = 48, pageStyle = null) {
+  const cleaned = cleanBlocksForPagination(blocks);
+  void pageStyle;
+  return paginate(cleaned, fallbackWeight);
 }
 
 /* ════════════════════════════════════════════════════════
@@ -846,6 +872,9 @@ function parseHwpCharShape(body, faceNames = {}) {
     bold: Boolean(attr & (1 << 1)),
     italic: Boolean(attr & 1),
     underline: ((attr >> 2) & 0x3) !== 0,
+    strike: Boolean((attr >> 18) & 0x7),
+    superscript: Boolean(attr & (1 << 15)),
+    subscript: Boolean(attr & (1 << 16)),
     scaleX,
     letterSpacing,
     relSize,
@@ -2518,6 +2547,7 @@ async function parseBodyText(b) {
 
   // Section 파싱
   const allParas = [];
+  const sections = [];
   let headerBlocks = [];
   let footerBlocks = [];
   let pageStyle = null;
@@ -2549,6 +2579,15 @@ async function parseBodyText(b) {
     if (!pageStyle && parsed?.sectionMeta) {
       pageStyle = parsed.sectionMeta;
     }
+    if (parsed?.paras?.length) {
+      sections.push({
+        order: sn,
+        paragraphs: parsed.paras,
+        headerBlocks: parsed.headerBlocks || [],
+        footerBlocks: parsed.footerBlocks || [],
+        pageStyle: parsed.sectionMeta || null,
+      });
+    }
   }
 
   return allParas.length > 0 ? {
@@ -2556,6 +2595,7 @@ async function parseBodyText(b) {
     headerBlocks,
     footerBlocks,
     pageStyle,
+    sections,
   } : null;
 }
 
@@ -2711,15 +2751,35 @@ self.onmessage = async ({ data }) => {
       }
 
       if (parsedBody?.paragraphs?.length) {
-        // 빈 단락 정리 (연속 빈 줄 2개 초과 → 1개로 압축)
-        const cleaned = [];
-        let emptyRun = 0;
-        for (const p of parsedBody.paragraphs) {
-          const isEmpty = !blockText(p).trim();
-          if (isEmpty) { if (++emptyRun <= 2) cleaned.push(p); }
-          else { emptyRun = 0; cleaned.push(p); }
+        if (parsedBody.sections?.length) {
+          const pages = [];
+          parsedBody.sections.forEach((section, sectionIndex) => {
+            const sectionPages = paginateSectionBlocks(
+              section.paragraphs || [],
+              48,
+              section.pageStyle,
+            );
+            sectionPages.forEach((page, sectionPageIndex) => {
+              page.headerBlocks = section.headerBlocks || [];
+              page.footerBlocks = section.footerBlocks || [];
+              page.pageStyle = section.pageStyle || null;
+              page.sectionIndex = sectionIndex;
+              page.sectionOrder = section.order ?? sectionIndex;
+              page.sectionPageIndex = sectionPageIndex;
+              page.index = pages.length;
+              pages.push(page);
+            });
+          });
+          doc = { meta: { pages: pages.length }, pages };
+          self.postMessage({ type: 'done', doc });
+          return;
         }
-        const pages = paginate(cleaned, 48);
+
+        const pages = paginateSectionBlocks(
+          parsedBody.paragraphs,
+          48,
+          parsedBody.pageStyle,
+        );
         if (pages.length) {
           if (parsedBody.headerBlocks?.length) {
             pages[0].headerBlocks = parsedBody.headerBlocks;

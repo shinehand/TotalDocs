@@ -10,7 +10,7 @@ HWP_SAMPLE="${1:-$ROOT_DIR/output/playwright/inputs/goyeopje.hwp}"
 HWPX_SAMPLE="${2:-$ROOT_DIR/output/playwright/inputs/incheon-2a.hwpx}"
 ATTACHMENT_HWP_SAMPLE="${3:-$ROOT_DIR/output/playwright/inputs/attachment-sale-notice.hwp}"
 
-export CODEX_HOME PLAYWRIGHT_CLI_SESSION="$SESSION"
+export CODEX_HOME
 
 cleanup() {
   "$PWCLI" close-all >/dev/null 2>&1 || true
@@ -34,17 +34,17 @@ if [[ ! -f "$ATTACHMENT_HWP_SAMPLE" ]]; then
 fi
 
 "$PWCLI" close-all >/dev/null 2>&1 || true
-"$PWCLI" open "$VIEWER_URL"
-"$PWCLI" snapshot
-"$PWCLI" click e15
-"$PWCLI" upload "$HWP_SAMPLE"
-"$PWCLI" screenshot
-"$PWCLI" snapshot
-"$PWCLI" click e8
-"$PWCLI" upload "$HWPX_SAMPLE"
-"$PWCLI" screenshot
-"$PWCLI" click e8
-"$PWCLI" upload "$ATTACHMENT_HWP_SAMPLE"
-"$PWCLI" screenshot
+"$PWCLI" "-s=$SESSION" open "$VIEWER_URL"
+"$PWCLI" "-s=$SESSION" snapshot
+"$PWCLI" "-s=$SESSION" click e15
+"$PWCLI" "-s=$SESSION" upload "$HWP_SAMPLE"
+"$PWCLI" "-s=$SESSION" screenshot
+"$PWCLI" "-s=$SESSION" snapshot
+"$PWCLI" "-s=$SESSION" click e8
+"$PWCLI" "-s=$SESSION" upload "$HWPX_SAMPLE"
+"$PWCLI" "-s=$SESSION" screenshot
+"$PWCLI" "-s=$SESSION" click e8
+"$PWCLI" "-s=$SESSION" upload "$ATTACHMENT_HWP_SAMPLE"
+"$PWCLI" "-s=$SESSION" screenshot
 
 echo "Playwright smoke check completed with session: $SESSION"

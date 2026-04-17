@@ -17,6 +17,7 @@ const SESSION_NAME = process.env.PLAYWRIGHT_CLI_SESSION || 'verify-current';
 const SAMPLE_DIR = path.join(ROOT_DIR, 'output', 'playwright', 'inputs');
 const MAX_SESSION_RETRIES = Number(process.env.PLAYWRIGHT_SESSION_RETRIES || 6);
 const RETRY_BASE_DELAY_MS = 250;
+const SESSION_ARGS = [`-s=${SESSION_NAME}`];
 
 const HWP_SAMPLE = process.env.HWP_SAMPLE
   || path.join(SAMPLE_DIR, 'goyeopje.hwp');
@@ -57,12 +58,11 @@ function runPw(args, options = {}) {
   const throwOnError = options.throwOnError === true;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      return execFileSync(PWCLI, args, {
+      return execFileSync(PWCLI, [...SESSION_ARGS, ...args], {
         cwd: ROOT_DIR,
         env: {
           ...process.env,
           CODEX_HOME,
-          PLAYWRIGHT_CLI_SESSION: SESSION_NAME,
         },
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -91,10 +91,24 @@ function extractSnapshotPath(commandOutput) {
   return match[1];
 }
 
+function extractInlineSnapshot(commandOutput) {
+  const text = String(commandOutput || '');
+  const fenced = text.match(/### Snapshot\s+```yaml\s*([\s\S]*?)```/);
+  if (fenced) return fenced[1].trim();
+
+  const bareYaml = text.match(/^\s*-\s+\w[\s\S]*$/m);
+  return bareYaml ? bareYaml[0].trim() : '';
+}
+
 function loadSnapshot(commandOutput) {
+  const inlineSnapshot = extractInlineSnapshot(commandOutput);
+  if (inlineSnapshot) {
+    return inlineSnapshot;
+  }
+
   const rel = extractSnapshotPath(commandOutput);
   if (!rel) {
-    fail('snapshot 경로를 찾지 못했습니다.');
+    fail(`snapshot 경로를 찾지 못했습니다.\n${String(commandOutput || '').slice(0, 2000)}`);
   }
   const abs = path.resolve(ROOT_DIR, rel);
   if (!existsSync(abs)) {
