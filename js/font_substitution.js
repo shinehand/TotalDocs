@@ -17,22 +17,33 @@
         'HY그래픽', 'HYGraphic-Medium', 'HY그래픽M',
         'HY견명조', 'HYMyeongJo-Extra',
         'HY신명조', 'HY중고딕', '양재튼튼체B', 'Palatino Linotype',
+        '휴먼명조', '휴먼고딕',
+        '한양신명조', '한양중고딕', '한양견명조', '한양견고딕',
+        '한양그래픽', '한양궁서', 'HCI Poppy', '한컴 윤체 B', '산돌고딕 M',
+        '#세고딕', '#중고딕', '#태고딕', '#견고딕',
+        '#세명조', '#신명조', '#중명조', '#견명조',
         '함초롬돋움', '함초롬바탕', '함초롱돋움', '함초롱바탕',
         '한컴돋움', '한컴바탕', '새돋움', '새바탕',
         'Malgun Gothic', '맑은 고딕',
-        '돋움', '돋움체', '굴림', '굴림체', '새굴림',
-        '바탕', '바탕체', '궁서', '궁서체', '새궁서',
+        '돋움', '돋움체', '굴림', '굴림체', '새굴림', '고딕',
+        '바탕', '바탕체', '명조', '궁서', '궁서체', '새궁서',
         'Arial', 'Times New Roman', 'Calibri', 'Courier New', 'Tahoma', 'Verdana',
         'Webdings', 'Wingdings 3',
         'Pretendard', 'Pretendard Thin', 'Pretendard ExtraLight', 'Pretendard Light',
         'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold',
         'Pretendard ExtraBold', 'Pretendard Black',
+        'NanumSquareNeo Light', 'NanumSquareNeo', 'NanumSquareNeo Bold',
+        'NanumSquareNeo ExtraBold', 'NanumSquareNeo Heavy',
+        'Wanted Sans', 'Wanted Sans Medium', 'Wanted Sans SemiBold',
+        'Wanted Sans Bold', 'Wanted Sans ExtraBold', 'Wanted Sans ExtraBlack',
+        'D2Coding', '나눔고딕코딩',
+        '나눔고딕', '나눔명조',
         '해피니스 산스 레귤러', 'Happiness Sans Regular',
         '해피니스 산스 볼드', 'Happiness Sans Bold',
         '해피니스 산스 타이틀', 'Happiness Sans Title',
         '해피니스 산스 VF', 'Happiness Sans VF',
         'Cafe24 Ssurround Bold', '카페24 슈퍼매직', 'Cafe24 Supermagic',
-        'SpoqaHanSans',
+        'SpoqaHanSans', '고운바탕', '고운돋움',
     ]);
 
     // webhwp g_SubstFonts 치환 테이블 (7개 언어별)
@@ -687,28 +698,67 @@
     }
 
     /**
-     * CSS font-family 문자열에 fallback 체인을 추가한다.
+     * CSS font-family 문자열에 전 플랫폼 fallback 체인을 추가한다.
      *
      * @param {string} fontName - 해소된 폰트 이름
      * @returns {string} CSS font-family에 사용할 fallback 체인 문자열
      */
     function fontFamilyWithFallback(fontName) {
-        // 이미 generic family인 경우
         if (fontName === 'serif' || fontName === 'sans-serif' || fontName === 'monospace') {
             return fontName;
         }
 
-        // 폰트 계열 판별 (명조/바탕 → serif, 고딕/돋움 → sans-serif)
-        const isSerif = /[바탕명조궁서]|hymjre|Times/i.test(fontName);
-        const generic = isSerif ? 'serif' : 'sans-serif';
+        if (/굴림체|바탕체|gulimche|batangche|coding|courier/i.test(fontName)) {
+            return '"' + fontName + '", "GulimChe", "D2Coding", "Noto Sans Mono", monospace';
+        }
 
-        return '"' + fontName + '", ' + generic;
+        if (/[바탕명조궁서]|hymjre|times|palatino|georgia|batang|gungsuh/i.test(fontName)) {
+            return '"' + fontName + '", "휴먼명조", "한양신명조", "나눔명조", "고운바탕", "Batang", "AppleMyungjo", "Noto Serif KR", serif';
+        }
+
+        return '"' + fontName + '", "휴먼고딕", "한양중고딕", "NanumSquareNeo", "Wanted Sans", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", sans-serif';
+    }
+
+    /**
+     * CSS font 문자열에서 font-family를 해소하고 fallback 체인을 적용한다.
+     *
+     * 입력: `bold 14px "안상수2006가는", sans-serif`
+     * 출력: `bold 14px "돋움", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", sans-serif`
+     *
+     * @param {string} cssFont
+     * @param {number} altType
+     * @param {number} langId
+     * @returns {string}
+     */
+    function substituteCssFont(cssFont, altType, langId) {
+        if (!cssFont || typeof cssFont !== 'string') return cssFont;
+
+        const pxIdx = cssFont.indexOf('px ');
+        if (pxIdx < 0) return cssFont;
+
+        const prefix = cssFont.substring(0, pxIdx + 3);
+        const familyPart = cssFont.substring(pxIdx + 3).trim();
+        if (!familyPart) return cssFont;
+
+        const quotedMatch = familyPart.match(/^"([^"]+)"/);
+        const bareMatch = quotedMatch ? null : familyPart.match(/^([^,]+)/);
+        const fontName = (quotedMatch ? quotedMatch[1] : bareMatch?.[1] || '').trim();
+        if (!fontName) return cssFont;
+
+        if (REGISTERED_FONTS.has(fontName)) {
+            return prefix + fontFamilyWithFallback(fontName);
+        }
+
+        const resolved = resolveFont(fontName, altType || 0, langId || 0);
+        if (!resolved) return cssFont;
+        return prefix + fontFamilyWithFallback(resolved);
     }
 
     // 공개 API
     globalThis.FontSubstitution = {
         resolveFont: resolveFont,
         fontFamilyWithFallback: fontFamilyWithFallback,
+        substituteCssFont: substituteCssFont,
         REGISTERED_FONTS: REGISTERED_FONTS,
     };
 })();
