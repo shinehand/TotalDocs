@@ -172,7 +172,15 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
   p.style.textAlign = alignOverride || para.align || 'left';
   if (/[\n\t]| {2,}/.test(textContent)) {
     p.style.whiteSpace = 'pre-wrap';
-    p.style.tabSize = '4';
+    // 첫 번째 왼쪽 정렬 탭 정지 위치를 CSS tab-size (길이값)로 설정한다.
+    // TabDef에 정의된 실제 HWPUNIT 위치를 px로 환산해 정렬 정확도를 높인다.
+    const firstLeftTab = (para.tabStops || []).find(t => !t.kind || t.kind === 'left');
+    if (firstLeftTab && firstLeftTab.position > 0) {
+      const tabPx = Math.max(20, Math.min(400, Math.round(firstLeftTab.position / 75)));
+      p.style.tabSize = `${tabPx}px`;
+    } else {
+      p.style.tabSize = '4';
+    }
   }
   if (Number.isFinite(para.marginLeft) && !['center', 'right'].includes(p.style.textAlign)) {
     p.style.paddingLeft = `${Math.max(0, hwpSignedUnitToPx(para.marginLeft, -34, 310, 1 / 75, 0))}px`;

@@ -1208,6 +1208,8 @@ function buildHwpTextRuns(text, charShapes = [], docInfo = null, baseStyle = {})
 function createHwpParagraphBlock(text, paraState = {}, docInfo = null) {
   const { style, paraStyle, baseCharStyle } = resolveHwpParagraphStyle(paraState, docInfo);
   const lineMetrics = summarizeHwpLineSegs(paraState?.lineSegs || []);
+  const tabDef = docInfo?.tabDefs?.[paraStyle?.tabDefId];
+  const tabStops = (tabDef?.tabs || []).map(t => ({ position: t.position, kind: t.kind }));
   return {
     type: 'paragraph',
     align: paraStyle?.align || 'left',
@@ -1221,6 +1223,7 @@ function createHwpParagraphBlock(text, paraState = {}, docInfo = null) {
     styleId: paraState?.styleId ?? 0,
     styleName: style?.name || style?.englishName || '',
     tabDefId: paraStyle?.tabDefId ?? 0,
+    tabStops,
     listInfo: resolveHwpParagraphListInfo(paraStyle, docInfo),
     lineHeightPx: lineMetrics.lineHeightPx,
     layoutHeightPx: lineMetrics.layoutHeightPx,
@@ -1519,6 +1522,41 @@ function parseHwpSecDef(body) {
       footer: i32(body, 28),
     },
   };
+}
+
+// HWPTAG_PAGE_NUM_PARA (tag 76): 쪽 번호 자동 배치 위치와 형식
+// offset 0: DWORD attr (bits 0-3 위치, bits 4-7 형식)
+// offset 4: WCHAR sideChar (장식 문자, optional)
+function parseHwpPageNumMeta(body) {
+  if (!body || body.length < 4) return null;
+  const attr = u32(body, 0);
+  const posCode = attr & 0xF;
+  if (posCode === 0) return null; // 없음 — 쪽번호 자동배치 비활성
+  const formatCode = (attr >> 4) & 0xF;
+  const sideChar = body.length >= 6
+    ? decodeHwpUtf16String(body, 4, 1).replace(/\u0000/g, '').trim()
+    : '';
+  return {
+    position: hwpPageNumPositionCode(posCode),
+    formatType: formatCode === 0 ? 'DIGIT' : 'OTHER',
+    sideChar,
+  };
+}
+
+function hwpPageNumPositionCode(code) {
+  switch (code) {
+    case 1:  return 'BOTTOM_LEFT';
+    case 2:  return 'BOTTOM_CENTER';
+    case 3:  return 'BOTTOM_RIGHT';
+    case 4:  return 'TOP_LEFT';
+    case 5:  return 'TOP_CENTER';
+    case 6:  return 'TOP_RIGHT';
+    case 7:  return 'OUTER_BOTTOM';
+    case 8:  return 'INNER_BOTTOM';
+    case 9:  return 'OUTER_TOP';
+    case 10: return 'INNER_TOP';
+    default: return 'BOTTOM_CENTER';
+  }
 }
 
 function parseHwpObjectCommon(ctrlBody) {
@@ -2272,17 +2310,25 @@ function parseHwpBlockRange(data, startPos = 0, docInfo = null, stopLevel = null
       if (controlId === 'secd') {
         pushParagraph();
         if (extras && !extras.sectionMeta) {
+          // tag-73: PAGE_DEF (용지/여백), tag-76: PAGE_NUM_PARA (쪽번호 위치/형식)
+          // break 없이 전체 서브레코드를 스캔해 두 레코드를 모두 수집한다.
           let scanPos = rec.nextPos;
+          let secDef = null;
+          let pageNumMeta = null;
           while (scanPos < data.length) {
             const sub = readRecord(data, scanPos);
             if (!sub) break;
             if (sub.level <= rec.level) break;
-            if (sub.tagId === 73) {
-              const secDef = parseHwpSecDef(sub.body);
-              if (secDef) extras.sectionMeta = secDef;
-              break;
+            if (sub.tagId === 73 && !secDef) {
+              secDef = parseHwpSecDef(sub.body);
+            } else if (sub.tagId === 76 && !pageNumMeta) {
+              pageNumMeta = parseHwpPageNumMeta(sub.body);
             }
             scanPos = sub.nextPos;
+          }
+          if (secDef) {
+            if (pageNumMeta) secDef.pageNumber = pageNumMeta;
+            extras.sectionMeta = secDef;
           }
         }
         pos = skipControlSubtree(data, rec.nextPos, rec.level);

@@ -1,6 +1,56 @@
 # Work Log
 
-## 2026-03-27
+## 2026-04-20
+
+### 문서 정확성 — 영향도 높은 항목 1차 구현
+
+- 요청: 영향도 높은 항목부터 추가 개발 진행 후 md에 기록
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`
+
+#### 1. 탭 정지 렌더링 (Tab Stop Rendering)
+
+- 문제: HWP `TabDef` 레코드는 파싱되지만 렌더러에서 `tab-size: 4` (고정 4칸)로만 처리됨.
+  양식 문서에서 탭으로 맞추는 레이블-값 정렬이 한컴 뷰어 대비 크게 어긋남.
+- 수정 내용:
+  - `_createHwpParagraphBlock` (hwp-parser.js) 및 `createHwpParagraphBlock` (parser.worker.js):
+    `docInfo.tabDefs[tabDefId]`를 조회해 `tabStops: [{position, kind}]` 배열을 단락 블록에 임베드.
+  - `appendParagraphBlock` (hwp-renderer.js):
+    `tabStops` 중 첫 번째 `left` 정렬 탭 정지 위치(HWPUNIT → px)를 CSS `tab-size: Npx`로 적용.
+    탭 정지가 없으면 기존 `tab-size: 4`로 폴백.
+- 영향 범위: HWP 양식 문서 전체. 탭으로 정렬되는 레이블/값 쌍이 더 원본에 가까워짐.
+
+#### 2. secd tag-76 (쪽 번호 위치) 파싱
+
+- 문제: `secd` 컨트롤 서브레코드 스캔이 tag-73(PAGE_DEF)을 찾은 즉시 `break`해,
+  tag-76(PAGE_NUM_PARA: 쪽 번호 자동 배치 위치·형식)를 전혀 읽지 못함.
+- 수정 내용:
+  - hwp-parser.js / parser.worker.js 양쪽의 secd 스캔 루프에서 `break` 제거.
+  - tag-73과 tag-76을 모두 수집하도록 변경 (`while` 루프가 레벨 경계까지 전체 스캔).
+  - `_parseHwpPageNumMeta` (hwp-parser.js) / `parseHwpPageNumMeta` (parser.worker.js) 추가:
+    attr bits 0-3 위치 코드 → `BOTTOM_LEFT/BOTTOM_CENTER/...` 문자열 변환,
+    bits 4-7 형식 코드 → `DIGIT/OTHER` 변환, sideChar 추출.
+  - 파싱 결과를 `sectionMeta.pageNumber`에 저장.
+
+#### 3. HWP 자동 쪽번호 블록 생성
+
+- 문제: secd tag-76이 파싱되더라도 섹션 루프에서 쪽번호 블록을 생성하지 않아
+  HWP 문서에 쪽번호가 표시되지 않음 (HWPX는 이미 지원).
+- 수정 내용:
+  - `_parseHwp5` 섹션 루프 (hwp-parser.js):
+    섹션에 명시적 header/footer 블록이 없을 때만 `_hwpxCreatePageNumberBlock`을 호출해
+    자동 쪽번호 블록을 footer 또는 header에 삽입 (중복 방지).
+    위치(TOP_*/BOTTOM_*)에 따라 headerBlocks / footerBlocks에 분기.
+  - 단일 섹션 경로(sections 배열 없는 경우)도 동일한 로직으로 적용.
+- 영향 범위: secd에 tag-76이 정의된 HWP 문서. 명시적 `foot` 컨트롤 없이 자동 쪽번호만 사용하는 문서.
+
+#### 검증
+
+- `node --check js/hwp-parser.js` 통과
+- `node --check js/parser.worker.js` 통과
+- `node --check js/hwp-renderer.js` 통과
+
+---
+
 
 - 요청: 프로젝트 분석 및 문제 여부 점검
 - 범위: `manifest.json`, `background.js`, `pages/viewer.html`, `js/app.js`, `popup.js`, `sidepanel.js`, `content_script.js`, 보조 모듈/스타일

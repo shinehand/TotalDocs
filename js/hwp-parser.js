@@ -736,6 +736,41 @@ const HwpParser = {
     return 'center';
   },
 
+  // HWP secd tag-76: HWPTAG_PAGE_NUM_PARA — 쪽 번호 자동 배치 위치/형식
+  // offset 0: DWORD attr (bits 0-3: 위치, bits 4-7: 형식)
+  // offset 4: WCHAR sideChar (장식 문자, optional)
+  _parseHwpPageNumMeta(body) {
+    if (!body || body.length < 4) return null;
+    const attr = HwpParser._u32(body, 0);
+    const posCode = attr & 0xF;
+    if (posCode === 0) return null; // 없음 — 쪽번호 자동배치 비활성
+    const formatCode = (attr >> 4) & 0xF;
+    const sideChar = body.length >= 6
+      ? HwpParser._decodeHwpUtf16String(body, 4, 1).replace(/\u0000/g, '').trim()
+      : '';
+    return {
+      position: HwpParser._hwpPageNumPositionCode(posCode),
+      formatType: formatCode === 0 ? 'DIGIT' : 'OTHER',
+      sideChar,
+    };
+  },
+
+  _hwpPageNumPositionCode(code) {
+    switch (code) {
+      case 1:  return 'BOTTOM_LEFT';
+      case 2:  return 'BOTTOM_CENTER';
+      case 3:  return 'BOTTOM_RIGHT';
+      case 4:  return 'TOP_LEFT';
+      case 5:  return 'TOP_CENTER';
+      case 6:  return 'TOP_RIGHT';
+      case 7:  return 'OUTER_BOTTOM';
+      case 8:  return 'INNER_BOTTOM';
+      case 9:  return 'OUTER_TOP';
+      case 10: return 'INNER_TOP';
+      default: return 'BOTTOM_CENTER';
+    }
+  },
+
   _hwpxCreatePageNumberBlock(pageNumberMeta, pageNumber, hidden = false) {
     if (!pageNumberMeta || hidden) return null;
     if (String(pageNumberMeta.formatType || 'DIGIT').toUpperCase() !== 'DIGIT') return null;
@@ -1066,8 +1101,21 @@ const HwpParser = {
               section.footerBlocks,
               sectionPageIndex,
             );
-            page.headerBlocks = resolvedHeaderBlocks.map(cloneParagraphBlock);
-            page.footerBlocks = resolvedFooterBlocks.map(cloneParagraphBlock);
+            const pageNumber = pages.length + 1;
+            // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 footer가 없을 때만 추가해 중복을 막는다.
+            const pageNumMeta = section.pageStyle?.pageNumber;
+            const autoPageNumBlock = (!resolvedFooterBlocks.length && !resolvedHeaderBlocks.length)
+              ? HwpParser._hwpxCreatePageNumberBlock(pageNumMeta, pageNumber, sectionPageIndex === 0)
+              : null;
+            const isTopNum = String(pageNumMeta?.position || '').toUpperCase().includes('TOP');
+            page.headerBlocks = [
+              ...resolvedHeaderBlocks.map(cloneParagraphBlock),
+              ...(autoPageNumBlock && isTopNum ? [autoPageNumBlock] : []),
+            ];
+            page.footerBlocks = [
+              ...resolvedFooterBlocks.map(cloneParagraphBlock),
+              ...(autoPageNumBlock && !isTopNum ? [autoPageNumBlock] : []),
+            ];
             page.pageStyle = clonePageStyle(section.pageStyle);
             page.sectionIndex = sectionIndex;
             page.sectionOrder = section.order ?? sectionIndex;
@@ -1098,6 +1146,21 @@ const HwpParser = {
           );
           page.headerBlocks = resolvedHeaderBlocks.map(cloneParagraphBlock);
           page.footerBlocks = resolvedFooterBlocks.map(cloneParagraphBlock);
+          // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 header/footer가 없을 때만 추가
+          const pageNumMeta = parsedBody.pageStyle?.pageNumber;
+          if (pageNumMeta && !resolvedFooterBlocks.length && !resolvedHeaderBlocks.length) {
+            const autoPageNumBlock = HwpParser._hwpxCreatePageNumberBlock(
+              pageNumMeta, pageIndex + 1, pageIndex === 0,
+            );
+            if (autoPageNumBlock) {
+              const isTopNum = String(pageNumMeta.position || '').toUpperCase().includes('TOP');
+              if (isTopNum) {
+                page.headerBlocks = [autoPageNumBlock];
+              } else {
+                page.footerBlocks = [autoPageNumBlock];
+              }
+            }
+          }
         });
         if (parsedBody.pageStyle) {
           pages.forEach(page => { page.pageStyle = parsedBody.pageStyle; });
@@ -2266,6 +2329,8 @@ const HwpParser = {
   _createHwpParagraphBlock(text, paraState = {}, docInfo = null) {
     const { style, paraStyle, baseCharStyle } = HwpParser._resolveHwpParagraphStyle(paraState, docInfo);
     const lineMetrics = HwpParser._summarizeHwpLineSegs(paraState?.lineSegs || []);
+    const tabDef = docInfo?.tabDefs?.[paraStyle?.tabDefId];
+    const tabStops = (tabDef?.tabs || []).map(t => ({ position: t.position, kind: t.kind }));
     return {
       type: 'paragraph',
       align: paraStyle?.align || 'left',
@@ -2279,6 +2344,7 @@ const HwpParser = {
       styleId: paraState?.styleId ?? 0,
       styleName: style?.name || style?.englishName || '',
       tabDefId: paraStyle?.tabDefId ?? 0,
+      tabStops,
       listInfo: HwpParser._resolveHwpParagraphListInfo(paraStyle, docInfo),
       lineHeightPx: lineMetrics.lineHeightPx,
       layoutHeightPx: lineMetrics.layoutHeightPx,
@@ -3323,17 +3389,25 @@ const HwpParser = {
         if (controlId === 'secd') {
           pushParagraph();
           if (extras && !extras.sectionMeta) {
+            // tag-73: PAGE_DEF (용지/여백), tag-76: PAGE_NUM_PARA (쪽번호 위치/형식)
+            // break 없이 전체 서브레코드를 스캔해 두 레코드를 모두 수집한다.
             let scanPos = rec.nextPos;
+            let secDef = null;
+            let pageNumMeta = null;
             while (scanPos < data.length) {
               const sub = HwpParser._readRecord(data, scanPos);
               if (!sub) break;
               if (sub.level <= rec.level) break;
-              if (sub.tagId === 73) {
-                const secDef = HwpParser._parseHwpSecDef(sub.body);
-                if (secDef) extras.sectionMeta = secDef;
-                break;
+              if (sub.tagId === 73 && !secDef) {
+                secDef = HwpParser._parseHwpSecDef(sub.body);
+              } else if (sub.tagId === 76 && !pageNumMeta) {
+                pageNumMeta = HwpParser._parseHwpPageNumMeta(sub.body);
               }
               scanPos = sub.nextPos;
+            }
+            if (secDef) {
+              if (pageNumMeta) secDef.pageNumber = pageNumMeta;
+              extras.sectionMeta = secDef;
             }
           }
           pos = HwpParser._skipControlSubtree(data, rec.nextPos, rec.level);
