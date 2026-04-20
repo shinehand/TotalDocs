@@ -1,8 +1,18 @@
 # ChromeHWP
 
-크롬에서 `HWP`, `HWPX`, `OWPML` 문서를 열고, 가능한 한 실제 한글 프로그램과 비슷한 화면과 동선으로 확인·편집·저장하려는 프로젝트이옵니다.
+> **⚡ 설치 없이 브라우저에서 바로 사용하기**
+>
+> 👉 **[https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)**
+>
+> 링크를 클릭하면 **아무것도 설치하지 않아도** HWP 뷰어가 바로 열립니다.
+> `.hwp` / `.hwpx` / `.owpml` 파일을 화면에 끌어다 놓거나 "파일 선택" 버튼으로 올리면 즉시 렌더링됩니다.
+> Chrome · Firefox · Safari · Edge 모두 지원합니다.
 
-현재 프로젝트는 `확장 프로그램 셸 + HWP 엔진 기반 Canvas 렌더링 + 직접 편집 경로 + 다운로드 원본 기준 QA` 구조로 움직이고 있사옵니다.
+---
+
+`HWP`, `HWPX`, `OWPML` 문서를 어떤 브라우저에서든 설치 없이 열고, 가능한 한 실제 한글 프로그램과 비슷한 화면과 동선으로 확인·편집·저장하려는 프로젝트이옵니다.
+
+현재 프로젝트는 `웹 뷰어(GitHub Pages) + 크롬 확장 프로그램 셸 + HWP 엔진 기반 Canvas 렌더링 + 직접 편집 경로 + 다운로드 원본 기준 QA` 구조로 움직이고 있사옵니다.
 
 ## 현재 상태
 
@@ -98,19 +108,21 @@
 
 ## 핵심 구조
 
-### 1. 뷰어 셸
+### 1. 웹 뷰어 (GitHub Pages)
 
-- 화면: [pages/viewer.html](/Users/shinehandmac/Github/ChromeHWP/pages/viewer.html:1)
-- 스타일: [css/viewer.css](/Users/shinehandmac/Github/ChromeHWP/css/viewer.css:1)
-- 앱 로직: [js/app.js](/Users/shinehandmac/Github/ChromeHWP/js/app.js:1)
+- **라이브 URL**: [https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)
+- 뷰어 (루트): [viewer.html](viewer.html)
+- 뷰어 (크롬 확장용): [pages/viewer.html](pages/viewer.html)
+- 스타일: [css/viewer.css](css/viewer.css)
+- 앱 로직: [js/app.js](js/app.js)
 
 현재 셸은 메뉴/툴바/눈금자/캔버스/상태바 구조를 갖추고 있으며, 상태바에는 페이지/구역/모드와 함께 구조 진단 요약도 표시하옵니다.
 사이드바 하단의 `레이아웃 감사 패널` 은 현재 쪽의 `표/그림/수식/차트/텍스트` 집계와 hotspot 쪽 이동 버튼을 보여 주옵니다.
 
 ### 2. HWP 엔진 브리지
 
-- 브리지: [js/hwp-wasm-renderer.js](/Users/shinehandmac/Github/ChromeHWP/js/hwp-wasm-renderer.js:1)
-- 엔진 번들: [lib/hwp.js](/Users/shinehandmac/Github/ChromeHWP/lib/hwp.js:1), `lib/hwp_bg.wasm`
+- 브리지: [js/hwp-wasm-renderer.js](js/hwp-wasm-renderer.js)
+- 엔진 번들: [lib/hwp.js](lib/hwp.js), `lib/hwp_bg.wasm`
 
 브리지는 아래 역할을 맡고 있사옵니다.
 
@@ -123,12 +135,8 @@
 
 ### 3. QA / 회귀검증
 
-- 검증 스크립트: [scripts/verify_samples.mjs](/Users/shinehandmac/Github/ChromeHWP/scripts/verify_samples.mjs:1)
-- 최신 리포트: [verify-samples-report.json](/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-report.json:1)
-- hotspot 요약: [verify-samples-hotspots.md](/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-hotspots.md:1)
-- 다운로드 전수 inventory: [verify-samples-inventory.md](/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-inventory.md:1)
-- QA 스냅샷: [output/playwright/qa-snapshots](/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots)
-- 전 페이지 한컴 대조 감사: [hancom-page-audit-report.html](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit/hancom-page-audit-report.html)
+- 검증 스크립트: [scripts/verify_samples.mjs](scripts/verify_samples.mjs)
+- QA 스냅샷: [output/playwright/qa-snapshots](output/playwright/qa-snapshots)
 
 검증기는 아래를 함께 확인하옵니다.
 
@@ -139,13 +147,12 @@
 - 구조 진단 합계 일치
 - hotspot 쪽 우선순위 계산
 - 전체 화면 PNG 스냅샷 저장
-- 다운로드 폴더 지원 문서 전수 inventory 작성
 
 ## QA 원칙
 
 가장 중요한 규칙은 하나이옵니다.
 
-- QA는 반드시 `/Users/shinehandmac/Downloads` 의 원본 `HWP/HWPX` 파일을 기준으로 한다.
+- QA는 반드시 로컬 다운로드 폴더의 원본 `HWP/HWPX` 파일을 기준으로 한다.
 - 화면 정답은 한컴 Viewer를 기준선으로 삼는다.
 - 렌더러에는 문서명, 파일명, 페이지 번호, 특정 샘플 전용 수치를 하드코딩하지 않는다.
 - 모든 보정은 HWP/HWPX 원본 레코드의 서식값, 위치값, 캡션 방향, 줄/행/셀 속성처럼 문서 형식에서 읽은 값에 대한 일반 규칙이어야 한다.
@@ -155,84 +162,75 @@
 
 상세 기준은 아래 문서에 정리되어 있사옵니다.
 
-- [Downloads QA Baseline](/Users/shinehandmac/Github/ChromeHWP/docs/downloads-qa-baseline-2026-04-18.md:1)
-- [Rendering Status](/Users/shinehandmac/Github/ChromeHWP/docs/rendering-status.md:1)
+- [Downloads QA Baseline](docs/downloads-qa-baseline-2026-04-18.md)
+- [Rendering Status](docs/rendering-status.md)
 
 ## 실행 방법
+
+### 🌐 웹 뷰어 (설치 불필요)
+
+아래 링크를 클릭하면 바로 HWP 뷰어가 열립니다. 아무것도 설치할 필요가 없사옵니다.
+
+**[https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)**
+
+- `.hwp` / `.hwpx` / `.owpml` 파일을 화면에 끌어다 놓거나 "파일 선택" 버튼으로 올리면 즉시 렌더링됩니다.
+- Chrome · Firefox · Safari · Edge 모두 지원합니다.
+- 홈 화면: [https://shinehand.github.io/ChromeHWP/](https://shinehand.github.io/ChromeHWP/)
 
 ### 로컬 정적 서버
 
 ```bash
-cd /Users/shinehandmac/Github/ChromeHWP
+cd /path/to/ChromeHWP
 python3 -m http.server 4173
+# 브라우저에서 http://localhost:4173/viewer.html 접속
 ```
 
 ### 최소 회귀검증
 
 ```bash
-cd /Users/shinehandmac/Github/ChromeHWP
+cd /path/to/ChromeHWP
 node scripts/verify_samples.mjs
 ```
-
-검증 결과는 아래에 남사옵니다.
-
-- JSON 리포트: [verify-samples-report.json](/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-report.json:1)
-- hotspot 요약: [verify-samples-hotspots.md](/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-hotspots.md:1)
-- 다운로드 전수 inventory: [verify-samples-inventory.md](/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-inventory.md:1)
-- QA 스냅샷: [output/playwright/qa-snapshots](/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots)
 
 ### 한컴 기준선 캡처
 
 한컴 Viewer를 열 수 있는 macOS 환경이라면, 같은 문서를 한컴 Viewer와 ChromeHWP 양쪽에서 캡처한 비교판을 생성할 수 있사옵니다.
 
 ```bash
-cd /Users/shinehandmac/Github/ChromeHWP
 node scripts/capture_hancom_oracle.mjs
 ```
-
-산출물은 아래에 남사옵니다.
-
-- manifest: [hancom-oracle-manifest.json](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/hancom-oracle-manifest.json:1)
-- 보고서: [hancom-oracle-report.md](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/hancom-oracle-report.md:1)
-- 비교판: [hancom-oracle-report.html](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/hancom-oracle-report.html:1)
-- 픽셀 비교 리포트: [hancom-page-compare-report.json](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/hancom-page-compare-report.json:1)
-- 페이지 기준선: [hancom-oracle-page-baseline.json](/Users/shinehandmac/Github/ChromeHWP/docs/hancom-oracle-page-baseline.json:1)
 
 ### 전 페이지 한컴 감사
 
 대표 화면 1장이 아니라 테스트 문서의 모든 페이지를 한컴 Viewer와 ChromeHWP로 짝지어 확인하려면 아래를 실행하옵니다.
 
 ```bash
-cd /Users/shinehandmac/Github/ChromeHWP
 node scripts/capture_hancom_page_audit.mjs
 python3 scripts/build_hancom_page_audit.py
 ```
 
 현재 최신 전 페이지 감사는 다운로드 기준 5개 문서 36쪽을 모두 캡처했으며, 아직 모든 페이지가 원본과 동일한 수준은 아니옵니다.
 
-- 산출물: [hancom-page-audit-report.html](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit/hancom-page-audit-report.html)
-- JSON: [hancom-page-audit-report.json](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit/hancom-page-audit-report.json:1)
-- 주요 잔여 대상: `incheon-2a.hwpx` 15쪽, `attachment-sale-notice.hwp` 1쪽, `goyeopje-full-2024.hwp` 6·9쪽, 전반적인 글자 농도·줄 높이·상단 원점 미세 오차
+주요 잔여 대상: `incheon-2a.hwpx` 15쪽, `attachment-sale-notice.hwp` 1쪽, `goyeopje-full-2024.hwp` 6·9쪽, 전반적인 글자 농도·줄 높이·상단 원점 미세 오차
 
 ## 핵심 문서
 
 ### 형식 분석
 
-- [HWP 5.0 분석](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/hwp-5.0-revision1.3.md:1)
-- [HWPML 3.0 분석](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/hwpml-3.0-revision1.2.md:1)
-- [수식 분석](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/hwp-equation-revision1.3.md:1)
-- [차트 분석](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/hwp-chart-revision1.2.md:1)
-- [배포용 문서 분석](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/hwp-distributed-doc-revision1.2.md:1)
-- [통합 구현 기준서](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/implementation-requirements.md:1)
-- [형식 문서 교차표](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/spec-crosswalk.md:1)
+- [HWP 5.0 분석](docs/hwp-spec-analysis/hwp-5.0-revision1.3.md)
+- [HWPML 3.0 분석](docs/hwp-spec-analysis/hwpml-3.0-revision1.2.md)
+- [수식 분석](docs/hwp-spec-analysis/hwp-equation-revision1.3.md)
+- [차트 분석](docs/hwp-spec-analysis/hwp-chart-revision1.2.md)
+- [배포용 문서 분석](docs/hwp-spec-analysis/hwp-distributed-doc-revision1.2.md)
+- [통합 구현 기준서](docs/hwp-spec-analysis/implementation-requirements.md)
+- [형식 문서 교차표](docs/hwp-spec-analysis/spec-crosswalk.md)
 
 ### QA / 레이아웃
 
-- [Downloads QA Baseline](/Users/shinehandmac/Github/ChromeHWP/docs/downloads-qa-baseline-2026-04-18.md:1)
-- [Rendering Status](/Users/shinehandmac/Github/ChromeHWP/docs/rendering-status.md:1)
-- [Font Strategy](/Users/shinehandmac/Github/ChromeHWP/docs/font-strategy-2026-04-18.md:1)
-- [Hancom Oracle Page Baseline](/Users/shinehandmac/Github/ChromeHWP/docs/hancom-oracle-page-baseline.json:1)
-- [Hancom Oracle Report](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/hancom-oracle-report.md:1)
+- [Downloads QA Baseline](docs/downloads-qa-baseline-2026-04-18.md)
+- [Rendering Status](docs/rendering-status.md)
+- [Font Strategy](docs/font-strategy-2026-04-18.md)
+- [Hancom Oracle Page Baseline](docs/hancom-oracle-page-baseline.json)
 
 ## 2026-04-19 종료 메모
 
