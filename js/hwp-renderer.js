@@ -428,6 +428,29 @@ function appendShapePlaceholder(parent, block) {
   if (widthPx) box.style.width = `${widthPx}px`;
   if (heightPx) box.style.height = `${heightPx}px`;
 
+  // 채움 색상 적용 (태그 86 HWPTAG_SHAPE_COMPONENT 파싱 결과)
+  const fillGrad = block.fillGradient;
+  if (fillGrad?.colors?.length >= 2) {
+    box.style.background = hwpxGradientToCss(fillGrad);
+  } else if (block.fillColor) {
+    box.style.backgroundColor = block.fillColor;
+  }
+
+  // 테두리 선 색상·굵기 적용
+  const lineColor = block.lineColor;
+  const lineWidthMm = Number(block.lineWidthMm) || 0;
+  if (lineColor && lineColor !== '#000000' && lineColor !== '#ffffff') {
+    const lineWidthPx = lineWidthMm > 0
+      ? Math.max(0.5, Math.min(8, lineWidthMm * 3.78)) // mm → px at 96 DPI
+      : 1;
+    box.style.border = `${lineWidthPx}px solid ${lineColor}`;
+    box.style.boxSizing = 'border-box';
+  } else if (!block.fillColor && !fillGrad) {
+    // 색상 정보가 없을 때 최소한 보이는 아웃라인 적용 (디버그용 시각화)
+    box.style.border = '1px dashed #aaa';
+    box.style.boxSizing = 'border-box';
+  }
+
   wrap.appendChild(box);
   parent.appendChild(wrap);
   registerPlacedBlock(wrap, box, block);
@@ -1149,52 +1172,6 @@ function applyCellBorderStyle(td, cell) {
   }
 }
 
-function clonePageStyle(pageStyle) {
-  if (!pageStyle) return null;
-  return {
-    ...pageStyle,
-    margins: pageStyle.margins ? { ...pageStyle.margins } : undefined,
-    pageBorderFills: Array.isArray(pageStyle.pageBorderFills)
-      ? pageStyle.pageBorderFills.map(def => ({
-        ...def,
-        offset: def?.offset ? { ...def.offset } : undefined,
-      }))
-      : undefined,
-  };
-}
-
-function cloneParagraphBlock(para) {
-  if (para?.type === 'table') {
-    return {
-      ...(para || {}),
-      rows: (para.rows || []).map(row => ({
-        ...row,
-        cells: (row.cells || []).map(cell => cloneTableCell(cell)),
-      })),
-      columnWidths: Array.isArray(para.columnWidths) ? [...para.columnWidths] : para.columnWidths,
-      rowHeights: Array.isArray(para.rowHeights) ? [...para.rowHeights] : para.rowHeights,
-      texts: ((para?.texts) || []).map(run => ({ ...run })),
-    };
-  }
-
-  return {
-    ...(para || HwpParser._createParagraphBlock('')),
-    texts: ((para?.texts) || []).map(run => ({ ...run })),
-  };
-}
-
-function cloneTableCell(cell, overrides = {}) {
-  const paragraphs = overrides.paragraphs
-    ? overrides.paragraphs.map(cloneParagraphBlock)
-    : (cell?.paragraphs || []).map(cloneParagraphBlock);
-  const padding = Array.isArray(cell?.padding) ? [...cell.padding] : cell?.padding;
-  return {
-    ...(cell || {}),
-    ...overrides,
-    padding,
-    paragraphs,
-  };
-}
 
 function buildSyntheticRow(baseRow, cells, syntheticRowRole = 'body') {
   let colCursor = 0;
