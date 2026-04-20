@@ -1318,6 +1318,36 @@ body {
   margin: 6px 0 0;
 }
 
+.hwp-textbox-block {
+  margin: 6px 0;
+}
+
+.hwp-textbox-block[data-inline="true"] {
+  margin: 4px 0 8px;
+}
+
+.hwp-textbox-content {
+  box-sizing: border-box;
+  overflow: visible;
+  padding: 4px 6px;
+}
+
+.hwp-shape-block {
+  display: block;
+  margin: 4px 0;
+}
+
+.hwp-shape-block[data-inline="true"] {
+  margin: 2px 0 4px;
+}
+
+.hwp-shape {
+  display: block;
+  box-sizing: border-box;
+  min-width: 4px;
+  min-height: 2px;
+}
+
 /* 신청서 첫 페이지 첫 표 미세 조정 */
 .hwp-table[data-layout="first-page-primary"] .hwp-table-row[data-row-role="title"] > td {
   padding-top: 10px;

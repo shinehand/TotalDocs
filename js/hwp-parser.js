@@ -688,7 +688,7 @@ const HwpParser = {
   _hwpxResolveAreaBlocks(areaDefs, pageIndex, hideFirst = false) {
     if (hideFirst && pageIndex === 0) return [];
     return (areaDefs || [])
-      .filter(area => HwpParser._hwpxPageTypeMatches(area.applyPageType, pageIndex))
+      .filter(area => HwpParser._matchesPageScope(area.applyPageType, pageIndex))
       .flatMap(area => area.blocks || []);
   },
 
@@ -700,7 +700,7 @@ const HwpParser = {
     );
   },
 
-  _hwpxPageTypeMatches(applyPageType, pageIndex) {
+  _matchesPageScope(applyPageType, pageIndex) {
     const type = String(applyPageType || 'BOTH').toUpperCase();
     const pageNo = pageIndex + 1;
     if (type === 'EVEN') return pageNo % 2 === 0;
@@ -709,11 +709,70 @@ const HwpParser = {
     return true;
   },
 
+  _parseHwpHeaderFooterApplyPageType(controlBody) {
+    const MIN_CONTROL_BODY_BYTES = 8;
+    const HEADER_FOOTER_SCOPE_MASK = 0x3;
+    if (!controlBody || controlBody.length < MIN_CONTROL_BODY_BYTES) return 'BOTH';
+    const attr = HwpParser._u32(controlBody, 4);
+    const scope = attr & HEADER_FOOTER_SCOPE_MASK;
+    if (scope === 1) return 'EVEN';
+    if (scope === 2) return 'ODD';
+    return 'BOTH';
+  },
+
+  _resolveHwpHeaderFooterBlocks(areaDefs, fallbackBlocks, pageIndex, hideFirst = false) {
+    if (hideFirst && pageIndex === 0) return [];
+    if (!Array.isArray(areaDefs) || !areaDefs.length) {
+      return Array.isArray(fallbackBlocks) ? fallbackBlocks : [];
+    }
+    return areaDefs
+      .filter(area => HwpParser._matchesPageScope(area.applyPageType, pageIndex))
+      .flatMap(area => area.blocks || []);
+  },
+
   _hwpxPageNumAlign(position) {
     const pos = String(position || '').toUpperCase();
     if (pos.includes('RIGHT')) return 'right';
     if (pos.includes('LEFT')) return 'left';
     return 'center';
+  },
+
+  // HWP secd tag-76: HWPTAG_PAGE_NUM_PARA — 쪽 번호 자동 배치 위치/형식
+  // offset 0: DWORD attr (bits 0-3: 위치, bits 4-7: 형식)
+  // offset 4: WCHAR sideChar (장식 문자, optional)
+  _parseHwpPageNumMeta(body) {
+    if (!body || body.length < 4) return null;
+    const attr = HwpParser._u32(body, 0);
+    const posCode = attr & 0xF;
+    if (posCode === 0) return null; // 없음 — 쪽번호 자동배치 비활성
+    const formatCode = (attr >> 4) & 0xF;
+    const sideChar = body.length >= 6
+      ? HwpParser._decodeHwpUtf16String(body, 4, 1).replace(/\u0000/g, '').trim()
+      : '';
+    // offset 6: WORD startPageNumber (일부 HWP 버전에만 존재)
+    const startPageNum = body.length >= 8 ? HwpParser._u16(body, 6) : 0;
+    return {
+      position: HwpParser._hwpPageNumPositionCode(posCode),
+      formatType: formatCode === 0 ? 'DIGIT' : 'OTHER',
+      sideChar,
+      startPageNum: startPageNum > 0 ? startPageNum : 1,
+    };
+  },
+
+  _hwpPageNumPositionCode(code) {
+    switch (code) {
+      case 1:  return 'BOTTOM_LEFT';
+      case 2:  return 'BOTTOM_CENTER';
+      case 3:  return 'BOTTOM_RIGHT';
+      case 4:  return 'TOP_LEFT';
+      case 5:  return 'TOP_CENTER';
+      case 6:  return 'TOP_RIGHT';
+      case 7:  return 'OUTER_BOTTOM';
+      case 8:  return 'INNER_BOTTOM';
+      case 9:  return 'OUTER_TOP';
+      case 10: return 'INNER_TOP';
+      default: return 'BOTTOM_CENTER';
+    }
   },
 
   _hwpxCreatePageNumberBlock(pageNumberMeta, pageNumber, hidden = false) {
@@ -798,13 +857,19 @@ const HwpParser = {
     const rowEls = HwpParser._hwpxChildren(tblEl, 'tr');
     const cells = [];
     const objectInfo = HwpParser._hwpxParseObjectLayout(tblEl);
+    // Table-level default inner margin (used when a cell has hasMargin="0")
+    const tblInMarginEl = HwpParser._hwpxFirstChild(tblEl, 'inMargin');
 
     rowEls.forEach((trEl, rowIndex) => {
       HwpParser._hwpxChildren(trEl, 'tc').forEach((tcEl, cellIndex) => {
         const addrEl = HwpParser._hwpxFirstChild(tcEl, 'cellAddr');
         const spanEl = HwpParser._hwpxFirstChild(tcEl, 'cellSpan');
         const sizeEl = HwpParser._hwpxFirstChild(tcEl, 'cellSz');
-        const marginEl = HwpParser._hwpxFirstChild(tcEl, 'cellMargin');
+        // Use per-cell margin when hasMargin="1", otherwise fall back to table inMargin
+        const hasOwnMargin = tcEl.getAttribute?.('hasMargin') === '1';
+        const marginEl = hasOwnMargin
+          ? HwpParser._hwpxFirstChild(tcEl, 'cellMargin')
+          : tblInMarginEl || HwpParser._hwpxFirstChild(tcEl, 'cellMargin');
         const subListEl = HwpParser._hwpxFirstChild(tcEl, 'subList');
         const blocks = subListEl ? HwpParser._hwpxBlocksFromContainer(subListEl, header) : [];
         const contentHeight = HwpParser._hwpxAttrNum(subListEl, 'textHeight', 0);
@@ -1036,8 +1101,39 @@ const HwpParser = {
             section.pageStyle,
           );
           sectionPages.forEach((page, sectionPageIndex) => {
-            page.headerBlocks = (section.headerBlocks || []).map(cloneParagraphBlock);
-            page.footerBlocks = (section.footerBlocks || []).map(cloneParagraphBlock);
+            const sectionVisibility = section.pageStyle?.visibility || {};
+            const resolvedHeaderBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
+              section.headerAreas,
+              section.headerBlocks,
+              sectionPageIndex,
+              sectionVisibility.hideFirstHeader === '1',
+            );
+            const resolvedFooterBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
+              section.footerAreas,
+              section.footerBlocks,
+              sectionPageIndex,
+              sectionVisibility.hideFirstFooter === '1',
+            );
+            // secd startPageNum이 설정된 경우 해당 섹션의 시작 번호를 사용, 없으면 누적 번호
+            const sectionBasePageNum = Number(section.pageStyle?.startPageNum) > 0
+              ? Number(section.pageStyle.startPageNum)
+              : pages.length + 1;
+            const pageNumber = sectionBasePageNum + sectionPageIndex;
+            // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 footer가 없을 때만 추가해 중복을 막는다.
+            const pageNumMeta = section.pageStyle?.pageNumber;
+            const hideFirstPageNum = sectionVisibility.hideFirstPageNum === '1';
+            const autoPageNumBlock = (!resolvedFooterBlocks.length && !resolvedHeaderBlocks.length)
+              ? HwpParser._hwpxCreatePageNumberBlock(pageNumMeta, pageNumber, hideFirstPageNum && sectionPageIndex === 0)
+              : null;
+            const isTopNum = String(pageNumMeta?.position || '').toUpperCase().includes('TOP');
+            page.headerBlocks = [
+              ...resolvedHeaderBlocks.map(cloneParagraphBlock),
+              ...(autoPageNumBlock && isTopNum ? [autoPageNumBlock] : []),
+            ];
+            page.footerBlocks = [
+              ...resolvedFooterBlocks.map(cloneParagraphBlock),
+              ...(autoPageNumBlock && !isTopNum ? [autoPageNumBlock] : []),
+            ];
             page.pageStyle = clonePageStyle(section.pageStyle);
             page.sectionIndex = sectionIndex;
             page.sectionOrder = section.order ?? sectionIndex;
@@ -1055,12 +1151,41 @@ const HwpParser = {
         parsedBody.pageStyle,
       );
       if (pages.length) {
-        if (parsedBody.headerBlocks?.length) {
-          pages[0].headerBlocks = parsedBody.headerBlocks.map(cloneParagraphBlock);
-        }
-        if (parsedBody.footerBlocks?.length) {
-          pages[0].footerBlocks = parsedBody.footerBlocks.map(cloneParagraphBlock);
-        }
+        pages.forEach((page, pageIndex) => {
+          const bodyVisibility = parsedBody.pageStyle?.visibility || {};
+          const resolvedHeaderBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
+            parsedBody.headerAreas,
+            parsedBody.headerBlocks,
+            pageIndex,
+            bodyVisibility.hideFirstHeader === '1',
+          );
+          const resolvedFooterBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
+            parsedBody.footerAreas,
+            parsedBody.footerBlocks,
+            pageIndex,
+            bodyVisibility.hideFirstFooter === '1',
+          );
+          page.headerBlocks = resolvedHeaderBlocks.map(cloneParagraphBlock);
+          page.footerBlocks = resolvedFooterBlocks.map(cloneParagraphBlock);
+          // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 header/footer가 없을 때만 추가
+          const pageNumMeta = parsedBody.pageStyle?.pageNumber;
+          const hideFirstPageNum = bodyVisibility.hideFirstPageNum === '1';
+          if (pageNumMeta && !resolvedFooterBlocks.length && !resolvedHeaderBlocks.length) {
+            const startPageNum = Number(parsedBody.pageStyle?.startPageNum) > 0
+              ? Number(parsedBody.pageStyle.startPageNum) : 1;
+            const autoPageNumBlock = HwpParser._hwpxCreatePageNumberBlock(
+              pageNumMeta, startPageNum + pageIndex, hideFirstPageNum && pageIndex === 0,
+            );
+            if (autoPageNumBlock) {
+              const isTopNum = String(pageNumMeta.position || '').toUpperCase().includes('TOP');
+              if (isTopNum) {
+                page.headerBlocks = [autoPageNumBlock];
+              } else {
+                page.footerBlocks = [autoPageNumBlock];
+              }
+            }
+          }
+        });
         if (parsedBody.pageStyle) {
           pages.forEach(page => { page.pageStyle = parsedBody.pageStyle; });
         }
@@ -1883,14 +2008,19 @@ const HwpParser = {
   _parseHwpCharShape(body, faceNames = {}) {
     if (!body || body.length < 56) return null;
     const attr = HwpParser._u32(body, 46);
-    const faceId = HwpParser._u16(body, 0);
+    // face IDs: 한글(0), 영어(2), 한자(4), 일어(6), 기타(8), 심벌(10), 사용자(12)
+    const faceId      = HwpParser._u16(body, 0);
+    const faceIdLatin = HwpParser._u16(body, 2);
+    const fontName      = faceNames[faceId]      || '';
+    const fontNameLatin = faceNames[faceIdLatin]  || '';
     const scaleX = body[14] ?? 100;
     const letterSpacing = (body[21] ?? 0) << 24 >> 24;
     const relSize = body[28] ?? 100;
     const offsetY = (body[35] ?? 0) << 24 >> 24;
     const fontSizeRaw = HwpParser._u32(body, 42);
     return {
-      fontName: faceNames[faceId] || '',
+      fontName,
+      fontNameLatin: fontNameLatin !== fontName ? fontNameLatin : '',
       fontSize: fontSizeRaw > 0 ? Math.round((fontSizeRaw / 100) * 10) / 10 : 0,
       color: HwpParser._hwpColorRefToCss(HwpParser._u32(body, 52)),
       bold: Boolean(attr & (1 << 1)),
@@ -1943,9 +2073,22 @@ const HwpParser = {
   _parseHwpParaShape(body) {
     if (!body || body.length < 26) return null;
     const attr = HwpParser._u32(body, 0);
-    const modernAttr = body.length >= 46 ? HwpParser._u32(body, 42) : 0;
+    // attr2 is at offset 42 (한 줄 입력 / 자동 간격 flags — not line spacing type).
+    // attr3 at offset 46 holds the new line-spacing kind (bits 0-4).
+    // lineSpacingNew at offset 50 holds the new line-spacing value.
+    const attr3 = body.length >= 50 ? HwpParser._u32(body, 46) : 0;
     const modernLineSpacing = body.length >= 54 ? HwpParser._u32(body, 50) : 0;
     const legacyLineSpacing = body.length >= 28 ? HwpParser._u32(body, 24) : 0;
+    const modernLineSpacingType = modernLineSpacing
+      ? HwpParser._hwpLineSpacingTypeFromCode(attr3 & 0x1F)
+      : null;
+    // Modern percent format stores value×100 (16000=160%); normalize to legacy scale (160=160%)
+    // so that resolveParagraphLineHeight can use a consistent divisor of 100.
+    const lineSpacing = modernLineSpacing
+      ? (modernLineSpacingType === 'percent'
+        ? Math.round(modernLineSpacing / 100)
+        : modernLineSpacing)
+      : (legacyLineSpacing || 0);
     return {
       align: HwpParser._hwpAlignFromAttr(attr),
       marginLeft: HwpParser._i32(body, 4),
@@ -1958,10 +2101,8 @@ const HwpParser = {
       borderFillId: body.length >= 34 ? HwpParser._u16(body, 32) : 0,
       headShapeType: ['none', 'outline', 'number', 'bullet'][(attr >> 23) & 0x3] || 'none',
       headShapeLevel: Math.max(1, ((attr >> 25) & 0x7) + 1),
-      lineSpacingType: modernLineSpacing
-        ? HwpParser._hwpLineSpacingTypeFromCode(modernAttr & 0x1F)
-        : HwpParser._hwpLineSpacingTypeFromCode(attr & 0x3),
-      lineSpacing: modernLineSpacing || legacyLineSpacing || 0,
+      lineSpacingType: modernLineSpacingType || HwpParser._hwpLineSpacingTypeFromCode(attr & 0x3),
+      lineSpacing,
     };
   },
 
@@ -2158,7 +2299,8 @@ const HwpParser = {
   _summarizeHwpLineSegs(lineSegs = []) {
     const saneSegs = lineSegs.filter(seg => {
       const height = Math.max(Number(seg?.height) || 0, Number(seg?.textHeight) || 0);
-      return height >= 400 && height <= 6000;
+      // Accept lines from tiny text (200 = ~2.7px) up to large headings (14400 = ~192px)
+      return height >= 200 && height <= 14400;
     });
     if (!saneSegs.length) {
       return { lineHeightPx: 0, layoutHeightPx: 0 };
@@ -2167,10 +2309,11 @@ const HwpParser = {
     const heights = saneSegs.map(seg => Math.max(Number(seg.height) || 0, Number(seg.textHeight) || 0));
     const totalHeight = heights.reduce((sum, value) => sum + value, 0);
     const avgHeight = totalHeight / heights.length;
-    // HWPUNIT (1/7200 inch) → px at 96 DPI: 1/75 scale
+    // HWPUNIT (1/7200 inch) → px at 96 DPI: 1/75 scale.
+    // Allow up to 96px per line so large heading fonts are not clamped.
     return {
-      lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 75))),
-      layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 75))),
+      lineHeightPx: Math.max(11, Math.min(96, Math.round(avgHeight / 75))),
+      layoutHeightPx: Math.max(12, Math.min(480, Math.round(totalHeight / 75))),
     };
   },
 
@@ -2215,6 +2358,8 @@ const HwpParser = {
   _createHwpParagraphBlock(text, paraState = {}, docInfo = null) {
     const { style, paraStyle, baseCharStyle } = HwpParser._resolveHwpParagraphStyle(paraState, docInfo);
     const lineMetrics = HwpParser._summarizeHwpLineSegs(paraState?.lineSegs || []);
+    const tabDef = docInfo?.tabDefs?.[paraStyle?.tabDefId];
+    const tabStops = (tabDef?.tabs || []).map(t => ({ position: t.position, kind: t.kind }));
     return {
       type: 'paragraph',
       align: paraStyle?.align || 'left',
@@ -2228,6 +2373,7 @@ const HwpParser = {
       styleId: paraState?.styleId ?? 0,
       styleName: style?.name || style?.englishName || '',
       tabDefId: paraStyle?.tabDefId ?? 0,
+      tabStops,
       listInfo: HwpParser._resolveHwpParagraphListInfo(paraStyle, docInfo),
       lineHeightPx: lineMetrics.lineHeightPx,
       layoutHeightPx: lineMetrics.layoutHeightPx,
@@ -2516,10 +2662,15 @@ const HwpParser = {
     // offset  0: paperWidth (HWPUNIT), 4: paperHeight (HWPUNIT)
     // offset  8: marginLeft, 12: marginRight, 16: marginTop, 20: marginBottom
     // offset 24: marginHeader, 28: marginFooter, 32: gutter, 36: flags
+    // flags bit 8: hide header on first page, bit 9: hide footer on first page
     if (!body || body.length < 32) return null;
     const paperWidth  = HwpParser._i32(body, 0);
     const paperHeight = HwpParser._i32(body, 4);
     if (paperWidth <= 0 || paperHeight <= 0) return null;
+    const flags = body.length >= 40 ? HwpParser._u32(body, 36) : 0;
+    const hideFirstHeader = Boolean(flags & (1 << 8));
+    const hideFirstFooter = Boolean(flags & (1 << 9));
+    const hideFirstPageNum = Boolean(flags & (1 << 10));
     return {
       sourceFormat: 'hwp',
       width:  paperWidth,
@@ -2531,6 +2682,11 @@ const HwpParser = {
         bottom: HwpParser._i32(body, 20),
         header: HwpParser._i32(body, 24),
         footer: HwpParser._i32(body, 28),
+      },
+      visibility: {
+        hideFirstHeader: hideFirstHeader ? '1' : '0',
+        hideFirstFooter: hideFirstFooter ? '1' : '0',
+        hideFirstPageNum: hideFirstPageNum ? '1' : '0',
       },
     };
   },
@@ -2712,6 +2868,18 @@ const HwpParser = {
     let hasChartData = false;
     let hasVideoData = false;
 
+    // Text box support: track LIST_HEADER (tag 72) and collect paragraph records
+    let hasListHeader = false;
+    const textBoxParas = [];
+    let textBoxCurrentText = null;
+    let textBoxParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+    const pushTextBoxPara = () => {
+      if (textBoxCurrentText === null) return;
+      textBoxParas.push(HwpParser._createHwpParagraphBlock(textBoxCurrentText, textBoxParaState, docInfo));
+      textBoxCurrentText = null;
+      textBoxParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+    };
+
     while (pos < data.length) {
       const rec = HwpParser._readRecord(data, pos);
       if (!rec) break;
@@ -2726,9 +2894,27 @@ const HwpParser = {
         hasChartData = true;
       } else if (rec.tagId === 98) {
         hasVideoData = true;
+      } else if (rec.tagId === 72 && !hasListHeader) {
+        hasListHeader = true;
+        textBoxCurrentText = '';
+      } else if (hasListHeader && !pictureBody && !oleBody && !equationBody) {
+        if (rec.tagId === 66) {
+          pushTextBoxPara();
+          textBoxCurrentText = '';
+          textBoxParaState = HwpParser._parseHwpParaHeader(rec.body);
+          textBoxParaState.lineSegs = [];
+        } else if (rec.tagId === 67) {
+          if (textBoxCurrentText === null) textBoxCurrentText = '';
+          textBoxCurrentText += HwpParser._decodeParaText(rec.body, 0, rec.body.length);
+        } else if (rec.tagId === 68) {
+          textBoxParaState.charShapes = HwpParser._parseHwpParaCharShape(rec.body);
+        } else if (rec.tagId === 69) {
+          textBoxParaState.lineSegs = HwpParser._parseHwpParaLineSeg(rec.body);
+        }
       }
       pos = rec.nextPos;
     }
+    pushTextBoxPara();
 
     let block = null;
     if (equationBody) {
@@ -2737,12 +2923,39 @@ const HwpParser = {
       block = HwpParser._parseHwpGsoBlock(objectInfo, pictureBody, docInfo);
     } else if (oleBody) {
       block = HwpParser._parseHwpOleBlock(objectInfo, oleBody, docInfo, { hasChartData, hasVideoData });
+    } else if (hasListHeader && textBoxParas.length) {
+      block = HwpParser._parseHwpTextBoxBlock(objectInfo, textBoxParas);
+    } else if (objectInfo?.width > 0 && objectInfo?.height > 0) {
+      block = HwpParser._parseHwpShapePlaceholder(objectInfo);
     }
 
     return {
       block,
       nextPos: pos,
     };
+  },
+
+  _parseHwpTextBoxBlock(objectInfo, paragraphs) {
+    if (!objectInfo) return null;
+    return HwpParser._withObjectLayout({
+      type: 'textbox',
+      paragraphs: paragraphs || [],
+      width: objectInfo.width || 0,
+      height: objectInfo.height || 0,
+      sourceFormat: 'hwp',
+      texts: (paragraphs || []).flatMap(p => p.texts || []),
+    }, objectInfo);
+  },
+
+  _parseHwpShapePlaceholder(objectInfo) {
+    if (!objectInfo || !(objectInfo.width > 0)) return null;
+    return HwpParser._withObjectLayout({
+      type: 'shape',
+      width: objectInfo.width || 0,
+      height: objectInfo.height || 0,
+      sourceFormat: 'hwp',
+      texts: [HwpParser._run('')],
+    }, objectInfo);
   },
 
   _createParagraphBlock(text, align = 'left', runOpts = {}, blockOpts = {}) {
@@ -2803,6 +3016,13 @@ const HwpParser = {
     const rowCount = HwpParser._u16(body, 4);
     const colCount = HwpParser._u16(body, 6);
     const cellSpacing = HwpParser._u16(body, 8);
+    // offsets 10-17: 표 전체 기본 셀 내부 여백 (HWPUNIT) — 셀이 자체 여백을 지정하지 않을 때 기준값
+    const defaultCellPadding = [
+      HwpParser._u16(body, 10), // left
+      HwpParser._u16(body, 12), // right
+      HwpParser._u16(body, 14), // top
+      HwpParser._u16(body, 16), // bottom
+    ];
     const rowHeights = [];
 
     let off = 18;
@@ -2814,6 +3034,7 @@ const HwpParser = {
       rowCount,
       colCount,
       cellSpacing,
+      defaultCellPadding,
       rowHeights,
     };
   },
@@ -3102,6 +3323,7 @@ const HwpParser = {
       rows,
       columnWidths,
       cellSpacing: tableInfo?.cellSpacing || 0,
+      defaultCellPadding: tableInfo?.defaultCellPadding || null,
       rowHeights: tableInfo?.rowHeights || [],
       estimatedParagraphs,
       sourceFormat: tableInfo?.sourceFormat || '',
@@ -3253,9 +3475,17 @@ const HwpParser = {
         if (controlId === 'head' || controlId === 'foot') {
           pushParagraph();
           const subtree = HwpParser._parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
+          const applyPageType = HwpParser._parseHwpHeaderFooterApplyPageType(rec.body);
           const target = controlId === 'head' ? extras?.headerBlocks : extras?.footerBlocks;
+          const targetAreas = controlId === 'head' ? extras?.headerAreas : extras?.footerAreas;
           if (target && subtree.blocks.length) {
             target.push(...subtree.blocks);
+          }
+          if (targetAreas && subtree.blocks.length) {
+            targetAreas.push({
+              applyPageType,
+              blocks: subtree.blocks,
+            });
           }
           pos = subtree.nextPos;
           continue;
@@ -3264,17 +3494,31 @@ const HwpParser = {
         if (controlId === 'secd') {
           pushParagraph();
           if (extras && !extras.sectionMeta) {
+            // tag-73: PAGE_DEF (용지/여백), tag-76: PAGE_NUM_PARA (쪽번호 위치/형식)
+            // break 없이 전체 서브레코드를 스캔해 두 레코드를 모두 수집한다.
             let scanPos = rec.nextPos;
+            let secDef = null;
+            let pageNumMeta = null;
             while (scanPos < data.length) {
               const sub = HwpParser._readRecord(data, scanPos);
               if (!sub) break;
               if (sub.level <= rec.level) break;
-              if (sub.tagId === 73) {
-                const secDef = HwpParser._parseHwpSecDef(sub.body);
-                if (secDef) extras.sectionMeta = secDef;
-                break;
+              if (sub.tagId === 73 && !secDef) {
+                secDef = HwpParser._parseHwpSecDef(sub.body);
+              } else if (sub.tagId === 76 && !pageNumMeta) {
+                pageNumMeta = HwpParser._parseHwpPageNumMeta(sub.body);
               }
               scanPos = sub.nextPos;
+            }
+            if (secDef) {
+              if (pageNumMeta) {
+                secDef.pageNumber = pageNumMeta;
+                // startPageNum: tag-76 PAGE_NUM_PARA에서 읽은 시작 쪽번호 (기본 1)
+                if (pageNumMeta.startPageNum > 1) {
+                  secDef.startPageNum = pageNumMeta.startPageNum;
+                }
+              }
+              extras.sectionMeta = secDef;
             }
           }
           pos = HwpParser._skipControlSubtree(data, rec.nextPos, rec.level);
@@ -3401,11 +3645,19 @@ const HwpParser = {
     let bestParas = [];
     let bestHeaderBlocks = [];
     let bestFooterBlocks = [];
+    let bestHeaderAreas = [];
+    let bestFooterAreas = [];
     let bestSectionMeta = null;
     let bestScore = 0;
 
     for (const { mode, bytes } of attempts) {
-      const extras = { headerBlocks: [], footerBlocks: [], sectionMeta: null };
+      const extras = {
+        headerBlocks: [],
+        footerBlocks: [],
+        headerAreas: [],
+        footerAreas: [],
+        sectionMeta: null,
+      };
       const paras = HwpParser._parseHwpRecords(bytes, docInfo, extras);
       const score = HwpParser._scoreParas(paras);
       if (score > bestScore) {
@@ -3413,6 +3665,8 @@ const HwpParser = {
         bestParas = paras;
         bestHeaderBlocks = extras.headerBlocks;
         bestFooterBlocks = extras.footerBlocks;
+        bestHeaderAreas = extras.headerAreas || [];
+        bestFooterAreas = extras.footerAreas || [];
         bestSectionMeta = extras.sectionMeta || null;
       }
       if (score > 0) {
@@ -3425,6 +3679,8 @@ const HwpParser = {
         paras: bestParas,
         headerBlocks: bestHeaderBlocks,
         footerBlocks: bestFooterBlocks,
+        headerAreas: bestHeaderAreas,
+        footerAreas: bestFooterAreas,
         sectionMeta: bestSectionMeta,
       };
     }
@@ -3436,11 +3692,25 @@ const HwpParser = {
       const score = HwpParser._scoreParas(paras);
       if (score > 0) {
         console.warn('[HWP] %s: 구조 파싱 실패 → 텍스트 블록 복구 (%s)', sectionName, mode);
-        return { paras, headerBlocks: [], footerBlocks: [], sectionMeta: null };
+        return {
+          paras,
+          headerBlocks: [],
+          footerBlocks: [],
+          headerAreas: [],
+          footerAreas: [],
+          sectionMeta: null,
+        };
       }
     }
 
-    return { paras: [], headerBlocks: [], footerBlocks: [], sectionMeta: null };
+    return {
+      paras: [],
+      headerBlocks: [],
+      footerBlocks: [],
+      headerAreas: [],
+      footerAreas: [],
+      sectionMeta: null,
+    };
   },
 
   /* ── BodyText/Section 스트림 파싱 ── */
@@ -3531,6 +3801,8 @@ const HwpParser = {
     const sections = [];
     let headerBlocks = [];
     let footerBlocks = [];
+    let headerAreas = [];
+    let footerAreas = [];
     let pageStyle = null;
     for (const sn of sectionNumbers) {
       const entry = entries['Section' + sn];
@@ -3559,6 +3831,12 @@ const HwpParser = {
       if (!footerBlocks.length && parsed?.footerBlocks?.length) {
         footerBlocks = parsed.footerBlocks;
       }
+      if (!headerAreas.length && parsed?.headerAreas?.length) {
+        headerAreas = parsed.headerAreas;
+      }
+      if (!footerAreas.length && parsed?.footerAreas?.length) {
+        footerAreas = parsed.footerAreas;
+      }
       if (!pageStyle && parsed?.sectionMeta) {
         pageStyle = parsed.sectionMeta;
       }
@@ -3568,6 +3846,8 @@ const HwpParser = {
           paragraphs: parsed.paras,
           headerBlocks: parsed.headerBlocks || [],
           footerBlocks: parsed.footerBlocks || [],
+          headerAreas: parsed.headerAreas || [],
+          footerAreas: parsed.footerAreas || [],
           pageStyle: parsed.sectionMeta || null,
         });
       }
@@ -3577,6 +3857,8 @@ const HwpParser = {
       paragraphs: allParas,
       headerBlocks,
       footerBlocks,
+      headerAreas,
+      footerAreas,
       pageStyle,
       sections,
     } : null;

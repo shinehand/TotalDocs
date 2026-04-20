@@ -1,8 +1,130 @@
 # Work Log
 
-## 2026-03-27
+## 2026-04-20
 
-- 요청: 프로젝트 분석 및 문제 여부 점검
+### 문서 정확성 — 영향도 높은 항목 1차 구현
+
+- 요청: 영향도 높은 항목부터 추가 개발 진행 후 md에 기록
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`
+
+#### 1. 탭 정지 렌더링 (Tab Stop Rendering)
+
+- 문제: HWP `TabDef` 레코드는 파싱되지만 렌더러에서 `tab-size: 4` (고정 4칸)로만 처리됨.
+  양식 문서에서 탭으로 맞추는 레이블-값 정렬이 한컴 뷰어 대비 크게 어긋남.
+- 수정 내용:
+  - `_createHwpParagraphBlock` (hwp-parser.js) 및 `createHwpParagraphBlock` (parser.worker.js):
+    `docInfo.tabDefs[tabDefId]`를 조회해 `tabStops: [{position, kind}]` 배열을 단락 블록에 임베드.
+  - `appendParagraphBlock` (hwp-renderer.js):
+    `tabStops` 중 첫 번째 `left` 정렬 탭 정지 위치(HWPUNIT → px)를 CSS `tab-size: Npx`로 적용.
+    탭 정지가 없으면 기존 `tab-size: 4`로 폴백.
+- 영향 범위: HWP 양식 문서 전체. 탭으로 정렬되는 레이블/값 쌍이 더 원본에 가까워짐.
+
+#### 2. secd tag-76 (쪽 번호 위치) 파싱
+
+- 문제: `secd` 컨트롤 서브레코드 스캔이 tag-73(PAGE_DEF)을 찾은 즉시 `break`해,
+  tag-76(PAGE_NUM_PARA: 쪽 번호 자동 배치 위치·형식)를 전혀 읽지 못함.
+- 수정 내용:
+  - hwp-parser.js / parser.worker.js 양쪽의 secd 스캔 루프에서 `break` 제거.
+  - tag-73과 tag-76을 모두 수집하도록 변경 (`while` 루프가 레벨 경계까지 전체 스캔).
+  - `_parseHwpPageNumMeta` (hwp-parser.js) / `parseHwpPageNumMeta` (parser.worker.js) 추가:
+    attr bits 0-3 위치 코드 → `BOTTOM_LEFT/BOTTOM_CENTER/...` 문자열 변환,
+    bits 4-7 형식 코드 → `DIGIT/OTHER` 변환, sideChar 추출.
+  - 파싱 결과를 `sectionMeta.pageNumber`에 저장.
+
+#### 3. HWP 자동 쪽번호 블록 생성
+
+- 문제: secd tag-76이 파싱되더라도 섹션 루프에서 쪽번호 블록을 생성하지 않아
+  HWP 문서에 쪽번호가 표시되지 않음 (HWPX는 이미 지원).
+- 수정 내용:
+  - `_parseHwp5` 섹션 루프 (hwp-parser.js):
+    섹션에 명시적 header/footer 블록이 없을 때만 `_hwpxCreatePageNumberBlock`을 호출해
+    자동 쪽번호 블록을 footer 또는 header에 삽입 (중복 방지).
+    위치(TOP_*/BOTTOM_*)에 따라 headerBlocks / footerBlocks에 분기.
+  - 단일 섹션 경로(sections 배열 없는 경우)도 동일한 로직으로 적용.
+- 영향 범위: secd에 tag-76이 정의된 HWP 문서. 명시적 `foot` 컨트롤 없이 자동 쪽번호만 사용하는 문서.
+
+#### 검증
+
+- `node --check js/hwp-parser.js` 통과
+- `node --check js/parser.worker.js` 통과
+- `node --check js/hwp-renderer.js` 통과
+
+---
+
+
+### 문서 정확성 — 영향도 높은 항목 3차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`
+
+#### 7. HWP 표 기본 셀 내부 여백 파싱 (Table Default Cell Padding)
+
+- 문제: HWP `HWPTAG_TABLE` (tag 80) 레코드의 offset 10-17 에는 표 전체 기본 셀 내부 여백
+  (left/right/top/bottom inner margin, HWPUNIT)이 저장되어 있지만 파싱하지 않아
+  개별 셀 여백이 0인 경우 3~4px 하드코딩 폴백으로 처리됨.
+- 수정 내용:
+  - `_parseTableInfo` (hwp-parser.js) / `parseTableInfo` (parser.worker.js):
+    `defaultCellPadding: [L, R, T, B]` 배열 추가 파싱.
+  - `_buildTableBlock` (hwp-parser.js): `defaultCellPadding`을 테이블 블록에 전달.
+  - `appendTableBlock` (hwp-renderer.js):
+    셀의 자체 padding이 모두 0일 때 `tableBlock.defaultCellPadding`을 우선 적용.
+    기존 하드코딩 폴백(타이틀행/메타행 등)은 그 이후의 폴백으로 유지.
+- 영향 범위: 개별 셀 여백을 지정하지 않고 표 수준 기본 여백을 사용하는 HWP 표 전체.
+
+#### 검증
+
+- `node --check js/hwp-parser.js` 통과
+- `node --check js/parser.worker.js` 통과
+- `node --check js/hwp-renderer.js` 통과
+
+---
+
+
+### 문서 정확성 — 영향도 높은 항목 2차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`
+
+#### 4. CharShape 언어별 폰트 이름 분리 (Language-Specific Font)
+
+- 문제: HWP CharShape는 언어별(한글/영어/한자/일어 등) 7개 폰트 face ID를 갖지만,
+  기존 코드는 한글(faceId[0])만 읽어 모든 문자에 동일 폰트를 적용함.
+  영문/수자 문자가 한글 폰트 폴백으로 렌더링 → 자폭 차이로 줄바꿈 위치가 어긋남.
+- 수정 내용:
+  - `_parseHwpCharShape` (hwp-parser.js) / `parseHwpCharShape` (parser.worker.js):
+    `faceId[1]` (영어 face ID)도 읽어 `fontNameLatin`으로 저장.
+    `fontNameLatin`이 `fontName`과 같으면 빈 문자열로 설정 (불필요한 중복 방지).
+  - `appendTextRun` (hwp-renderer.js):
+    `run.fontNameLatin`이 있으면 CSS `font-family` 스택 맨 앞에 추가.
+    브라우저는 각 문자에 대해 스택 앞 폰트를 우선 시도하므로 라틴 문자는 라틴 폰트로 자동 렌더링됨.
+- 영향 범위: 영문/라틴 혼합 HWP 문서. 공문서 내 영숫자 필드 정렬 정확도 개선.
+
+#### 5. 표 테두리 최소 두께 정밀화 (Border Width)
+
+- 문제: `hwpxBorderWidthToPx`에서 최소 0.8px로 클램프되어,
+  HWP 0.1~0.2mm 최세선 표현이 한컴 뷰어보다 두꺼워 표 밀도 차이 발생.
+- 수정 내용:
+  - `hwpxBorderWidthToPx` (hwp-renderer.js): 최솟값 0.8px → 0.5px.
+    0.1mm = 0.378px → 0.5px, 0.12mm = 0.454px → 0.5px, 0.15mm = 0.567px → 0.6px.
+    얇은 선이 더 가늘게 렌더링되어 원본과의 밀도 차이 감소.
+- 영향 범위: 표 테두리가 있는 모든 HWP/HWPX 문서.
+
+#### 6. 셀 내부 여백 클램프 완화 (Cell Padding Clamp)
+
+- 문제: 셀 padding 상한이 18~20px으로 너무 낮아 넓은 셀(1mm 이상 padding)에서
+  여백이 찌그러져 보임.
+- 수정 내용:
+  - `appendTableBlock` (hwp-renderer.js): 상하 최대 18→30px, 좌우 최대 20→36px로 확대.
+    1mm = 720 HWPUNIT ÷ 75 = 9.6px (상한 여유 충분), 2mm = 19.2px (기존 상한 초과).
+- 영향 범위: 여백이 넓게 설정된 표 셀.
+
+#### 검증
+
+- `node --check js/hwp-parser.js` 통과
+- `node --check js/parser.worker.js` 통과
+- `node --check js/hwp-renderer.js` 통과
+
+---
+
+
 - 범위: `manifest.json`, `background.js`, `pages/viewer.html`, `js/app.js`, `popup.js`, `sidepanel.js`, `content_script.js`, 보조 모듈/스타일
 - 수행:
   - 저장소 구조 및 변경 상태 확인
@@ -911,3 +1033,89 @@
     - HWP `쪽번호 시작 번호/숨김` 규칙
     - `pageStyle.height/margins` 기반 pagination은 과분할 문제를 재검증한 뒤 재도입 여부 판단
     - 구체 우선순위는 `BACKLOG.md`의 `Next Session Start` 섹션 참조
+
+---
+
+### 문서 정확성 — 영향도 높은 항목 4차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`, `css/viewer.css`
+
+#### 8. HWP GSO 텍스트박스 파싱
+
+- 문제: GSO 컨트롤이 그림/수식/OLE 서브레코드를 갖지 않는 경우(텍스트박스, 벡터 도형 등) 블록이 `null`로 반환돼 해당 개체가 완전히 사라짐.
+- 수정 내용:
+  - `_parseGsoControl` (hwp-parser.js) / `parseGsoControl` (parser.worker.js):
+    - 스캔 루프에서 `LIST_HEADER` (tag 72) 를 감지하면 `hasListHeader = true` 로 전환.
+    - 이후 `PARA_HEADER`(66) / `PARA_TEXT`(67) / `PARA_CHAR_SHAPE`(68) / `PARA_LINE_SEG`(69) 레코드를 수집해 `textBoxParas` 배열에 단락 블록으로 조립.
+    - `equationBody / pictureBody / oleBody`가 없고 `hasListHeader && textBoxParas.length`이면 `_parseHwpTextBoxBlock` 호출.
+  - `_parseHwpTextBoxBlock` (hwp-parser.js) / `parseHwpTextBoxBlock` (parser.worker.js) 신규 추가:
+    - `type: 'textbox'`를 갖는 블록 생성, `paragraphs` 배열과 `width/height` 포함.
+    - `_withObjectLayout` / `withObjectLayout`으로 앵커 정보 적용.
+  - `appendTextBoxBlock` (hwp-renderer.js) 신규 추가:
+    - 래퍼 `div.hwp-textbox-block` + 내부 `div.hwp-textbox-content` 생성.
+    - 폭·높이 적용 후 `paragraphs` 각각을 `appendBlockByType`으로 렌더링.
+    - `registerPlacedBlock`으로 float/절대 배치 사후 처리에 참여.
+  - `appendBlockByType` (hwp-renderer.js): `type === 'textbox'` 분기 추가.
+
+#### 9. HWP GSO 벡터 도형 플레이스홀더
+
+- 문제: 텍스트박스도 아니고 그림/수식/OLE도 없는 GSO (선·사각형·타원 등 순수 벡터 도형)도 `null`로 드롭됨.
+- 수정 내용:
+  - `_parseGsoControl` / `parseGsoControl`: 위의 모든 경우가 해당 없고 `objectInfo.width > 0`이면 `_parseHwpShapePlaceholder` 호출.
+  - `_parseHwpShapePlaceholder` (hwp-parser.js) / `parseHwpShapePlaceholder` (parser.worker.js) 신규 추가:
+    - `type: 'shape'`를 갖는 최소 블록 생성, 크기 정보 유지.
+  - `appendShapePlaceholder` (hwp-renderer.js) 신규 추가:
+    - `div.hwp-shape-block` + `div.hwp-shape` 생성, 폭·높이 적용.
+    - `registerPlacedBlock`으로 앵커 배치 사후 처리에 참여.
+  - `appendBlockByType`: `type === 'shape'` 분기 추가.
+  - `css/viewer.css`: `.hwp-textbox-block`, `.hwp-textbox-content`, `.hwp-shape-block`, `.hwp-shape` CSS 추가.
+  - 표 셀 내부 인라인 렌더 경로에도 `textbox`/`shape` 분기 추가.
+
+#### 10. HWP secd PAGE_DEF flags — hideFirstHeader/Footer 파싱
+
+- 문제: `_parseHwpSecDef` (tag 73 PAGE_DEF 레코드)가 offset 36의 flags 필드를 읽지 않아 "첫 페이지에서 헤더/푸터 숨김" 설정이 무시됨.
+- 수정 내용:
+  - `_parseHwpSecDef` (hwp-parser.js) / `parseHwpSecDef` (parser.worker.js):
+    - `body.length >= 40`이면 `flags = u32(body, 36)` 추출.
+    - bit 8 → `hideFirstHeader`, bit 9 → `hideFirstFooter`, bit 10 → `hideFirstPageNum`.
+    - 결과를 `visibility: { hideFirstHeader, hideFirstFooter, hideFirstPageNum }` 으로 `sectionMeta` 에 포함.
+  - `_resolveHwpHeaderFooterBlocks` (hwp-parser.js): `hideFirst = false` 파라미터 추가. `hideFirst && pageIndex === 0`이면 빈 배열 반환.
+  - `_parseHwp5` 섹션 루프 및 단일 섹션 경로:
+    - `section.pageStyle?.visibility` / `parsedBody.pageStyle?.visibility`에서 hideFirstHeader/Footer/PageNum을 꺼내 `_resolveHwpHeaderFooterBlocks`와 자동 쪽번호 블록 생성에 전달.
+
+- 검증:
+  - `node --check js/hwp-parser.js` 통과
+  - `node --check js/parser.worker.js` 통과
+  - `node --check js/hwp-renderer.js` 통과
+
+---
+
+### 문서 정확성 — 영향도 높은 항목 5차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `index.html`, `favicon.ico`
+
+#### 11. HWPX 테이블 셀 `inMargin` fallback
+
+- 문제: HWPX 표에서 셀의 `hasMargin="0"` 속성이 설정된 경우 셀 고유 `cellMargin`이 없고 테이블 레벨 `<hp:inMargin>`을 사용해야 하는데, 기존 코드는 항상 `cellMargin`만 읽어 zero padding이 됨.
+- 수정: `_hwpxTableBlocks`에서 `tblInMarginEl = _hwpxFirstChild(tblEl, 'inMargin')` 추출 후, `hasOwnMargin = tcEl.getAttribute('hasMargin') === '1'`이 false이면 `tblInMarginEl`을 fallback으로 사용.
+
+#### 12. HWP `PAGE_NUM_PARA` (tag-76) `startPageNum` 추출
+
+- 문제: HWP secd sub-record tag-76 (PAGE_NUM_PARA)이 4+2바이트만 읽고, 일부 HWP 버전에서 offset 6에 존재하는 WORD startPageNum을 읽지 않았음.
+- 수정:
+  - `_parseHwpPageNumMeta` (hwp-parser.js) / `parseHwpPageNumMeta` (parser.worker.js): body.length >= 8이면 offset 6의 u16을 `startPageNum`으로 읽음. 0이면 1로 기본값.
+  - secd scan 결과 병합 시 `pageNumMeta.startPageNum > 1`이면 `secDef.startPageNum`으로 전달.
+  - HWP 다중 섹션 루프: `section.pageStyle.startPageNum`이 양수이면 `pageNumber = sectionBasePageNum + sectionPageIndex`, 없으면 기존 누적 방식 유지.
+  - HWP 단일 섹션 경로: `parsedBody.pageStyle.startPageNum`으로 동일 처리.
+
+#### 13. 파비콘 `favicon.ico` / `index.html` 아이콘 링크 추가
+
+- 문제: `http://127.0.0.1:4174/favicon.ico` 요청 시 404가 반복되어 개발·검증 콘솔이 오염됨. `index.html`에 favicon link tag가 없었음.
+- 수정:
+  - `favicon.ico` 파일을 루트에 추가 (icon32.png 복사본).
+  - `index.html`에 `<link rel="icon">`, `<link rel="apple-touch-icon">`, `<link rel="shortcut icon">` 추가.
+
+- 검증:
+  - `node --check js/hwp-parser.js` 통과
+  - `node --check js/parser.worker.js` 통과
+  - `node --check js/hwp-renderer.js` 통과

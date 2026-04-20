@@ -61,7 +61,13 @@ function appendRunSpan(parent, run) {
   if (run.underline) decorationLines.push('underline');
   if (run.strike) decorationLines.push('line-through');
   if (effectiveFontSize > 0) span.style.fontSize = `${effectiveFontSize}pt`;
-  if (run.fontName)  span.style.fontFamily = `'${run.fontName}', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
+  if (run.fontName) {
+    // 라틴 전용 폰트가 따로 지정된 경우 CSS 폰트 스택 앞에 배치한다.
+    // 브라우저는 각 문자에 대해 스택 앞 폰트를 우선 시도하므로,
+    // 라틴 문자는 라틴 폰트로, 한글 문자는 한글 폰트로 각각 렌더링된다.
+    const latinPrefix = run.fontNameLatin ? `'${run.fontNameLatin}', ` : '';
+    span.style.fontFamily = `${latinPrefix}'${run.fontName}', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
+  }
   if (run.color && run.color !== '#000000') span.style.color = run.color;
   if (decorationLines.length) {
     span.style.textDecorationLine = decorationLines.join(' ');
@@ -172,7 +178,18 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
   p.style.textAlign = alignOverride || para.align || 'left';
   if (/[\n\t]| {2,}/.test(textContent)) {
     p.style.whiteSpace = 'pre-wrap';
-    p.style.tabSize = '4';
+    // 첫 번째 왼쪽 정렬 탭 정지 위치를 CSS tab-size (길이값)로 설정한다.
+    // TabDef에 정의된 실제 HWPUNIT 위치를 px로 환산해 정렬 정확도를 높인다.
+    const TAB_PX_MIN = 20;
+    const TAB_PX_MAX = 400;
+    const HWPUNIT_TO_PX = 75; // 1 HWPUNIT = 1/7200 inch @ 96 DPI = 1/75 px
+    const firstLeftTab = (para.tabStops || []).find(t => !t.kind || t.kind === 'left');
+    if (firstLeftTab && firstLeftTab.position > 0) {
+      const tabPx = Math.max(TAB_PX_MIN, Math.min(TAB_PX_MAX, Math.round(firstLeftTab.position / HWPUNIT_TO_PX)));
+      p.style.tabSize = `${tabPx}px`;
+    } else {
+      p.style.tabSize = '4';
+    }
   }
   if (Number.isFinite(para.marginLeft) && !['center', 'right'].includes(p.style.textAlign)) {
     p.style.paddingLeft = `${Math.max(0, hwpSignedUnitToPx(para.marginLeft, -34, 310, 1 / 75, 0))}px`;
@@ -184,16 +201,22 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     p.style.textIndent = `${hwpSignedUnitToPx(para.textIndent, -170, 226, 1 / 75, 0)}px`;
   }
   if (Number.isFinite(para.spacingBefore) && para.spacingBefore > 0) {
-    p.style.marginTop = `${hwpUnitToPx(para.spacingBefore, 0, 80, 1 / 75, 0)}px`;
+    p.style.marginTop = `${hwpUnitToPx(para.spacingBefore, 0, 120, 1 / 75, 0)}px`;
   }
   if (Number.isFinite(para.spacingAfter) && para.spacingAfter > 0) {
-    p.style.marginBottom = `${hwpUnitToPx(para.spacingAfter, 0, 80, 1 / 75, 4)}px`;
+    p.style.marginBottom = `${hwpUnitToPx(para.spacingAfter, 0, 120, 1 / 75, 4)}px`;
   }
-  const resolvedLineHeight = resolveParagraphLineHeight(para);
-  if (resolvedLineHeight) {
-    p.style.lineHeight = resolvedLineHeight;
-  } else if (Number.isFinite(para.lineHeightPx) && para.lineHeightPx > 0) {
+  // When HWP line-segment heights are available they reflect actual HWP rendering and
+  // should take priority over the abstract lineSpacing formula (which can be affected by
+  // encoding bugs in the modern-format attr3/lineSpacingNew fields).
+  const hasLineSegHeight = Number.isFinite(para.lineHeightPx) && para.lineHeightPx > 0;
+  if (hasLineSegHeight) {
     p.style.lineHeight = `${para.lineHeightPx}px`;
+  } else {
+    const resolvedLineHeight = resolveParagraphLineHeight(para);
+    if (resolvedLineHeight) {
+      p.style.lineHeight = resolvedLineHeight;
+    }
   }
   if (Number.isFinite(para.layoutHeightPx) && para.layoutHeightPx > 0) {
     p.style.minHeight = `${para.layoutHeightPx}px`;
@@ -357,6 +380,58 @@ function appendObjectTextBlock(parent, block, kind = 'equation', className = '')
   registerPlacedBlock(wrap, box, block);
 }
 
+function appendTextBoxBlock(parent, block, context = {}) {
+  const { pageIndex = 0, tableIndexRef = { value: 0 }, listStateRef = null } = context;
+  const wrap = document.createElement('div');
+  wrap.className = 'hwp-textbox-block';
+  if (block.inline) wrap.dataset.inline = 'true';
+
+  const content = document.createElement('div');
+  content.className = 'hwp-textbox-content';
+
+  const isHwp = block.sourceFormat === 'hwp';
+  const widthPx = isHwp
+    ? hwpUnitToPx(block.width, 24, 960, 1 / 75, 0)
+    : hwpUnitToPx(block.width, 24, 960, 1 / 26, 0);
+  const heightPx = isHwp
+    ? hwpUnitToPx(block.height, 24, 1280, 1 / 75, 0)
+    : hwpUnitToPx(block.height, 24, 1280, 1 / 26, 0);
+  if (widthPx) content.style.minWidth = `${widthPx}px`;
+  if (heightPx) content.style.minHeight = `${heightPx}px`;
+
+  (block.paragraphs || []).forEach(para => {
+    appendBlockByType(content, para, { pageIndex, tableIndexRef, listStateRef });
+  });
+
+  wrap.appendChild(content);
+  parent.appendChild(wrap);
+  registerPlacedBlock(wrap, content, block);
+}
+
+function appendShapePlaceholder(parent, block) {
+  const isHwp = block.sourceFormat === 'hwp';
+  const widthPx = isHwp
+    ? hwpUnitToPx(block.width, 8, 960, 1 / 75, 0)
+    : hwpUnitToPx(block.width, 8, 960, 1 / 26, 0);
+  const heightPx = isHwp
+    ? hwpUnitToPx(block.height, 4, 960, 1 / 75, 0)
+    : hwpUnitToPx(block.height, 4, 960, 1 / 26, 0);
+  if (!widthPx && !heightPx) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'hwp-shape-block';
+  if (block.inline) wrap.dataset.inline = 'true';
+
+  const box = document.createElement('div');
+  box.className = 'hwp-shape';
+  if (widthPx) box.style.width = `${widthPx}px`;
+  if (heightPx) box.style.height = `${heightPx}px`;
+
+  wrap.appendChild(box);
+  parent.appendChild(wrap);
+  registerPlacedBlock(wrap, box, block);
+}
+
 function appendBlockByType(parent, block, context = {}) {
   const {
     pageIndex = Number(parent?.dataset?.pageIndex ?? 0),
@@ -386,6 +461,16 @@ function appendBlockByType(parent, block, context = {}) {
 
   if (block.type === 'ole') {
     appendObjectTextBlock(parent, block, 'ole');
+    return;
+  }
+
+  if (block.type === 'textbox') {
+    appendTextBoxBlock(parent, block, { pageIndex, tableIndexRef, listStateRef });
+    return;
+  }
+
+  if (block.type === 'shape') {
+    appendShapePlaceholder(parent, block);
     return;
   }
 
@@ -913,16 +998,16 @@ function applyPageStyle(pageEl, page, pageIndex) {
       pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWP_SCALE)))}px`;
     }
     if (margins.top > 0) {
-      pageEl.style.paddingTop = `${Math.max(22, Math.min(120, Math.round(margins.top * HWP_SCALE)))}px`;
+      pageEl.style.paddingTop = `${Math.max(22, Math.min(140, Math.round(margins.top * HWP_SCALE)))}px`;
     }
     if (margins.right > 0) {
-      pageEl.style.paddingRight = `${Math.max(22, Math.min(120, Math.round(margins.right * HWP_SCALE)))}px`;
+      pageEl.style.paddingRight = `${Math.max(22, Math.min(140, Math.round(margins.right * HWP_SCALE)))}px`;
     }
     if (margins.bottom > 0) {
-      pageEl.style.paddingBottom = `${Math.max(22, Math.min(120, Math.round(margins.bottom * HWP_SCALE)))}px`;
+      pageEl.style.paddingBottom = `${Math.max(22, Math.min(140, Math.round(margins.bottom * HWP_SCALE)))}px`;
     }
     if (margins.left > 0) {
-      pageEl.style.paddingLeft = `${Math.max(22, Math.min(120, Math.round(margins.left * HWP_SCALE)))}px`;
+      pageEl.style.paddingLeft = `${Math.max(22, Math.min(140, Math.round(margins.left * HWP_SCALE)))}px`;
     }
     return;
   }
@@ -1004,7 +1089,8 @@ function hwpxBorderTypeToCss(type) {
 function hwpxBorderWidthToPx(widthMm) {
   const mm = Number(widthMm);
   if (!Number.isFinite(mm) || mm <= 0) return '0px';
-  return `${Math.max(0.8, Math.min(4, Math.round(mm * 3.78 * 10) / 10))}px`;
+  // 0.1mm(최세선) ≈ 0.38px → 시각적으로 표시되는 최소값 0.5px 보장, 4px 상한
+  return `${Math.max(0.5, Math.min(4, Math.round(mm * 3.78 * 10) / 10))}px`;
 }
 
 function applyCellBorderStyle(td, cell) {
@@ -1531,10 +1617,17 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       let bottomPx = 3;
       let leftPx = 4;
       if (hasPaddingInfo) {
-        topPx    = Math.max(0, Math.min(18, Math.round((Number(padT) || 0) * TABLE_UNIT_SCALE)));
-        rightPx  = Math.max(0, Math.min(20, Math.round((Number(padR) || 0) * TABLE_UNIT_SCALE)));
-        bottomPx = Math.max(0, Math.min(18, Math.round((Number(padB) || 0) * TABLE_UNIT_SCALE)));
-        leftPx   = Math.max(0, Math.min(20, Math.round((Number(padL) || 0) * TABLE_UNIT_SCALE)));
+        topPx    = Math.max(0, Math.min(30, Math.round((Number(padT) || 0) * TABLE_UNIT_SCALE)));
+        rightPx  = Math.max(0, Math.min(36, Math.round((Number(padR) || 0) * TABLE_UNIT_SCALE)));
+        bottomPx = Math.max(0, Math.min(30, Math.round((Number(padB) || 0) * TABLE_UNIT_SCALE)));
+        leftPx   = Math.max(0, Math.min(36, Math.round((Number(padL) || 0) * TABLE_UNIT_SCALE)));
+      } else if (Array.isArray(tableBlock.defaultCellPadding) && tableBlock.defaultCellPadding.some(v => Number(v) > 0)) {
+        // HWP 표 수준 기본 셀 내부 여백 (tableInfo offset 10-17) 적용
+        const [dL, dR, dT, dB] = tableBlock.defaultCellPadding;
+        topPx    = Math.max(0, Math.min(30, Math.round((Number(dT) || 0) * TABLE_UNIT_SCALE)));
+        rightPx  = Math.max(0, Math.min(36, Math.round((Number(dR) || 0) * TABLE_UNIT_SCALE)));
+        bottomPx = Math.max(0, Math.min(30, Math.round((Number(dB) || 0) * TABLE_UNIT_SCALE)));
+        leftPx   = Math.max(0, Math.min(36, Math.round((Number(dL) || 0) * TABLE_UNIT_SCALE)));
       } else if (rowLooksLikeTitle) {
         if (isTitleLabelCell) {
           topPx = 16; rightPx = 10; bottomPx = 16; leftPx = 10;
@@ -1637,6 +1730,16 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
 
         if (paragraphToRender?.type === 'ole') {
           appendObjectTextBlock(content, paragraphToRender, 'ole', 'hwp-object-inline');
+          return;
+        }
+
+        if (paragraphToRender?.type === 'textbox') {
+          appendTextBoxBlock(content, paragraphToRender, { pageIndex, tableIndexRef: { value: 0 }, listStateRef });
+          return;
+        }
+
+        if (paragraphToRender?.type === 'shape') {
+          appendShapePlaceholder(content, paragraphToRender);
           return;
         }
 
