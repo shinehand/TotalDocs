@@ -859,14 +859,19 @@ function parseHwpFaceName(body) {
 function parseHwpCharShape(body, faceNames = {}) {
   if (!body || body.length < 56) return null;
   const attr = u32(body, 46);
-  const faceId = u16(body, 0);
+  // face IDs: 한글(0), 영어(2), 한자(4), 일어(6), 기타(8), 심벌(10), 사용자(12)
+  const faceId      = u16(body, 0);
+  const faceIdLatin = u16(body, 2);
+  const fontName      = faceNames[faceId]      || '';
+  const fontNameLatin = faceNames[faceIdLatin]  || '';
   const scaleX = body[14] ?? 100;
   const letterSpacing = (body[21] ?? 0) << 24 >> 24;
   const relSize = body[28] ?? 100;
   const offsetY = (body[35] ?? 0) << 24 >> 24;
   const fontSizeRaw = u32(body, 42);
   return {
-    fontName: faceNames[faceId] || '',
+    fontName,
+    fontNameLatin: fontNameLatin !== fontName ? fontNameLatin : '',
     fontSize: fontSizeRaw > 0 ? Math.round((fontSizeRaw / 100) * 10) / 10 : 0,
     color: hwpColorRefToCss(u32(body, 52)),
     bold: Boolean(attr & (1 << 1)),

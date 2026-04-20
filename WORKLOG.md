@@ -52,7 +52,52 @@
 ---
 
 
-- 요청: 프로젝트 분석 및 문제 여부 점검
+### 문서 정확성 — 영향도 높은 항목 2차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`
+
+#### 4. CharShape 언어별 폰트 이름 분리 (Language-Specific Font)
+
+- 문제: HWP CharShape는 언어별(한글/영어/한자/일어 등) 7개 폰트 face ID를 갖지만,
+  기존 코드는 한글(faceId[0])만 읽어 모든 문자에 동일 폰트를 적용함.
+  영문/수자 문자가 한글 폰트 폴백으로 렌더링 → 자폭 차이로 줄바꿈 위치가 어긋남.
+- 수정 내용:
+  - `_parseHwpCharShape` (hwp-parser.js) / `parseHwpCharShape` (parser.worker.js):
+    `faceId[1]` (영어 face ID)도 읽어 `fontNameLatin`으로 저장.
+    `fontNameLatin`이 `fontName`과 같으면 빈 문자열로 설정 (불필요한 중복 방지).
+  - `appendTextRun` (hwp-renderer.js):
+    `run.fontNameLatin`이 있으면 CSS `font-family` 스택 맨 앞에 추가.
+    브라우저는 각 문자에 대해 스택 앞 폰트를 우선 시도하므로 라틴 문자는 라틴 폰트로 자동 렌더링됨.
+- 영향 범위: 영문/라틴 혼합 HWP 문서. 공문서 내 영숫자 필드 정렬 정확도 개선.
+
+#### 5. 표 테두리 최소 두께 정밀화 (Border Width)
+
+- 문제: `hwpxBorderWidthToPx`에서 최소 0.8px로 클램프되어,
+  HWP 0.1~0.2mm 최세선 표현이 한컴 뷰어보다 두꺼워 표 밀도 차이 발생.
+- 수정 내용:
+  - `hwpxBorderWidthToPx` (hwp-renderer.js): 최솟값 0.8px → 0.5px.
+    0.1mm = 0.378px → 0.5px, 0.12mm = 0.454px → 0.5px, 0.15mm = 0.567px → 0.6px.
+    얇은 선이 더 가늘게 렌더링되어 원본과의 밀도 차이 감소.
+- 영향 범위: 표 테두리가 있는 모든 HWP/HWPX 문서.
+
+#### 6. 셀 내부 여백 클램프 완화 (Cell Padding Clamp)
+
+- 문제: 셀 padding 상한이 18~20px으로 너무 낮아 넓은 셀(1mm 이상 padding)에서
+  여백이 찌그러져 보임.
+- 수정 내용:
+  - `appendTableBlock` (hwp-renderer.js): 상하 최대 18→30px, 좌우 최대 20→36px로 확대.
+    1mm = 720 HWPUNIT ÷ 75 = 9.6px (상한 여유 충분), 2mm = 19.2px (기존 상한 초과).
+- 영향 범위: 여백이 넓게 설정된 표 셀.
+
+#### 검증
+
+- `node --check js/hwp-parser.js` 통과
+- `node --check js/parser.worker.js` 통과
+- `node --check js/hwp-renderer.js` 통과
+
+---
+
+
 - 범위: `manifest.json`, `background.js`, `pages/viewer.html`, `js/app.js`, `popup.js`, `sidepanel.js`, `content_script.js`, 보조 모듈/스타일
 - 수행:
   - 저장소 구조 및 변경 상태 확인

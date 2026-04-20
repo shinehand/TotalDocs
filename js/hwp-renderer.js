@@ -61,7 +61,13 @@ function appendRunSpan(parent, run) {
   if (run.underline) decorationLines.push('underline');
   if (run.strike) decorationLines.push('line-through');
   if (effectiveFontSize > 0) span.style.fontSize = `${effectiveFontSize}pt`;
-  if (run.fontName)  span.style.fontFamily = `'${run.fontName}', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
+  if (run.fontName) {
+    // 라틴 전용 폰트가 따로 지정된 경우 CSS 폰트 스택 앞에 배치한다.
+    // 브라우저는 각 문자에 대해 스택 앞 폰트를 우선 시도하므로,
+    // 라틴 문자는 라틴 폰트로, 한글 문자는 한글 폰트로 각각 렌더링된다.
+    const latinPrefix = run.fontNameLatin ? `'${run.fontNameLatin}', ` : '';
+    span.style.fontFamily = `${latinPrefix}'${run.fontName}', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
+  }
   if (run.color && run.color !== '#000000') span.style.color = run.color;
   if (decorationLines.length) {
     span.style.textDecorationLine = decorationLines.join(' ');
@@ -1018,7 +1024,8 @@ function hwpxBorderTypeToCss(type) {
 function hwpxBorderWidthToPx(widthMm) {
   const mm = Number(widthMm);
   if (!Number.isFinite(mm) || mm <= 0) return '0px';
-  return `${Math.max(0.8, Math.min(4, Math.round(mm * 3.78 * 10) / 10))}px`;
+  // 0.1mm(최세선) ≈ 0.38px → 시각적으로 표시되는 최소값 0.5px 보장, 4px 상한
+  return `${Math.max(0.5, Math.min(4, Math.round(mm * 3.78 * 10) / 10))}px`;
 }
 
 function applyCellBorderStyle(td, cell) {
@@ -1545,10 +1552,10 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       let bottomPx = 3;
       let leftPx = 4;
       if (hasPaddingInfo) {
-        topPx    = Math.max(0, Math.min(18, Math.round((Number(padT) || 0) * TABLE_UNIT_SCALE)));
-        rightPx  = Math.max(0, Math.min(20, Math.round((Number(padR) || 0) * TABLE_UNIT_SCALE)));
-        bottomPx = Math.max(0, Math.min(18, Math.round((Number(padB) || 0) * TABLE_UNIT_SCALE)));
-        leftPx   = Math.max(0, Math.min(20, Math.round((Number(padL) || 0) * TABLE_UNIT_SCALE)));
+        topPx    = Math.max(0, Math.min(30, Math.round((Number(padT) || 0) * TABLE_UNIT_SCALE)));
+        rightPx  = Math.max(0, Math.min(36, Math.round((Number(padR) || 0) * TABLE_UNIT_SCALE)));
+        bottomPx = Math.max(0, Math.min(30, Math.round((Number(padB) || 0) * TABLE_UNIT_SCALE)));
+        leftPx   = Math.max(0, Math.min(36, Math.round((Number(padL) || 0) * TABLE_UNIT_SCALE)));
       } else if (rowLooksLikeTitle) {
         if (isTitleLabelCell) {
           topPx = 16; rightPx = 10; bottomPx = 16; leftPx = 10;
