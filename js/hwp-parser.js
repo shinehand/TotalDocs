@@ -905,10 +905,12 @@ const HwpParser = {
       });
     });
 
+    const repeatHeader = HwpParser._hwpxAttrNum(tblEl, 'repeatHeader', 0);
     const table = HwpParser._hwpxNormalizeTableMetrics(HwpParser._withObjectLayout(HwpParser._buildTableBlock({
       rowCount: Math.max(rowEls.length, HwpParser._hwpxAttrNum(tblEl, 'rowCnt', rowEls.length)),
       colCount: HwpParser._hwpxAttrNum(tblEl, 'colCnt', 0),
       cellSpacing: HwpParser._hwpxAttrNum(tblEl, 'cellSpacing', 0),
+      numHeaderRows: repeatHeader > 0 ? repeatHeader : 0,
       sourceFormat: 'hwpx',
     }, cells), objectInfo));
 
@@ -2868,6 +2870,7 @@ const HwpParser = {
     let pictureBody = null;
     let equationBody = null;
     let oleBody = null;
+    let shapeComponentBody = null;
     let hasChartData = false;
     let hasVideoData = false;
 
@@ -2893,6 +2896,8 @@ const HwpParser = {
         equationBody = rec.body;
       } else if (rec.tagId === 84 && !oleBody) {
         oleBody = rec.body;
+      } else if (rec.tagId === 86 && !shapeComponentBody) {
+        shapeComponentBody = rec.body;
       } else if (rec.tagId === 95) {
         hasChartData = true;
       } else if (rec.tagId === 98) {
@@ -2929,7 +2934,10 @@ const HwpParser = {
     } else if (hasListHeader && textBoxParas.length) {
       block = HwpParser._parseHwpTextBoxBlock(objectInfo, textBoxParas);
     } else if (objectInfo?.width > 0 && objectInfo?.height > 0) {
-      block = HwpParser._parseHwpShapePlaceholder(objectInfo);
+      const shapeInfo = shapeComponentBody
+        ? HwpParser._parseHwpShapeComponent(shapeComponentBody)
+        : null;
+      block = HwpParser._parseHwpShapePlaceholder(objectInfo, shapeInfo);
     }
 
     return {
@@ -2950,13 +2958,42 @@ const HwpParser = {
     }, objectInfo);
   },
 
-  _parseHwpShapePlaceholder(objectInfo) {
+  // HWPTAG_SHAPE_COMPONENT (tag 86) 바디에서 선 색상·채움 색상을 추출한다.
+  // 구조: [localFileVersion:4][xOffset:4][yOffset:4][initW:4][initH:4][curW:4][curH:4]
+  //        [flags:4][rotation:4][rotCenterX:4][rotCenterY:4][renderCount:2]
+  //        renderCount*24 bytes of matrix data
+  //        [lineColor:4][lineWidth:4][lineAttr:4][outlineStyle:1]
+  //        [fillType:4][fillColor:4] ...
+  _parseHwpShapeComponent(body) {
+    if (!body || body.length < 46) return null;
+    // Skip fixed header: 11 DWORDs (44 bytes) + WORD renderCount (2 bytes) = 46 bytes
+    const renderCount = HwpParser._u16(body, 44);
+    const lineOffset = 46 + renderCount * 24;
+    if (lineOffset + 4 > body.length) return null;
+
+    const lineColor = HwpParser._hwpColorRefToCss(HwpParser._u32(body, lineOffset));
+    const lineWidthRaw = lineOffset + 4 < body.length ? HwpParser._u32(body, lineOffset + 4) : 0;
+    const lineWidthMm = lineWidthRaw > 0 ? lineWidthRaw / 100 : 0;
+    // fill info follows after lineColor(4) + lineWidth(4) + lineAttr(4) + outlineStyle(1) = 13
+    const fillOffset = lineOffset + 13;
+    const { fillColor, fillGradient } = fillOffset + 4 < body.length
+      ? HwpParser._parseHwpFillInfo(body, fillOffset)
+      : { fillColor: '', fillGradient: null };
+
+    return { fillColor, fillGradient, lineColor, lineWidthMm };
+  },
+
+  _parseHwpShapePlaceholder(objectInfo, shapeInfo = null) {
     if (!objectInfo || !(objectInfo.width > 0)) return null;
     return HwpParser._withObjectLayout({
       type: 'shape',
       width: objectInfo.width || 0,
       height: objectInfo.height || 0,
       sourceFormat: 'hwp',
+      fillColor: shapeInfo?.fillColor || '',
+      fillGradient: shapeInfo?.fillGradient || null,
+      lineColor: shapeInfo?.lineColor || '',
+      lineWidthMm: shapeInfo?.lineWidthMm || 0,
       texts: [HwpParser._run('')],
     }, objectInfo);
   },
@@ -3016,6 +3053,11 @@ const HwpParser = {
   _parseTableInfo(body) {
     if (!body || body.length < 18) return null;
 
+    // DWORD at offset 0: attribute flags
+    //   bits 0-4: numHeaderRow (0-31) — 머리 행 수 (반복 출력 행 수)
+    const attrDword = HwpParser._u32(body, 0);
+    const numHeaderRows = attrDword & 0x1F; // bits 0-4
+
     const rowCount = HwpParser._u16(body, 4);
     const colCount = HwpParser._u16(body, 6);
     const cellSpacing = HwpParser._u16(body, 8);
@@ -3034,6 +3076,7 @@ const HwpParser = {
     }
 
     return {
+      numHeaderRows,
       rowCount,
       colCount,
       cellSpacing,
@@ -3184,6 +3227,9 @@ const HwpParser = {
       rowCount: rows.length,
       rows,
       rowHeights: (tableBlock.rowHeights || []).slice(startRow, endRow),
+      // startRowOffset lets the renderer know which rows in the original table these rows correspond to
+      // (used to determine if header rows should be rendered as <thead>)
+      startRowOffset: startRow,
       estimatedParagraphs: rows.reduce(
         (sum, row) => sum + row.cells.reduce(
           (cellSum, cell) => cellSum + Math.max(1, (cell.paragraphs || []).length),
@@ -3328,6 +3374,7 @@ const HwpParser = {
       cellSpacing: tableInfo?.cellSpacing || 0,
       defaultCellPadding: tableInfo?.defaultCellPadding || null,
       rowHeights: tableInfo?.rowHeights || [],
+      numHeaderRows: Math.max(0, Number(tableInfo?.numHeaderRows) || 0),
       estimatedParagraphs,
       sourceFormat: tableInfo?.sourceFormat || '',
       texts: [HwpParser._run('')],
@@ -4012,8 +4059,23 @@ const HwpParser = {
 
   _paginateSectionBlocks(blocks, fallbackWeight = 46, pageStyle = null) {
     const cleaned = HwpParser._cleanBlocksForPagination(blocks);
-    void pageStyle;
-    return HwpParser._paginate(cleaned, fallbackWeight);
+    // pageStyle이 있으면 실제 페이지 콘텐츠 높이를 기반으로 budget을 재보정한다.
+    // HWPUNIT(1/7200 inch) 기준: content = height - top - bottom - header - footer
+    // 1 weight unit ≈ 표준 12pt 행 높이(≈1500 HWPUNIT) ≈ 20px(@96 DPI)
+    const HWPUNIT_PER_WEIGHT = 1500;
+    let budget = fallbackWeight;
+    if (pageStyle && Number(pageStyle.height) > 0) {
+      const margins = pageStyle.margins || {};
+      const contentHwpu = Number(pageStyle.height)
+        - (Number(margins.top) || 0)
+        - (Number(margins.bottom) || 0)
+        - (Number(margins.header) || 0)
+        - (Number(margins.footer) || 0);
+      if (contentHwpu > 0) {
+        budget = Math.max(16, Math.min(200, Math.round(contentHwpu / HWPUNIT_PER_WEIGHT)));
+      }
+    }
+    return HwpParser._paginate(cleaned, budget);
   },
 
   _paginate(paras, n) {
@@ -4076,3 +4138,52 @@ const HwpParser = {
     return (((b[o]??0) << 24) | ((b[o+1]??0) << 16) | ((b[o+2]??0) << 8) | (b[o+3]??0)) >>> 0;
   },
 };
+
+/* ── 파서/렌더러 공통 clone 유틸 (worker에서도 사용됨) ── */
+
+function clonePageStyle(pageStyle) {
+  if (!pageStyle) return null;
+  return {
+    ...pageStyle,
+    margins: pageStyle.margins ? { ...pageStyle.margins } : undefined,
+    pageBorderFills: Array.isArray(pageStyle.pageBorderFills)
+      ? pageStyle.pageBorderFills.map(def => ({
+        ...def,
+        offset: def?.offset ? { ...def.offset } : undefined,
+      }))
+      : undefined,
+  };
+}
+
+function cloneParagraphBlock(para) {
+  if (para?.type === 'table') {
+    return {
+      ...(para || {}),
+      rows: (para.rows || []).map(row => ({
+        ...row,
+        cells: (row.cells || []).map(cell => cloneTableCell(cell)),
+      })),
+      columnWidths: Array.isArray(para.columnWidths) ? [...para.columnWidths] : para.columnWidths,
+      rowHeights: Array.isArray(para.rowHeights) ? [...para.rowHeights] : para.rowHeights,
+      texts: ((para?.texts) || []).map(run => ({ ...run })),
+    };
+  }
+
+  return {
+    ...(para || HwpParser._createParagraphBlock('')),
+    texts: ((para?.texts) || []).map(run => ({ ...run })),
+  };
+}
+
+function cloneTableCell(cell, overrides = {}) {
+  const paragraphs = overrides.paragraphs
+    ? overrides.paragraphs.map(cloneParagraphBlock)
+    : (cell?.paragraphs || []).map(cloneParagraphBlock);
+  const padding = Array.isArray(cell?.padding) ? [...cell.padding] : cell?.padding;
+  return {
+    ...(cell || {}),
+    ...overrides,
+    padding,
+    paragraphs,
+  };
+}

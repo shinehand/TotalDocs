@@ -21,15 +21,19 @@
     const CDN_HAMCHOD_R = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_four@1.0/HCRDotum.woff';
 
     const fonts = [
-      // 함초롬/한컴 폰트 (CDN)
+      // 함초롬/한컴 폰트 (CDN) — Regular(400) + Bold(700)
       { name: '함초롬돋움', file: CDN_HAMCHOD_R, format: 'woff' },
       { name: '함초롬바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '함초롬바탕', file: CDN_HAMCHOB_B, format: 'woff', weight: 700 },
       { name: '함초롱돋움', file: CDN_HAMCHOD_R, format: 'woff' },
       { name: '함초롱바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '함초롱바탕', file: CDN_HAMCHOB_B, format: 'woff', weight: 700 },
       { name: '한컴돋움', file: CDN_HAMCHOD_R, format: 'woff' },
       { name: '한컴바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '한컴바탕', file: CDN_HAMCHOB_B, format: 'woff', weight: 700 },
       { name: '새돋움', file: CDN_HAMCHOD_R, format: 'woff' },
       { name: '새바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '새바탕', file: CDN_HAMCHOB_B, format: 'woff', weight: 700 },
       // reference 편집기와 같은 오픈소스 대체 폰트 세트
       { name: 'HY헤드라인M', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
       { name: 'HYHeadLine M', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
@@ -72,17 +76,27 @@
       { name: '새굴림', file: 'lib/fonts/gulim-Regular.ttf', format: 'truetype' },
       { name: '고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
       { name: '바탕', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '바탕', file: 'lib/fonts/NotoSerifKR-Bold.woff2', weight: 700 },
       { name: '바탕체', file: 'lib/fonts/D2Coding-Regular.woff2' },
       { name: '명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '명조', file: 'lib/fonts/NanumMyeongjo-Bold.woff2', weight: 700 },
       { name: '궁서', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: '궁서', file: 'lib/fonts/GowunBatang-Bold.woff2', weight: 700 },
       { name: '궁서체', file: 'lib/fonts/GowunBatang-Regular.woff2' },
       { name: '새궁서', file: 'lib/fonts/GowunBatang-Regular.woff2' },
       { name: '나눔고딕', file: 'lib/fonts/NanumGothic-Regular.woff2' },
+      { name: '나눔고딕', file: 'lib/fonts/NanumGothic-Bold.woff2', weight: 700 },
+      { name: '나눔고딕', file: 'lib/fonts/NanumGothic-ExtraBold.woff2', weight: 800 },
       { name: '나눔명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '나눔명조', file: 'lib/fonts/NanumMyeongjo-Bold.woff2', weight: 700 },
+      { name: '나눔명조', file: 'lib/fonts/NanumMyeongjo-ExtraBold.woff2', weight: 800 },
       { name: '나눔고딕코딩', file: 'lib/fonts/NanumGothicCoding-Regular.woff2' },
+      { name: '나눔고딕코딩', file: 'lib/fonts/NanumGothicCoding-Bold.woff2', weight: 700 },
       { name: 'Palatino Linotype', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
       { name: 'Noto Sans KR', file: 'lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'Noto Sans KR', file: 'lib/fonts/NotoSansKR-Bold.woff2', weight: 700 },
       { name: 'Noto Serif KR', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'Noto Serif KR', file: 'lib/fonts/NotoSerifKR-Bold.woff2', weight: 700 },
       { name: 'Pretendard', file: 'lib/fonts/Pretendard-Regular.woff2' },
       { name: 'Pretendard Thin', file: 'lib/fonts/Pretendard-Thin.woff2' },
       { name: 'Pretendard ExtraLight', file: 'lib/fonts/Pretendard-ExtraLight.woff2' },
@@ -94,6 +108,9 @@
       { name: 'Pretendard Black', file: 'lib/fonts/Pretendard-Black.woff2' },
       { name: 'NanumSquareNeo Light', file: 'lib/fonts/NanumSquareNeoTTF-aLt.woff2' },
       { name: 'NanumSquareNeo', file: 'lib/fonts/NanumSquareNeoTTF-bRg.woff2' },
+      { name: 'NanumSquareNeo', file: 'lib/fonts/NanumSquareNeoTTF-cBd.woff2', weight: 700 },
+      { name: 'NanumSquareNeo', file: 'lib/fonts/NanumSquareNeoTTF-dEb.woff2', weight: 800 },
+      { name: 'NanumSquareNeo', file: 'lib/fonts/NanumSquareNeoTTF-eHv.woff2', weight: 900 },
       { name: 'NanumSquareNeo Bold', file: 'lib/fonts/NanumSquareNeoTTF-cBd.woff2' },
       { name: 'NanumSquareNeo ExtraBold', file: 'lib/fonts/NanumSquareNeoTTF-dEb.woff2' },
       { name: 'NanumSquareNeo Heavy', file: 'lib/fonts/NanumSquareNeoTTF-eHv.woff2' },
@@ -104,6 +121,7 @@
       { name: 'Wanted Sans ExtraBold', file: 'lib/fonts/WantedSans-ExtraBold.woff2' },
       { name: 'Wanted Sans ExtraBlack', file: 'lib/fonts/WantedSans-ExtraBlack.woff2' },
       { name: 'D2Coding', file: 'lib/fonts/D2Coding-Regular.woff2' },
+      { name: 'D2Coding', file: 'lib/fonts/D2Coding-Bold.woff2', weight: 700 },
       { name: '해피니스 산스 레귤러', file: 'lib/fonts/Happiness-Sans-Regular.woff2' },
       { name: 'Happiness Sans Regular', file: 'lib/fonts/Happiness-Sans-Regular.woff2' },
       { name: '해피니스 산스 볼드', file: 'lib/fonts/Happiness-Sans-Bold.woff2' },
@@ -117,6 +135,7 @@
       { name: 'Cafe24 Supermagic', file: 'lib/fonts/Cafe24Supermagic-Regular-v1.0.woff2' },
       { name: 'SpoqaHanSans', file: 'lib/fonts/SpoqaHanSans-Regular.woff2' },
       { name: '고운바탕', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: '고운바탕', file: 'lib/fonts/GowunBatang-Bold.woff2', weight: 700 },
       { name: '고운돋움', file: 'lib/fonts/GowunDodum-Regular.woff2' },
     ];
 
@@ -152,7 +171,9 @@
     const style = document.createElement('style');
     style.textContent = fonts.map(f => {
       const fmt = f.format || 'woff2';
-      return `@font-face { font-family: "${f.name}"; src: url("${f.file}") format("${fmt}"); font-display: block; }`;
+      const weightProp = f.weight ? ` font-weight: ${f.weight};` : '';
+      const styleProp = f.style ? ` font-style: ${f.style};` : '';
+      return `@font-face { font-family: "${f.name}"; src: url("${f.file}") format("${fmt}");${weightProp}${styleProp} font-display: block; }`;
     }).join('\n');
     document.head.appendChild(style);
 
@@ -160,7 +181,10 @@
     let loadedCount = 0, failedCount = 0;
     globalThis._fontLoadPromise = Promise.all(fonts.map(f => {
       const fmt = f.format || 'woff2';
-      const face = new FontFace(f.name, `url(${f.file}) format('${fmt}')`);
+      const descriptors = {};
+      if (f.weight) descriptors.weight = String(f.weight);
+      if (f.style) descriptors.style = f.style;
+      const face = new FontFace(f.name, `url(${f.file}) format('${fmt}')`, descriptors);
       return face.load().then(loadedFace => {
         document.fonts.add(loadedFace);
         loadedCount++;

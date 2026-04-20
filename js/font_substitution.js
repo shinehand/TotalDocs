@@ -38,6 +38,7 @@
         'Wanted Sans Bold', 'Wanted Sans ExtraBold', 'Wanted Sans ExtraBlack',
         'D2Coding', '나눔고딕코딩',
         '나눔고딕', '나눔명조',
+        'Noto Sans KR', 'Noto Serif KR',
         '해피니스 산스 레귤러', 'Happiness Sans Regular',
         '해피니스 산스 볼드', 'Happiness Sans Bold',
         '해피니스 산스 타이틀', 'Happiness Sans Title',
@@ -713,16 +714,16 @@
         }
 
         if (/[바탕명조궁서]|hymjre|times|palatino|georgia|batang|gungsuh/i.test(fontName)) {
-            return '"' + fontName + '", "휴먼명조", "한양신명조", "나눔명조", "고운바탕", "Batang", "AppleMyungjo", "Noto Serif KR", serif';
+            return '"' + fontName + '", "휴먼명조", "한양신명조", "나눔명조", "고운바탕", "Noto Serif KR", "Batang", "AppleMyungjo", serif';
         }
 
-        return '"' + fontName + '", "휴먼고딕", "한양중고딕", "NanumSquareNeo", "Wanted Sans", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", sans-serif';
+        return '"' + fontName + '", "휴먼고딕", "한양중고딕", "돋움", "나눔고딕", "NanumSquareNeo", "Wanted Sans", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", sans-serif';
     }
 
     /**
      * CSS font 문자열에서 font-family를 해소하고 fallback 체인을 적용한다.
      *
-     * 입력: `bold 14px "안상수2006가는", sans-serif`
+     * 입력: `bold 14px "안상수2006가는", sans-serif` (또는 `bold 14pt "font-name"`)
      * 출력: `bold 14px "돋움", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", sans-serif`
      *
      * @param {string} cssFont
@@ -733,11 +734,16 @@
     function substituteCssFont(cssFont, altType, langId) {
         if (!cssFont || typeof cssFont !== 'string') return cssFont;
 
-        const pxIdx = cssFont.indexOf('px ');
-        if (pxIdx < 0) return cssFont;
+        // CSS font 문자열에서 단위(px 또는 pt) 위치를 찾아 접두사와 폰트 계열을 분리한다.
+        let unitIdx = cssFont.indexOf('px ');
+        let unitLen = 3; // 'px '.length
+        if (unitIdx < 0) {
+            unitIdx = cssFont.indexOf('pt ');
+            if (unitIdx < 0) return cssFont;
+        }
 
-        const prefix = cssFont.substring(0, pxIdx + 3);
-        const familyPart = cssFont.substring(pxIdx + 3).trim();
+        const prefix = cssFont.substring(0, unitIdx + unitLen);
+        const familyPart = cssFont.substring(unitIdx + unitLen).trim();
         if (!familyPart) return cssFont;
 
         const quotedMatch = familyPart.match(/^"([^"]+)"/);
