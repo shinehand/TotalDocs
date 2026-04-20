@@ -40,7 +40,7 @@
 - `gyeolseokgye.hwp`: visiblePageDiff `15.668`, titleDiff `12.574`
 - `attachment-sale-notice.hwp`: visiblePageDiff `30.773`, titleDiff `32.788`
 - `incheon-2a.hwpx`: visiblePageDiff `29.208`, titleDiff `26.707`
-- 최신 비교 리포트: [hancom-page-compare-report.json](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/hancom-page-compare-report.json:1)
+- 최신 비교 리포트: [hancom-page-compare-report.json](output/hancom-oracle/hancom-page-compare-report.json)
 
 최근 반영된 충실도 개선은 아래와 같사옵니다.
 
@@ -53,7 +53,7 @@
 - `incheon-2a.hwpx` 2페이지는 큰 표 셀 안에서 `LineSeg.vertical_pos`가 되감기는 continuation window를 감지하여, 한컴 Viewer처럼 `[무주택세대구성원]` 박스부터 이어지도록 보정했사옵니다.
 - 같은 행이 여러 페이지로 쪼개질 때 `split_end`를 `split_start + visible_length` 기준으로 해석하도록 방어하여, 중첩 표가 이전/다음 continuation 구간에서 되살아나는 위험을 줄였사옵니다.
 - 셀 안의 중첩 표도 `Table.caption` 방향과 간격을 그대로 적용하도록 일반화하여, `Top` 캡션이 표 머리행과 겹치거나 누락되는 문제를 바로잡았사옵니다.
-- 최신 2페이지 직접 비교 캡처는 [incheon-p2-side-by-side-vpos3.png](/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png)에 남겨 두었사옵니다.
+- 최신 2페이지 직접 비교 캡처는 [incheon-p2-side-by-side-vpos3.png](output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png)에 남겨 두었사옵니다.
 
 즉, 지금 단계는 “열람 가능”과 “대표 샘플 쪽수 일치”를 넘었으나, “한컴 Viewer 화면과 매우 비슷한 표 높이·개체 위치·폰트 조판”을 향한 본수술이 계속 필요한 상태이옵니다.
 
@@ -246,15 +246,15 @@ python3 scripts/build_hancom_page_audit.py
 오늘 확인한 테스트이옵니다.
 
 - `cargo test --lib split_line_ranges_can_span_multiple_vpos_windows --quiet`: 통과, `1 passed`, `811 filtered out`.
-- `RUSTC=/Users/shinehandmac/.cargo/bin/rustc /Users/shinehandmac/.cargo/bin/cargo build --release --target wasm32-unknown-unknown --lib`: 통과.
-- `/Users/shinehandmac/.cargo/bin/wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/rhwp.wasm`: 통과.
+- `cargo build --release --target wasm32-unknown-unknown --lib`: 통과.
+- `wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/rhwp.wasm`: 통과.
 - `node scripts/verify_samples.mjs`: 대표 5개 문서 통과.
 - 페이지 수 재확인: `goyeopje.hwp 2/2`, `goyeopje-full-2024.hwp 11/11`, `gyeolseokgye.hwp 1/1`, `attachment-sale-notice.hwp 4/4`, `incheon-2a.hwpx 18/18`.
 
 로컬 빌드 주의사항이옵니다.
 
 - 현재 셸의 기본 `cargo/rustc`가 Homebrew x86_64 경로(`/usr/local/bin`)를 먼저 잡으면 WASM 타깃을 못 찾아 실패할 수 있사옵니다.
-- WASM 빌드 시에는 `RUSTC=/Users/shinehandmac/.cargo/bin/rustc /Users/shinehandmac/.cargo/bin/cargo build --release --target wasm32-unknown-unknown --lib`처럼 rustup 경로를 명시하는 편이 안전하옵니다.
+- WASM 빌드 시에는 `cargo build --release --target wasm32-unknown-unknown --lib`처럼 rustup 경로를 명시하는 편이 안전하옵니다.
 
 ## 다음 우선순위
 
