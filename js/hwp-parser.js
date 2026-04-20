@@ -2058,7 +2058,7 @@ const HwpParser = {
     const modernLineSpacingType = modernLineSpacing
       ? HwpParser._hwpLineSpacingTypeFromCode(attr3 & 0x1F)
       : null;
-    // Modern percent format stores value×100 (16000=160%); normalise to legacy scale (160=160%)
+    // Modern percent format stores value×100 (16000=160%); normalize to legacy scale (160=160%)
     // so that resolveParagraphLineHeight can use a consistent divisor of 100.
     const lineSpacing = modernLineSpacing
       ? (modernLineSpacingType === 'percent'

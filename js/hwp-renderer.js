@@ -180,9 +180,12 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     p.style.whiteSpace = 'pre-wrap';
     // 첫 번째 왼쪽 정렬 탭 정지 위치를 CSS tab-size (길이값)로 설정한다.
     // TabDef에 정의된 실제 HWPUNIT 위치를 px로 환산해 정렬 정확도를 높인다.
+    const TAB_PX_MIN = 20;
+    const TAB_PX_MAX = 400;
+    const HWPUNIT_TO_PX = 75; // 1 HWPUNIT = 1/7200 inch @ 96 DPI = 1/75 px
     const firstLeftTab = (para.tabStops || []).find(t => !t.kind || t.kind === 'left');
     if (firstLeftTab && firstLeftTab.position > 0) {
-      const tabPx = Math.max(20, Math.min(400, Math.round(firstLeftTab.position / 75)));
+      const tabPx = Math.max(TAB_PX_MIN, Math.min(TAB_PX_MAX, Math.round(firstLeftTab.position / HWPUNIT_TO_PX)));
       p.style.tabSize = `${tabPx}px`;
     } else {
       p.style.tabSize = '4';
