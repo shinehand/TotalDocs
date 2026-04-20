@@ -1116,8 +1116,9 @@ function hwpxBorderTypeToCss(type) {
 function hwpxBorderWidthToPx(widthMm) {
   const mm = Number(widthMm);
   if (!Number.isFinite(mm) || mm <= 0) return '0px';
-  // 0.1mm(최세선) ≈ 0.38px → 시각적으로 표시되는 최소값 0.5px 보장, 4px 상한
-  return `${Math.max(0.5, Math.min(4, Math.round(mm * 3.78 * 10) / 10))}px`;
+  // 0.1mm(최세선) ≈ 0.38px → 시각적으로 표시되는 최소값 0.5px 보장, 8px 상한
+  // (이전 4px 상한은 2.0mm 이상 굵은 선을 너무 얇게 렌더링하는 원인이었음)
+  return `${Math.max(0.5, Math.min(8, Math.round(mm * 3.78 * 10) / 10))}px`;
 }
 
 function applyCellBorderStyle(td, cell) {
