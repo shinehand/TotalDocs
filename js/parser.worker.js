@@ -1777,7 +1777,7 @@ function ctrlId(body) {
   return String.fromCharCode(body[3], body[2], body[1], body[0]);
 }
 
-function pageTypeMatches(applyPageType, pageIndex) {
+function matchesHeaderFooterScope(applyPageType, pageIndex) {
   const type = String(applyPageType || 'BOTH').toUpperCase();
   const pageNo = pageIndex + 1;
   if (type === 'EVEN') return pageNo % 2 === 0;
@@ -1787,9 +1787,11 @@ function pageTypeMatches(applyPageType, pageIndex) {
 }
 
 function parseHwpHeaderFooterApplyPageType(controlBody) {
-  if (!controlBody || controlBody.length < 8) return 'BOTH';
+  const MIN_CONTROL_BODY_BYTES = 8;
+  const HEADER_FOOTER_SCOPE_MASK = 0x3;
+  if (!controlBody || controlBody.length < MIN_CONTROL_BODY_BYTES) return 'BOTH';
   const attr = u32(controlBody, 4);
-  const scope = attr & 0x3;
+  const scope = attr & HEADER_FOOTER_SCOPE_MASK;
   if (scope === 1) return 'EVEN';
   if (scope === 2) return 'ODD';
   return 'BOTH';
@@ -1800,7 +1802,7 @@ function resolveHwpHeaderFooterBlocks(areaDefs, fallbackBlocks, pageIndex) {
     return Array.isArray(fallbackBlocks) ? fallbackBlocks : [];
   }
   return areaDefs
-    .filter(area => pageTypeMatches(area.applyPageType, pageIndex))
+    .filter(area => matchesHeaderFooterScope(area.applyPageType, pageIndex))
     .flatMap(area => area.blocks || []);
 }
 

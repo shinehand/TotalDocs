@@ -688,7 +688,7 @@ const HwpParser = {
   _hwpxResolveAreaBlocks(areaDefs, pageIndex, hideFirst = false) {
     if (hideFirst && pageIndex === 0) return [];
     return (areaDefs || [])
-      .filter(area => HwpParser._hwpxPageTypeMatches(area.applyPageType, pageIndex))
+      .filter(area => HwpParser._matchesPageScope(area.applyPageType, pageIndex))
       .flatMap(area => area.blocks || []);
   },
 
@@ -700,7 +700,7 @@ const HwpParser = {
     );
   },
 
-  _hwpxPageTypeMatches(applyPageType, pageIndex) {
+  _matchesPageScope(applyPageType, pageIndex) {
     const type = String(applyPageType || 'BOTH').toUpperCase();
     const pageNo = pageIndex + 1;
     if (type === 'EVEN') return pageNo % 2 === 0;
@@ -710,9 +710,11 @@ const HwpParser = {
   },
 
   _parseHwpHeaderFooterApplyPageType(controlBody) {
-    if (!controlBody || controlBody.length < 8) return 'BOTH';
+    const MIN_CONTROL_BODY_BYTES = 8;
+    const HEADER_FOOTER_SCOPE_MASK = 0x3;
+    if (!controlBody || controlBody.length < MIN_CONTROL_BODY_BYTES) return 'BOTH';
     const attr = HwpParser._u32(controlBody, 4);
-    const scope = attr & 0x3;
+    const scope = attr & HEADER_FOOTER_SCOPE_MASK;
     if (scope === 1) return 'EVEN';
     if (scope === 2) return 'ODD';
     return 'BOTH';
@@ -723,7 +725,7 @@ const HwpParser = {
       return Array.isArray(fallbackBlocks) ? fallbackBlocks : [];
     }
     return areaDefs
-      .filter(area => HwpParser._hwpxPageTypeMatches(area.applyPageType, pageIndex))
+      .filter(area => HwpParser._matchesPageScope(area.applyPageType, pageIndex))
       .flatMap(area => area.blocks || []);
   },
 
