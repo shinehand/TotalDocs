@@ -301,6 +301,7 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     para.texts.forEach(run => appendRunSpan(contentTarget, run));
   }
 
+  enforceMinimumParagraphLineHeight(p, para);
   parent.appendChild(p);
 }
 
@@ -598,6 +599,32 @@ function paragraphBaseFontPx(para) {
     ...(para?.texts || []).map(run => Math.max(0, resolveRunFontSize(run))),
   );
   return fontPt * (96 / 72);
+}
+
+function resolveInlineLineHeightPx(lineHeightValue, baseFontPx) {
+  const raw = String(lineHeightValue || '').trim();
+  if (!raw) return 0;
+  if (raw.endsWith('px')) {
+    const px = Number(raw.slice(0, -2));
+    return Number.isFinite(px) && px > 0 ? px : 0;
+  }
+  const unitless = Number(raw);
+  if (Number.isFinite(unitless) && unitless > 0 && baseFontPx > 0) {
+    return unitless * baseFontPx;
+  }
+  return 0;
+}
+
+function enforceMinimumParagraphLineHeight(paragraphEl, para) {
+  if (!paragraphEl) return;
+  const baseFontPx = paragraphBaseFontPx(para);
+  if (!Number.isFinite(baseFontPx) || baseFontPx <= 0) return;
+  // 일부 문서는 lineSeg 값이 비정상적으로 낮아 줄이 겹칠 수 있어 최소 줄높이를 보장한다.
+  const minLineHeightPx = Math.max(12, Math.ceil(baseFontPx * 1.12));
+  const currentLineHeightPx = resolveInlineLineHeightPx(paragraphEl.style.lineHeight, baseFontPx);
+  if (currentLineHeightPx > 0 && currentLineHeightPx < minLineHeightPx) {
+    paragraphEl.style.lineHeight = `${minLineHeightPx}px`;
+  }
 }
 
 function resolveParagraphLineHeight(para) {
