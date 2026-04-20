@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HWP Web Viewer &amp; Editor</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon16.png" />
+  <link rel="apple-touch-icon" href="icons/icon128.png" />
+  <link href="lib/quill.snow.css" rel="stylesheet" />
+  <link rel="stylesheet" href="css/viewer.css" />
+  <link rel="stylesheet" href="css/editor.css" />
+
+  <script>
+  // ── 한글 웹폰트 프리로드 (기준 편집기 방식) ────────────────────────────────
+  // HWP 문서에서 자주 사용되는 폰트를 미리 로드
+  // Canvas measureTextWidth의 정확도를 높이고 렌더링 품질을 개선한다.
+  (function() {
+    const CDN_HAMCHOB_R = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2104@1.0/HANBatang.woff';
+    const CDN_HAMCHOB_B = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2104@1.0/HANBatangB.woff';
+    const CDN_HAMCHOD_R = 'https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_four@1.0/HCRDotum.woff';
+
+    const fonts = [
+      // 함초롬/한컴 폰트 (CDN)
+      { name: '함초롬돋움', file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '함초롬바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '함초롱돋움', file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '함초롱바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '한컴돋움', file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '한컴바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      { name: '새돋움', file: CDN_HAMCHOD_R, format: 'woff' },
+      { name: '새바탕', file: CDN_HAMCHOB_R, format: 'woff' },
+      // reference 편집기와 같은 오픈소스 대체 폰트 세트
+      { name: 'HY헤드라인M', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: 'HYHeadLine M', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: 'HYHeadLine Medium', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: 'HY견고딕', file: 'lib/fonts/WantedSans-ExtraBlack.woff2' },
+      { name: 'HYGothic-Extra', file: 'lib/fonts/WantedSans-ExtraBlack.woff2' },
+      { name: 'HY그래픽', file: 'lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'HYGraphic-Medium', file: 'lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'HY그래픽M', file: 'lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'HY견명조', file: 'lib/fonts/NotoSerifKR-Bold.woff2' },
+      { name: 'HYMyeongJo-Extra', file: 'lib/fonts/NotoSerifKR-Bold.woff2' },
+      { name: 'HY신명조', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'HY중고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '휴먼명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '휴먼고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '한양신명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '한양중고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '한양견명조', file: 'lib/fonts/NanumMyeongjo-Bold.woff2' },
+      { name: '한양견고딕', file: 'lib/fonts/NanumSquareNeoTTF-dEb.woff2' },
+      { name: '한양그래픽', file: 'lib/fonts/WantedSans-SemiBold.woff2' },
+      { name: '한양궁서', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: 'HCI Poppy', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '한컴 윤체 B', file: 'lib/fonts/Cafe24Ssurround-v2.0.woff2' },
+      { name: '산돌고딕 M', file: 'lib/fonts/NanumSquareNeoTTF-bRg.woff2' },
+      { name: '#세고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '#중고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '#태고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '#견고딕', file: 'lib/fonts/NanumSquareNeoTTF-eHv.woff2' },
+      { name: '#세명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '#신명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '#중명조', file: 'lib/fonts/NanumMyeongjo-Bold.woff2' },
+      { name: '#견명조', file: 'lib/fonts/NotoSerifKR-Bold.woff2' },
+      { name: '양재튼튼체B', file: 'lib/fonts/Happiness-Sans-Title.woff2' },
+      { name: 'Malgun Gothic', file: 'lib/fonts/NanumGothic-Regular.woff2' },
+      { name: '맑은 고딕', file: 'lib/fonts/NanumGothic-Regular.woff2' },
+      { name: '돋움', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '돋움체', file: 'lib/fonts/dotumche-Regular.ttf', format: 'truetype' },
+      { name: '굴림', file: 'lib/fonts/gulim-Regular.ttf', format: 'truetype' },
+      { name: '굴림체', file: 'lib/fonts/gulimche-Regular.ttf', format: 'truetype' },
+      { name: '새굴림', file: 'lib/fonts/gulim-Regular.ttf', format: 'truetype' },
+      { name: '고딕', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
+      { name: '바탕', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: '바탕체', file: 'lib/fonts/D2Coding-Regular.woff2' },
+      { name: '명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '궁서', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: '궁서체', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: '새궁서', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: '나눔고딕', file: 'lib/fonts/NanumGothic-Regular.woff2' },
+      { name: '나눔명조', file: 'lib/fonts/NanumMyeongjo-Regular.woff2' },
+      { name: '나눔고딕코딩', file: 'lib/fonts/NanumGothicCoding-Regular.woff2' },
+      { name: 'Palatino Linotype', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'Noto Sans KR', file: 'lib/fonts/NotoSansKR-Regular.woff2' },
+      { name: 'Noto Serif KR', file: 'lib/fonts/NotoSerifKR-Regular.woff2' },
+      { name: 'Pretendard', file: 'lib/fonts/Pretendard-Regular.woff2' },
+      { name: 'Pretendard Thin', file: 'lib/fonts/Pretendard-Thin.woff2' },
+      { name: 'Pretendard ExtraLight', file: 'lib/fonts/Pretendard-ExtraLight.woff2' },
+      { name: 'Pretendard Light', file: 'lib/fonts/Pretendard-Light.woff2' },
+      { name: 'Pretendard Medium', file: 'lib/fonts/Pretendard-Medium.woff2' },
+      { name: 'Pretendard SemiBold', file: 'lib/fonts/Pretendard-SemiBold.woff2' },
+      { name: 'Pretendard Bold', file: 'lib/fonts/Pretendard-Bold.woff2' },
+      { name: 'Pretendard ExtraBold', file: 'lib/fonts/Pretendard-ExtraBold.woff2' },
+      { name: 'Pretendard Black', file: 'lib/fonts/Pretendard-Black.woff2' },
+      { name: 'NanumSquareNeo Light', file: 'lib/fonts/NanumSquareNeoTTF-aLt.woff2' },
+      { name: 'NanumSquareNeo', file: 'lib/fonts/NanumSquareNeoTTF-bRg.woff2' },
+      { name: 'NanumSquareNeo Bold', file: 'lib/fonts/NanumSquareNeoTTF-cBd.woff2' },
+      { name: 'NanumSquareNeo ExtraBold', file: 'lib/fonts/NanumSquareNeoTTF-dEb.woff2' },
+      { name: 'NanumSquareNeo Heavy', file: 'lib/fonts/NanumSquareNeoTTF-eHv.woff2' },
+      { name: 'Wanted Sans', file: 'lib/fonts/WantedSans-Regular.woff2' },
+      { name: 'Wanted Sans Medium', file: 'lib/fonts/WantedSans-Medium.woff2' },
+      { name: 'Wanted Sans SemiBold', file: 'lib/fonts/WantedSans-SemiBold.woff2' },
+      { name: 'Wanted Sans Bold', file: 'lib/fonts/WantedSans-Bold.woff2' },
+      { name: 'Wanted Sans ExtraBold', file: 'lib/fonts/WantedSans-ExtraBold.woff2' },
+      { name: 'Wanted Sans ExtraBlack', file: 'lib/fonts/WantedSans-ExtraBlack.woff2' },
+      { name: 'D2Coding', file: 'lib/fonts/D2Coding-Regular.woff2' },
+      { name: '해피니스 산스 레귤러', file: 'lib/fonts/Happiness-Sans-Regular.woff2' },
+      { name: 'Happiness Sans Regular', file: 'lib/fonts/Happiness-Sans-Regular.woff2' },
+      { name: '해피니스 산스 볼드', file: 'lib/fonts/Happiness-Sans-Bold.woff2' },
+      { name: 'Happiness Sans Bold', file: 'lib/fonts/Happiness-Sans-Bold.woff2' },
+      { name: '해피니스 산스 타이틀', file: 'lib/fonts/Happiness-Sans-Title.woff2' },
+      { name: 'Happiness Sans Title', file: 'lib/fonts/Happiness-Sans-Title.woff2' },
+      { name: '해피니스 산스 VF', file: 'lib/fonts/HappinessSansVF.woff2' },
+      { name: 'Happiness Sans VF', file: 'lib/fonts/HappinessSansVF.woff2' },
+      { name: 'Cafe24 Ssurround Bold', file: 'lib/fonts/Cafe24Ssurround-v2.0.woff2' },
+      { name: '카페24 슈퍼매직', file: 'lib/fonts/Cafe24Supermagic-Regular-v1.0.woff2' },
+      { name: 'Cafe24 Supermagic', file: 'lib/fonts/Cafe24Supermagic-Regular-v1.0.woff2' },
+      { name: 'SpoqaHanSans', file: 'lib/fonts/SpoqaHanSans-Regular.woff2' },
+      { name: '고운바탕', file: 'lib/fonts/GowunBatang-Regular.woff2' },
+      { name: '고운돋움', file: 'lib/fonts/GowunDodum-Regular.woff2' },
+    ];
+
+    const applyFontOverrides = () => {
+      const raw = new URLSearchParams(window.location.search).get('fontOverrides');
+      if (!raw) return;
+
+      const overrides = new Map(
+        raw
+          .split('|')
+          .map((entry) => entry.split('='))
+          .filter(([name, file]) => name && file)
+          .map(([name, file]) => [decodeURIComponent(name), decodeURIComponent(file)]),
+      );
+      if (!overrides.size) return;
+
+      for (const font of fonts) {
+        const overrideFile = overrides.get(font.name);
+        if (overrideFile) {
+          font.file = overrideFile;
+          const lower = overrideFile.toLowerCase();
+          font.format = lower.endsWith('.woff')
+            ? 'woff'
+            : lower.endsWith('.ttf') ? 'truetype' : 'woff2';
+        }
+      }
+      console.log(`[폰트] QA 오버라이드 ${overrides.size}개 적용`);
+    };
+
+    applyFontOverrides();
+
+    // 1) CSS @font-face 규칙 생성 (Canvas 2D 호환)
+    const style = document.createElement('style');
+    style.textContent = fonts.map(f => {
+      const fmt = f.format || 'woff2';
+      return `@font-face { font-family: "${f.name}"; src: url("${f.file}") format("${fmt}"); font-display: block; }`;
+    }).join('\n');
+    document.head.appendChild(style);
+
+    // 2) FontFace API로 폰트 데이터를 즉시 로드 (네트워크 요청 트리거)
+    let loadedCount = 0, failedCount = 0;
+    globalThis._fontLoadPromise = Promise.all(fonts.map(f => {
+      const fmt = f.format || 'woff2';
+      const face = new FontFace(f.name, `url(${f.file}) format('${fmt}')`);
+      return face.load().then(loadedFace => {
+        document.fonts.add(loadedFace);
+        loadedCount++;
+        return loadedFace;
+      }).catch(e => {
+        failedCount++;
+        return null;
+      });
+    })).then(async () => {
+      await document.fonts.ready;
+      console.log(`[폰트] ${loadedCount}개 로드 완료, ${failedCount}개 실패`);
+    });
+  })();
+
+  // ── measureTextWidth LRU 캐시 (WASM용) ─────────────────────────────────────
+  // hwp-wasm-renderer.js와 중복 방지: 여기서 먼저 정의하면 모듈 로드 전에도 동작
+  (function() {
+    if (typeof globalThis.measureTextWidth !== 'undefined') return;
+    let ctx = null, lastFont = '';
+    const cache = new Map();
+    const MAX = 256, EVICT = 64;
+    globalThis.measureTextWidth = function(font, text) {
+      const key = font + '\0' + text;
+      if (cache.has(key)) {
+        const v = cache.get(key); cache.delete(key); cache.set(key, v); return v;
+      }
+      if (!ctx) ctx = document.createElement('canvas').getContext('2d');
+      const resolvedFont = globalThis.FontSubstitution?.substituteCssFont
+        ? globalThis.FontSubstitution.substituteCssFont(font, 0, 0)
+        : font;
+      if (resolvedFont !== lastFont) { ctx.font = resolvedFont; lastFont = resolvedFont; }
+      const w = ctx.measureText(text).width;
+      if (cache.size >= MAX) {
+        const iter = cache.keys();
+        for (let i = 0; i < EVICT; i++) { const k = iter.next().value; if (k) cache.delete(k); }
+      }
+      cache.set(key, w);
+      return w;
+    };
+  })();
+  </script>
+</head>
+<body>
+<div id="studio-root">
+  <nav id="menu-bar" aria-label="주 메뉴">
+    <div class="menu-item" data-menu="file">
+      <span class="menu-title">파일</span>
+      <div class="menu-dropdown">
+        <button type="button" class="md-item" data-action="open-file">열기</button>
+        <button type="button" class="md-item" data-action="save-current">저장</button>
+        <button type="button" class="md-item" data-action="save-as">다른 이름으로 저장</button>
+        <div class="md-sep"></div>
+        <button type="button" class="md-item" data-action="print-document">인쇄</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="edit">
+      <span class="menu-title">편집</span>
+      <div class="menu-dropdown">
+        <button type="button" class="md-item" data-action="enter-view-mode">보기 모드</button>
+        <button type="button" class="md-item" data-action="enter-edit-mode">편집 모드</button>
+        <div class="md-sep"></div>
+        <button type="button" class="md-item" data-action="focus-search">찾기</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="view">
+      <span class="menu-title">보기</span>
+      <div class="menu-dropdown">
+        <button type="button" class="md-item" data-action="zoom-fit">폭 맞춤</button>
+        <button type="button" class="md-item" data-action="zoom-reset">100%</button>
+        <button type="button" class="md-item" data-action="focus-search">검색</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="insert"><span class="menu-title">입력</span></div>
+    <div class="menu-item" data-menu="format"><span class="menu-title">서식</span></div>
+    <div class="menu-item" data-menu="page">
+      <span class="menu-title">쪽</span>
+      <div class="menu-dropdown">
+        <button type="button" class="md-item" data-action="first-page">첫 쪽</button>
+        <button type="button" class="md-item" data-action="prev-page">이전 쪽</button>
+        <button type="button" class="md-item" data-action="next-page">다음 쪽</button>
+        <button type="button" class="md-item" data-action="last-page">마지막 쪽</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="table"><span class="menu-title">표</span></div>
+    <div class="menu-item" data-menu="tool">
+      <span class="menu-title">도구</span>
+      <div class="menu-dropdown">
+        <button type="button" class="md-item" data-action="focus-search">찾기</button>
+        <div class="md-sep"></div>
+        <button type="button" class="md-item" data-action="zoom-in">확대</button>
+        <button type="button" class="md-item" data-action="zoom-out">축소</button>
+        <button type="button" class="md-item" data-action="zoom-fit">폭 맞춤</button>
+        <button type="button" class="md-item" data-action="zoom-page-fit">쪽 맞춤</button>
+      </div>
+    </div>
+  </nav>
+
+  <div id="icon-toolbar">
+    <div class="tb-group">
+      <button id="btnOpenFile" class="tb-btn tb-btn-accent" title="파일 열기">
+        <span class="tb-icon-text">열</span>
+        <span class="tb-label">파일<br />열기</span>
+      </button>
+      <button id="btnSaveCurrent" class="tb-btn" title="저장" disabled>
+        <span class="tb-sprite icon-save"></span>
+        <span class="tb-label">저장</span>
+      </button>
+      <button id="btnPrint" class="tb-btn" title="인쇄" disabled>
+        <span class="tb-sprite icon-print"></span>
+        <span class="tb-label">인쇄</span>
+      </button>
+    </div>
+    <span class="tb-sep"></span>
+    <div class="tb-group">
+      <button id="btnEditMode" class="tb-btn" title="편집 모드" disabled>
+        <span class="tb-icon-text">편</span>
+        <span class="tb-label">편집<br />모드</span>
+      </button>
+      <button id="btnViewMode" class="tb-btn" title="보기 모드" style="display:none">
+        <span class="tb-icon-text">보</span>
+        <span class="tb-label">보기<br />모드</span>
+      </button>
+    </div>
+    <span class="tb-sep"></span>
+    <div class="tb-group export-group" id="exportGroup" style="display:none">
+      <select id="saveAsFormat" class="save-format-select" aria-label="다른 이름으로 저장 형식">
+        <option value="hwpx">HWPX</option>
+        <option value="owpml">OWPML</option>
+        <option value="html">HTML</option>
+        <option value="pdf">PDF</option>
+        <option value="hwp">HWP</option>
+      </select>
+      <button id="btnSaveAs" class="tb-btn" title="다른 이름으로 저장" disabled>
+        <span class="tb-icon-text">다</span>
+        <span class="tb-label">다른 이름<br />저장</span>
+      </button>
+    </div>
+    <span class="tb-spacer"></span>
+    <div class="tb-docinfo">
+      <span class="app-badge">HWP</span>
+      <span class="app-title">문서 편집기</span>
+      <span class="file-name" id="fileName">파일을 업로드하세요</span>
+    </div>
+    <input type="file" id="fileInput" accept=".hwp,.hwpx,.owpml" style="display:none" />
+  </div>
+
+  <div id="style-bar">
+    <select class="sb-combo" title="스타일" disabled>
+      <option>본문</option>
+    </select>
+    <select class="sb-combo sb-font-lang" title="언어" disabled>
+      <option>한글</option>
+    </select>
+    <select class="sb-combo sb-font" title="글꼴" disabled>
+      <option>함초롬바탕</option>
+    </select>
+    <span class="sb-size-group">
+      <input type="text" class="sb-size" value="10.0" title="글자 크기" disabled />
+      <span class="sb-size-unit">pt</span>
+      <span class="sb-size-arrows">
+        <button class="sb-arrow" type="button" disabled>▲</button>
+        <button class="sb-arrow" type="button" disabled>▼</button>
+      </span>
+    </span>
+    <span class="sb-sep"></span>
+    <button class="sb-btn" type="button" disabled><span class="sb-ga sb-bold">가</span></button>
+    <button class="sb-btn" type="button" disabled><span class="sb-ga sb-italic">가</span></button>
+    <button class="sb-btn" type="button" disabled><span class="sb-ga sb-underline">간</span></button>
+    <span class="sb-sep"></span>
+    <button class="sb-btn" type="button" disabled><span class="sb-align sb-al-left"></span></button>
+    <button class="sb-btn" type="button" disabled><span class="sb-align sb-al-center"></span></button>
+    <button class="sb-btn" type="button" disabled><span class="sb-align sb-al-right"></span></button>
+    <button class="sb-btn" type="button" disabled><span class="sb-align sb-al-justify"></span></button>
+    <span class="tb-spacer"></span>
+    <div class="wasm-toolbar hidden" id="wasmToolbar">
+      <div class="wasm-toolbar-group">
+        <button class="wasm-tb-btn" id="btnZoomOut" title="축소 (Ctrl+-)">&#8722;</button>
+        <span class="wasm-zoom-level" id="zoomLevel">100%</span>
+        <button class="wasm-tb-btn" id="btnZoomIn" title="확대 (Ctrl++)">&#43;</button>
+        <button class="wasm-tb-btn" id="btnZoomFit" title="페이지 너비에 맞춤">폭 맞춤</button>
+      </div>
+      <div class="wasm-toolbar-group wasm-search-group">
+        <input type="text" class="wasm-search-input" id="wasmSearchInput" placeholder="검색 (Ctrl+F)" />
+        <button class="wasm-tb-btn" id="btnSearchPrev" disabled title="이전 결과">&#9650;</button>
+        <button class="wasm-tb-btn" id="btnSearchNext" disabled title="다음 결과">&#9660;</button>
+        <span class="wasm-search-info hidden" id="wasmSearchInfo">0 / 0</span>
+        <button class="wasm-tb-btn wasm-search-clear hidden" id="btnSearchClear" title="검색 초기화">&#10005;</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="workspace-shell">
+    <div class="error-banner" id="errorBanner" style="display:none">
+      <span id="errorMsg"></span>
+      <button class="close-btn" id="btnCloseError">✕</button>
+    </div>
+
+    <main class="main-content" id="mainContent" style="display:none">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-title">문서 탐색</div>
+        <div class="page-thumbnails" id="pageThumbnails"></div>
+        <section class="qa-audit-panel" id="qaAuditPanel" style="display:none">
+          <div class="sidebar-title">레이아웃 감사</div>
+          <div class="qa-audit-summary" id="qaAuditSummary"></div>
+          <div class="qa-audit-current" id="qaCurrentPageAudit"></div>
+          <div class="qa-audit-list" id="qaHotspotList"></div>
+        </section>
+      </aside>
+
+      <section class="workspace-main">
+        <div id="editor-area">
+          <div id="ruler-corner"></div>
+          <canvas id="h-ruler" width="1200" height="20" aria-hidden="true"></canvas>
+          <canvas id="v-ruler" width="20" height="1200" aria-hidden="true"></canvas>
+
+          <section class="viewer-panel" id="viewerPanel">
+            <div class="document-canvas" id="documentCanvas">
+              <div class="wasm-edit-caret" id="wasmCaret" aria-hidden="true"></div>
+              <textarea
+                id="wasmImeInput"
+                class="wasm-ime-input"
+                rows="1"
+                spellcheck="false"
+                autocapitalize="off"
+                autocomplete="off"
+                autocorrect="off"
+                aria-hidden="true"
+              ></textarea>
+            </div>
+          </section>
+
+          <section class="editor-panel" id="editorPanel" style="display:none">
+            <div class="editor-toolbar-info">
+              편집 모드: 아래 에디터에서 내용을 수정한 뒤 저장하거나 다른 이름으로 저장할 수 있습니다.
+            </div>
+            <div id="quillEditor"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="drop-zone-inner">
+        <div class="drop-icon">HWP</div>
+        <p class="drop-title">HWP / HWPX / OWPML 문서를 이곳에 끌어다 놓으시옵소서</p>
+        <p class="drop-sub">또는 <button class="link-btn" id="btnDropOpen">파일 선택</button></p>
+        <p class="drop-note">지원 형식: .hwp (HWP 5.0+), .hwpx, .owpml</p>
+      </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay" style="display:none">
+      <div class="spinner"></div>
+      <p id="loadingMsg">처리 중...</p>
+    </div>
+  </div>
+
+  <footer class="status-bar" id="statusBar" style="display:none">
+    <div class="status-left">
+      <span id="statusPageInfo" class="stb-item">1 / 1 쪽</span>
+      <span class="stb-divider"></span>
+      <span id="statusSectionInfo" class="stb-item">구역: 1 / 1</span>
+      <span class="stb-divider"></span>
+      <span id="statusMode" class="stb-item">읽기</span>
+      <span id="statusFieldInfo" class="stb-item" style="display:none"></span>
+      <span id="statusMessage" class="stb-message"></span>
+    </div>
+    <div class="status-right">
+      <button id="sb-zoom-fit-width" class="stb-icon-btn" title="폭 맞춤">
+        <span class="tb-sprite icon-zoom-fit-width"></span>
+      </button>
+      <button id="sb-zoom-fit" class="stb-icon-btn" title="쪽 맞춤">
+        <span class="tb-sprite icon-zoom-fit"></span>
+      </button>
+      <span class="stb-divider"></span>
+      <span id="sb-zoom-val" class="stb-zoom-val">100%</span>
+      <button id="sb-zoom-out" class="stb-icon-btn" title="축소">
+        <span class="tb-sprite icon-zoom-out"></span>
+      </button>
+      <button id="sb-zoom-in" class="stb-icon-btn" title="확대">
+        <span class="tb-sprite icon-zoom-in"></span>
+      </button>
+    </div>
+  </footer>
+</div>
+
+<script src="lib/quill.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="lib/pako.min.js"></script>
+<!-- 폰트 치환 모듈 (전역 FontSubstitution 객체 등록) -->
+<script src="js/font_substitution.js"></script>
+<!-- HWP 엔진 WASM 렌더러 (ES module) — app.js보다 먼저 선언, 초기화는 비동기 -->
+<script type="module" src="js/hwp-wasm-renderer.js"></script>
+<script src="js/hwp-parser.js"></script>
+<script src="js/hwp-renderer.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

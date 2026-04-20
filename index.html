@@ -202,14 +202,18 @@
   <img class="logo" src="icons/icon128.png" alt="ChromeHWP 아이콘" />
   <h1>ChromeHWP</h1>
   <p class="tagline">
-    크롬 브라우저에서 <strong>HWP · HWPX · OWPML</strong> 문서를<br />
-    바로 열람하고 편집하는 무료 확장 프로그램
+    어떤 브라우저에서든 <strong>HWP · HWPX · OWPML</strong> 문서를<br />
+    설치 없이 바로 열람하고 편집하는 무료 웹 뷰어
   </p>
   <div class="btn-group">
     <a class="btn btn-white"
+       href="viewer.html">
+      🌐 웹 뷰어 바로 열기
+    </a>
+    <a class="btn btn-outline"
        href="https://github.com/shinehand/ChromeHWP/releases/latest"
        target="_blank" rel="noopener">
-      ⬇️ 최신 버전 다운로드
+      ⬇️ 확장 프로그램 다운로드
     </a>
     <a class="btn btn-outline"
        href="https://github.com/shinehand/ChromeHWP"
@@ -218,6 +222,7 @@
     </a>
   </div>
   <div class="badges">
+    <span class="badge">모든 브라우저 지원</span>
     <span class="badge">Chrome Extension</span>
     <span class="badge">HWP 5.0</span>
     <span class="badge">HWPX / OWPML</span>
@@ -227,6 +232,21 @@
 </header>
 
 <main>
+
+  <!-- ── 웹 뷰어 CTA ── -->
+  <section style="text-align:center; padding: 8px 0 32px;">
+    <a href="viewer.html"
+       style="display:inline-flex;align-items:center;gap:10px;background:var(--primary);color:#fff;
+              padding:16px 36px;border-radius:10px;font-size:1.1rem;font-weight:700;
+              text-decoration:none;box-shadow:0 4px 16px rgba(26,92,216,0.25);transition:transform 0.15s,box-shadow 0.15s;"
+       onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 28px rgba(26,92,216,0.35)'"
+       onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(26,92,216,0.25)'">
+      🌐 HWP 웹 뷰어 바로 열기 →
+    </a>
+    <p style="margin-top:12px;color:var(--muted);font-size:0.9rem;">
+      설치 불필요 · Chrome · Firefox · Safari · Edge 모두 지원
+    </p>
+  </section>
 
   <!-- ── 지원 형식 ── -->
   <section>
@@ -275,9 +295,32 @@
     </div>
   </section>
 
-  <!-- ── 설치 방법 ── -->
+  <!-- ── 사용 방법 ── -->
   <section>
-    <h2>🛠️ 설치 방법</h2>
+    <h2>🌐 웹 뷰어 사용 방법</h2>
+    <ol class="steps">
+      <li>
+        <strong>웹 뷰어 열기</strong>
+        <span>위의 <strong>웹 뷰어 바로 열기</strong> 버튼을 클릭하거나 <a href="viewer.html">viewer.html</a> 에 접속합니다. Chrome, Firefox, Safari, Edge 어디서든 작동합니다.</span>
+      </li>
+      <li>
+        <strong>HWP 파일 열기</strong>
+        <span>화면 중앙에 <strong>.hwp / .hwpx / .owpml</strong> 파일을 끌어다 놓거나, <strong>파일 선택</strong> 버튼으로 업로드합니다.</span>
+      </li>
+      <li>
+        <strong>열람 및 편집</strong>
+        <span>문서가 즉시 렌더링됩니다. 툴바의 <strong>편집 모드</strong>를 켜면 텍스트 편집도 가능합니다.</span>
+      </li>
+      <li>
+        <strong>저장</strong>
+        <span>편집 후 <strong>저장</strong> 또는 <strong>다른 이름으로 저장</strong>으로 HWPX·HTML·PDF 등으로 내보낼 수 있습니다.</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ── 크롬 확장 설치 방법 ── -->
+  <section>
+    <h2>🛠️ 크롬 확장 프로그램 설치 <span style="font-size:0.75rem;font-weight:400;color:var(--muted)">(선택사항 — 웹 페이지 HWP 링크 자동 열기 기능)</span></h2>
     <ol class="steps">
       <li>
         <strong>확장 프로그램 파일 다운로드</strong>
@@ -301,7 +344,7 @@
       </li>
       <li>
         <strong>설치 완료</strong>
-        <span>크롬 툴바에 ChromeHWP 아이콘이 나타나면 설치가 완료된 것입니다. HWP 파일을 드래그하거나 아이콘을 클릭하여 뷰어를 열 수 있습니다.</span>
+        <span>크롬 툴바에 ChromeHWP 아이콘이 나타나면 설치가 완료된 것입니다. 웹 페이지의 HWP 링크를 우클릭하면 뷰어로 바로 열 수 있습니다.</span>
       </li>
     </ol>
   </section>
