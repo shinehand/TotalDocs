@@ -2965,11 +2965,11 @@ const HwpParser = {
   //        [lineColor:4][lineWidth:4][lineAttr:4][outlineStyle:1]
   //        [fillType:4][fillColor:4] ...
   _parseHwpShapeComponent(body) {
-    if (!body || body.length < 46) return { fillColor: '', lineColor: '', lineWidthMm: 0 };
+    if (!body || body.length < 46) return null;
     // Skip fixed header: 11 DWORDs (44 bytes) + WORD renderCount (2 bytes) = 46 bytes
     const renderCount = HwpParser._u16(body, 44);
     const lineOffset = 46 + renderCount * 24;
-    if (lineOffset + 4 > body.length) return { fillColor: '', lineColor: '', lineWidthMm: 0 };
+    if (lineOffset + 4 > body.length) return null;
 
     const lineColor = HwpParser._hwpColorRefToCss(HwpParser._u32(body, lineOffset));
     const lineWidthRaw = lineOffset + 4 < body.length ? HwpParser._u32(body, lineOffset + 4) : 0;

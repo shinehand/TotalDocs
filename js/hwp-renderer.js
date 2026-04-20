@@ -439,7 +439,7 @@ function appendShapePlaceholder(parent, block) {
   // 테두리 선 색상·굵기 적용
   const lineColor = block.lineColor;
   const lineWidthMm = Number(block.lineWidthMm) || 0;
-  if (lineColor && lineColor !== '#000000' && lineColor !== '#ffffff') {
+  if (lineColor) {
     const lineWidthPx = lineWidthMm > 0
       ? Math.max(0.5, Math.min(8, lineWidthMm * 3.78)) // mm → px at 96 DPI
       : 1;
