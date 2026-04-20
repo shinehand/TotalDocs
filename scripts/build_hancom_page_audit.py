@@ -9,6 +9,11 @@ from statistics import median
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 
+PAGE_RATIO = 1.414
+PAGE_RATIO_TOLERANCE = 0.10
+PAGE_MIN_WIDTH_RATIO = 0.20
+
+
 def longest_true_run(values):
     best_start = 0
     best_end = -1
@@ -43,7 +48,7 @@ def detect_page_bands(image):
             red, green, blue = pixels[x, y][:3]
             is_page.append(red >= 242 and green >= 242 and blue >= 238)
         left, right, run_width = longest_true_run(is_page)
-        if width * 0.28 <= run_width <= width * 0.94:
+        if width * PAGE_MIN_WIDTH_RATIO <= run_width <= width * 0.94:
             rows.append((y, left, right, run_width))
 
     if not rows:
@@ -84,7 +89,7 @@ def detect_page_bands(image):
         top = min(row[0] for row in cluster)
         bottom = max(row[0] for row in cluster)
         page_width = right - left + 1
-        if page_width >= image.width * 0.28:
+        if page_width >= image.width * PAGE_MIN_WIDTH_RATIO:
             bands.append((left, top, right, bottom))
 
     if not bands:
@@ -145,7 +150,7 @@ def detect_page_rects(image):
             comp_h = max_comp_y - min_comp_y + 1
             fill = area / max(1, comp_w * comp_h)
             if (
-                comp_w >= width * 0.28
+                comp_w >= width * PAGE_MIN_WIDTH_RATIO
                 and comp_w <= width * 0.82
                 and comp_h >= comp_w * 0.70
                 and fill >= 0.32
@@ -276,7 +281,27 @@ def normalized_diff_score(left_image, right_image):
     return ImageStat.Stat(diff).mean[0]
 
 
-def verdict_for_score(score):
+def capture_quality(hancom_page, chrome_page):
+    hancom_ratio = hancom_page.height / max(1, hancom_page.width)
+    chrome_ratio = chrome_page.height / max(1, chrome_page.width)
+    ratio_gap = abs(hancom_ratio - chrome_ratio)
+    expected_gap = abs(hancom_ratio - PAGE_RATIO)
+    is_suspicious = (
+        expected_gap > PAGE_RATIO_TOLERANCE
+        or ratio_gap > PAGE_RATIO_TOLERANCE
+    )
+    return {
+        "hancomRatio": hancom_ratio,
+        "chromeRatio": chrome_ratio,
+        "ratioGap": ratio_gap,
+        "expectedGap": expected_gap,
+        "status": "capture-review" if is_suspicious else "ok",
+    }
+
+
+def verdict_for_score(score, quality=None):
+    if quality and quality.get("status") != "ok":
+        return quality["status"]
     if score is None:
         return "capture-error"
     if score <= 18:
@@ -337,11 +362,13 @@ def build_report(manifest, output_dir, target_width):
                     resize_to_width(hancom_page, target_width),
                     resize_to_width(chrome_page, target_width),
                 )
+                quality = capture_quality(hancom_page, chrome_page)
                 item.update({
                     "hancomCrop": str(hancom_crop_path),
                     "pageCompare": str(compare_path),
                     "diff": score,
-                    "verdict": verdict_for_score(score),
+                    "verdict": verdict_for_score(score, quality),
+                    "captureQuality": quality,
                     "hancomCropSize": list(hancom_page.size),
                     "chromeSize": list(chrome_page.size),
                 })
@@ -432,6 +459,7 @@ def write_html(results, html_path):
     .page-card {{ background: white; border: 1px solid #d8d0c3; border-radius: 14px; overflow: hidden; }}
     .page-card h3 {{ margin: 0; padding: 10px 12px; font-size: 15px; background: #f7f2eb; }}
     .page-card.mismatch h3 {{ background: #ffe2df; }}
+    .page-card.capture-review h3 {{ background: #ffe9c7; }}
     .page-card.review h3 {{ background: #fff1c2; }}
     .page-card.close h3 {{ background: #e8f5df; }}
     img {{ width: 100%; display: block; }}

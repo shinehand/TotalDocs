@@ -85,7 +85,7 @@
   - The current approach remains data-driven; no document names, page numbers, or sample text are used as layout conditions.
 - Rebuilt web bundle:
   - `RUSTC=/Users/shinehandmac/.cargo/bin/rustc /Users/shinehandmac/.cargo/bin/cargo build --release --target wasm32-unknown-unknown --lib`
-  - `/Users/shinehandmac/.cargo/bin/wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/rhwp.wasm`
+  - `/Users/shinehandmac/.cargo/bin/wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>`
   - Copied generated artifacts into `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.js`, `/Users/shinehandmac/Github/ChromeHWP/lib/hwp_bg.wasm`, and `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.d.ts`.
 - Tests run:
   - `cargo test --lib split_line_ranges_can_span_multiple_vpos_windows --quiet`: passed.
@@ -101,6 +101,59 @@
   - audited samples on 2026-04-18 returned keyword hits successfully
 - Detailed audit notes:
   - `/Users/shinehandmac/Github/ChromeHWP/docs/fidelity-audit-2026-04-17.md`
+
+## 2026-04-20 Continuation Follow-Up
+- Engine source update:
+  - Split-row nested table placement now preserves the `LineSeg.vertical_pos` anchored paragraph y when the paragraph has no preceding visible text.
+  - Non-split nested-table-only cells keep the previous cell-top behavior, so the change is limited to page continuation fragments.
+  - The rule remains data-driven; no document names, page numbers, or sample text were introduced.
+- Rebuilt web bundle:
+  - `RUSTC=/Users/shinehandmac/.cargo/bin/rustc /Users/shinehandmac/.cargo/bin/cargo build --release --target wasm32-unknown-unknown --lib`
+  - `/Users/shinehandmac/.cargo/bin/wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>`
+  - Copied generated artifacts into `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.js`, `/Users/shinehandmac/Github/ChromeHWP/lib/hwp_bg.wasm`, and `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.d.ts`.
+- Verification:
+  - `cargo test nested_block --quiet`: passed.
+  - `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet`: passed.
+  - `cargo test --lib --quiet`: passed (`813 passed`, `1 ignored`).
+  - `node --check scripts/verify_samples.mjs`: passed.
+  - `node scripts/verify_samples.mjs`: passed for all five downloaded QA documents.
+  - Page-count result: `goyeopje.hwp 2/2`, `goyeopje-full-2024.hwp 11/11`, `gyeolseokgye.hwp 1/1`, `attachment-sale-notice.hwp 4/4`, `incheon-2a.hwpx 18/18`.
+- QA script hardening:
+  - Failure reports for external local samples now use the copied served-input URL instead of trying to fetch `/Users/.../Downloads` directly.
+- Remaining risk:
+  - Visual identity against Hancom Viewer still requires full-page audit review, especially `incheon-2a.hwpx` pages 12-16 and the already-known high-diff pages.
+
+## 2026-04-20 Audit Follow-Up
+- Project naming cleanup:
+  - Removed stale lowercase legacy engine naming from visible ChromeHWP docs/comments while keeping the public bundle names `hwp.js` and `hwp_bg.wasm`.
+- Hancom page-audit hardening:
+  - `scripts/capture_hancom_page_audit.mjs` now defaults Hancom Viewer capture zoom to 35%, which keeps full pages visible for `incheon-2a.hwpx` late-page comparisons.
+  - `scripts/build_hancom_page_audit.py` accepts smaller page widths at low zoom and records `captureQuality`; suspicious crop aspect ratios are reported as `capture-review` instead of being mixed with renderer mismatches.
+- Latest visual audit:
+  - Full sample audit output: `/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit/hancom-page-audit-report.html`
+  - `incheon-2a.hwpx` focused audit output: `/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit-incheon-latest/hancom-page-audit-report.html`
+  - Focused `incheon-2a.hwpx` verdicts: `review 16`, `mismatch 1`, `close 1`.
+  - The remaining focused mismatch is page 16. Pages 17-18 still need sequence review because page 16 consumption determines the final-page content boundary.
+
+## 2026-04-20 End-of-Day Handoff
+- Engine integration:
+  - Added continuation handling for nested table overflow that starts at the bottom of a large-cell vpos window.
+  - Rebuilt and copied the latest WASM bundle into `lib/hwp.js` and `lib/hwp_bg.wasm`.
+- Local visual read:
+  - `incheon-2a.hwpx` pages 16-17 now follow the Hancom order more closely in local engine SVG output.
+  - Page 18 and later boundaries still need focused audit confirmation.
+- Passed checks:
+  - `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet`
+  - `node --check scripts/capture_hancom_page_audit.mjs`
+  - `node --check scripts/verify_samples.mjs`
+  - `python3 -m py_compile scripts/build_hancom_page_audit.py`
+- Current blocker:
+  - After the latest WASM copy, `node scripts/verify_samples.mjs` times out while waiting for the viewer on all five sample documents.
+  - The failure report shows `hasRenderer=false` and `canvasCount=0`, so treat it as a viewer/test bootstrap blocker before using the generated visual artifacts as renderer evidence.
+- Next verification order:
+  1. Restore `node scripts/verify_samples.mjs` to green.
+  2. Re-run the focused `incheon-2a.hwpx` Hancom audit.
+  3. Continue the page 16-18 sequence review from the new continuation behavior.
 
 ## Playwright Session Rule
 - Always run `close-all` before verification.

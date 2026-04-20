@@ -3,8 +3,7 @@
 // CFB(OLE2 Compound File) 컨테이너에서 /PrvImage 스트림만 추출한다.
 // 전체 HWP 파싱 없이 썸네일만 빠르게 얻을 수 있다.
 //
-// MIT License: Based on rhwp-chrome/sw/thumbnail-extractor.js
-// by Edward Kim (https://github.com/edwardkim/rhwp)
+// MIT License: Based on Edward Kim's upstream thumbnail extractor.
 
 const THUMBNAIL_CACHE = new Map();
 const CACHE_MAX_SIZE = 100;

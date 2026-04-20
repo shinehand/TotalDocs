@@ -305,6 +305,14 @@ function buildViewerUrl(servedUrl) {
   return target.toString();
 }
 
+function safeServedUrlForReport(sample) {
+  try {
+    return resolveSampleAccess(sample).servedUrl;
+  } catch {
+    return /^https?:\/\//i.test(sample.filePath) ? sample.filePath : '';
+  }
+}
+
 function resolveSampleAccess(sample) {
   const sourcePath = sample.filePath;
   if (/^https?:\/\//i.test(sourcePath)) {
@@ -883,7 +891,7 @@ async function main() {
           id: sample.id,
           filename: sample.filename,
           filePath: sample.filePath,
-          servedUrl: toServedUrl(sample.filePath),
+          servedUrl: safeServedUrlForReport(sample),
           fatal: error instanceof Error ? error.message : String(error),
           issues: ['문서 로드 실패'],
         };

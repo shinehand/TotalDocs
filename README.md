@@ -71,7 +71,7 @@
 ### 지금까지 완료한 일
 
 1. `HWP/HWPX` 렌더링 경로를 WASM 기반 `hwp` 엔진으로 통합했다.
-2. 외부 표기는 `rhwp`가 아니라 `hwp`로 통일했다.
+2. 외부 표기는 `hwp`로 통일했다.
 3. 실제 한글 프로그램과 유사한 메뉴/툴바/눈금자/페이지/상태바 레이아웃을 구성했다.
 4. 다운로드 폴더 원본 문서 기준 QA 체계를 만들었다.
 5. 대표 5개 문서의 한컴 Viewer 페이지 수와 ChromeHWP 페이지 수를 일치시켰다.
@@ -236,7 +236,7 @@ python3 scripts/build_hancom_page_audit.py
 
 오늘 종료 시점의 핵심 전황이옵니다.
 
-- `rhwp-reference`의 HWPX 대형 셀 continuation 처리를 보강하고, 최신 엔진을 `lib/hwp.js`, `lib/hwp_bg.wasm`, `lib/hwp.d.ts`로 다시 반영했사옵니다.
+- 엔진 참조 저장소의 HWPX 대형 셀 continuation 처리를 보강하고, 최신 엔진을 `lib/hwp.js`, `lib/hwp_bg.wasm`, `lib/hwp.d.ts`로 다시 반영했사옵니다.
 - `LineSeg.vertical_pos`가 큰 셀 안에서 여러 번 되감기는 구간을 continuation window로 분리하고, 분할 렌더링 시 문단 y를 저장된 vpos 기준으로 앵커링하는 규칙을 추가했사옵니다.
 - 중첩 표가 split window 안에서 렌더링될 때 `split_start`와 `split_end`를 절대 좌표처럼 오해하지 않도록 보정했사옵니다.
 - `incheon-2a.hwpx`는 한컴 기준 `18쪽`과 ChromeHWP `18쪽`이 계속 일치하오나, 15~16쪽의 내부 시각 흐름은 아직 원본과 완전히 같지 않사옵니다.
@@ -247,9 +247,30 @@ python3 scripts/build_hancom_page_audit.py
 
 - `cargo test --lib split_line_ranges_can_span_multiple_vpos_windows --quiet`: 통과, `1 passed`, `811 filtered out`.
 - `cargo build --release --target wasm32-unknown-unknown --lib`: 통과.
-- `wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/rhwp.wasm`: 통과.
+- `wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>`: 통과.
 - `node scripts/verify_samples.mjs`: 대표 5개 문서 통과.
 - 페이지 수 재확인: `goyeopje.hwp 2/2`, `goyeopje-full-2024.hwp 11/11`, `gyeolseokgye.hwp 1/1`, `attachment-sale-notice.hwp 4/4`, `incheon-2a.hwpx 18/18`.
+
+## 2026-04-20 진행 메모
+
+- split row 안의 중첩 표가 앞 텍스트 없이 시작하더라도 `LineSeg.vertical_pos`로 이미 보정된 문단 y를 유지하도록 엔진을 보강했사옵니다.
+- `wasm-bindgen --out-name hwp`로 ChromeHWP의 `hwp_bg.wasm` 배치명과 생성 JS의 기대 파일명을 맞췄사옵니다.
+- 다운로드 폴더 샘플 로드 실패 보고 시 served-inputs URL을 사용하도록 `scripts/verify_samples.mjs`를 보강했사옵니다.
+- `node scripts/verify_samples.mjs` 재검증 결과, 대표 5개 다운로드 문서는 한컴 기준 쪽수와 모두 일치했사옵니다: `2/2`, `11/11`, `1/1`, `4/4`, `18/18`.
+- 한컴 Viewer 전 페이지 감사 도구는 35% 줌 기본값과 crop 품질 판정을 추가해 부분 페이지를 별도 `capture-review`로 표시하도록 보강했사옵니다.
+- 최신 `incheon-2a.hwpx` 단독 감사 기준, 12~15쪽은 `review`, 16쪽은 `mismatch`, 17쪽은 `review`, 18쪽은 `close`이옵니다.
+- 아직 남은 핵심 판단은 `incheon-2a.hwpx` 16~18쪽의 page-like vpos window와 중첩 표 분할 흐름이옵니다.
+
+## 2026-04-20 종료 메모
+
+오늘 종료 시점의 추가 전황이옵니다.
+
+- 대형 셀 continuation 안에서 중첩 표가 물리 vpos window 아래로 넘치는 경우, 다음 페이지의 첫 흐름으로 이어 받도록 엔진을 보강하고 최신 WASM을 다시 반영했사옵니다.
+- 로컬 엔진 SVG 확인 기준 `incheon-2a.hwpx` 16~17쪽의 큰 흐름은 한컴 순서에 더 가까워졌사오나, 18쪽 이후 경계는 아직 추가 감사가 필요하옵니다.
+- 정적 검증은 통과했사옵니다: `node --check scripts/capture_hancom_page_audit.mjs`, `node --check scripts/verify_samples.mjs`, `python3 -m py_compile scripts/build_hancom_page_audit.py`.
+- 엔진 단위 검증은 통과했사옵니다: `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet`.
+- 단, 최신 WASM 반영 뒤 `node scripts/verify_samples.mjs`는 대표 5개 문서 모두 viewer load timeout으로 실패했사옵니다. 보고서에는 `hasRenderer=false`, `canvasCount=0`으로 남았으므로 렌더링 diff 판단이 아니라 로더/검증 하네스 차단으로 보아야 하옵니다.
+- 위 실패 산출물은 오늘 커밋 대상에서 제외하고, 다음 작업의 첫 번째 진단 대상으로 남겨두는 것이 옳사옵니다.
 
 로컬 빌드 주의사항이옵니다.
 
@@ -258,12 +279,13 @@ python3 scripts/build_hancom_page_audit.py
 
 ## 다음 우선순위
 
-1. `incheon-2a.hwpx` 15쪽 mismatch를 먼저 해결한다.
-2. 같은 대형 셀 흐름을 쓰는 `incheon-2a.hwpx` 12~16쪽을 연쇄 검증한다.
-3. `attachment-sale-notice.hwp` 1~4쪽의 표/이미지/헤더 정렬 문제를 해결한다.
-4. `goyeopje-full-2024.hwp` 6·9쪽의 표 높이와 문단 조판 잔여 오차를 줄인다.
-5. 공통 폰트 계량, 줄간격, border 농도, 배경색 농도, 상단 원점 오차를 줄인다.
-6. 전 페이지 감사에서 `mismatch 0`을 유지하고 `review`를 순차적으로 줄인다.
-7. 이후 `수식`, `차트`, `배포용 문서`를 같은 기준으로 더 깊게 붙인다.
+1. 최신 WASM 반영 뒤 발생한 `node scripts/verify_samples.mjs` viewer load timeout을 먼저 진단한다.
+2. 대표 5개 문서 검증을 다시 통과시킨 뒤, `incheon-2a.hwpx` focused audit을 재실행한다.
+3. `incheon-2a.hwpx` 16~18쪽의 대형 셀 continuation과 중첩 표 흐름을 연쇄 검증한다.
+4. `attachment-sale-notice.hwp` 1~4쪽의 표/이미지/헤더 정렬 문제를 해결한다.
+5. `goyeopje-full-2024.hwp` 6·9쪽의 표 높이와 문단 조판 잔여 오차를 줄인다.
+6. 공통 폰트 계량, 줄간격, border 농도, 배경색 농도, 상단 원점 오차를 줄인다.
+7. 전 페이지 감사에서 `mismatch 0`을 유지하고 `review`를 순차적으로 줄인다.
+8. 이후 `수식`, `차트`, `배포용 문서`를 같은 기준으로 더 깊게 붙인다.
 
 주군, 이 README는 현재 전황과 기준 문서를 빠르게 찾기 위한 입구이옵니다. 실제 구현 판단은 반드시 위 연결 문서들과 최신 QA 리포트를 함께 보고 내리는 것이 옳사옵니다.
