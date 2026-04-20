@@ -1556,6 +1556,13 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
         rightPx  = Math.max(0, Math.min(36, Math.round((Number(padR) || 0) * TABLE_UNIT_SCALE)));
         bottomPx = Math.max(0, Math.min(30, Math.round((Number(padB) || 0) * TABLE_UNIT_SCALE)));
         leftPx   = Math.max(0, Math.min(36, Math.round((Number(padL) || 0) * TABLE_UNIT_SCALE)));
+      } else if (Array.isArray(tableBlock.defaultCellPadding) && tableBlock.defaultCellPadding.some(v => Number(v) > 0)) {
+        // HWP 표 수준 기본 셀 내부 여백 (tableInfo offset 10-17) 적용
+        const [dL, dR, dT, dB] = tableBlock.defaultCellPadding;
+        topPx    = Math.max(0, Math.min(30, Math.round((Number(dT) || 0) * TABLE_UNIT_SCALE)));
+        rightPx  = Math.max(0, Math.min(36, Math.round((Number(dR) || 0) * TABLE_UNIT_SCALE)));
+        bottomPx = Math.max(0, Math.min(30, Math.round((Number(dB) || 0) * TABLE_UNIT_SCALE)));
+        leftPx   = Math.max(0, Math.min(36, Math.round((Number(dL) || 0) * TABLE_UNIT_SCALE)));
       } else if (rowLooksLikeTitle) {
         if (isTitleLabelCell) {
           topPx = 16; rightPx = 10; bottomPx = 16; leftPx = 10;

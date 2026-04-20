@@ -52,6 +52,33 @@
 ---
 
 
+### 문서 정확성 — 영향도 높은 항목 3차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`
+
+#### 7. HWP 표 기본 셀 내부 여백 파싱 (Table Default Cell Padding)
+
+- 문제: HWP `HWPTAG_TABLE` (tag 80) 레코드의 offset 10-17 에는 표 전체 기본 셀 내부 여백
+  (left/right/top/bottom inner margin, HWPUNIT)이 저장되어 있지만 파싱하지 않아
+  개별 셀 여백이 0인 경우 3~4px 하드코딩 폴백으로 처리됨.
+- 수정 내용:
+  - `_parseTableInfo` (hwp-parser.js) / `parseTableInfo` (parser.worker.js):
+    `defaultCellPadding: [L, R, T, B]` 배열 추가 파싱.
+  - `_buildTableBlock` (hwp-parser.js): `defaultCellPadding`을 테이블 블록에 전달.
+  - `appendTableBlock` (hwp-renderer.js):
+    셀의 자체 padding이 모두 0일 때 `tableBlock.defaultCellPadding`을 우선 적용.
+    기존 하드코딩 폴백(타이틀행/메타행 등)은 그 이후의 폴백으로 유지.
+- 영향 범위: 개별 셀 여백을 지정하지 않고 표 수준 기본 여백을 사용하는 HWP 표 전체.
+
+#### 검증
+
+- `node --check js/hwp-parser.js` 통과
+- `node --check js/parser.worker.js` 통과
+- `node --check js/hwp-renderer.js` 통과
+
+---
+
+
 ### 문서 정확성 — 영향도 높은 항목 2차 구현
 
 - 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`

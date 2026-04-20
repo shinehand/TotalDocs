@@ -1879,6 +1879,13 @@ function parseTableInfo(body) {
   const rowCount = u16(body, 4);
   const colCount = u16(body, 6);
   const cellSpacing = u16(body, 8);
+  // offsets 10-17: 표 전체 기본 셀 내부 여백 (HWPUNIT)
+  const defaultCellPadding = [
+    u16(body, 10), // left
+    u16(body, 12), // right
+    u16(body, 14), // top
+    u16(body, 16), // bottom
+  ];
   const rowHeights = [];
 
   let off = 18;
@@ -1890,6 +1897,7 @@ function parseTableInfo(body) {
     rowCount,
     colCount,
     cellSpacing,
+    defaultCellPadding,
     rowHeights,
   };
 }

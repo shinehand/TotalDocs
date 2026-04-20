@@ -2925,6 +2925,13 @@ const HwpParser = {
     const rowCount = HwpParser._u16(body, 4);
     const colCount = HwpParser._u16(body, 6);
     const cellSpacing = HwpParser._u16(body, 8);
+    // offsets 10-17: 표 전체 기본 셀 내부 여백 (HWPUNIT) — 셀이 자체 여백을 지정하지 않을 때 기준값
+    const defaultCellPadding = [
+      HwpParser._u16(body, 10), // left
+      HwpParser._u16(body, 12), // right
+      HwpParser._u16(body, 14), // top
+      HwpParser._u16(body, 16), // bottom
+    ];
     const rowHeights = [];
 
     let off = 18;
@@ -2936,6 +2943,7 @@ const HwpParser = {
       rowCount,
       colCount,
       cellSpacing,
+      defaultCellPadding,
       rowHeights,
     };
   },
@@ -3224,6 +3232,7 @@ const HwpParser = {
       rows,
       columnWidths,
       cellSpacing: tableInfo?.cellSpacing || 0,
+      defaultCellPadding: tableInfo?.defaultCellPadding || null,
       rowHeights: tableInfo?.rowHeights || [],
       estimatedParagraphs,
       sourceFormat: tableInfo?.sourceFormat || '',
