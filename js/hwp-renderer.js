@@ -301,6 +301,7 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     para.texts.forEach(run => appendRunSpan(contentTarget, run));
   }
 
+  enforceMinimumParagraphLineHeight(p, para);
   parent.appendChild(p);
 }
 
@@ -598,6 +599,32 @@ function paragraphBaseFontPx(para) {
     ...(para?.texts || []).map(run => Math.max(0, resolveRunFontSize(run))),
   );
   return fontPt * (96 / 72);
+}
+
+function resolveInlineLineHeightPx(lineHeightValue, baseFontPx) {
+  const raw = String(lineHeightValue || '').trim();
+  if (!raw) return 0;
+  if (raw.endsWith('px')) {
+    const px = Number(raw.slice(0, -2));
+    return Number.isFinite(px) && px > 0 ? px : 0;
+  }
+  const unitless = Number(raw);
+  if (Number.isFinite(unitless) && unitless > 0 && baseFontPx > 0) {
+    return unitless * baseFontPx;
+  }
+  return 0;
+}
+
+function enforceMinimumParagraphLineHeight(paragraphEl, para) {
+  if (!paragraphEl) return;
+  const baseFontPx = paragraphBaseFontPx(para);
+  if (!Number.isFinite(baseFontPx) || baseFontPx <= 0) return;
+  // 일부 문서는 lineSeg 값이 비정상적으로 낮아 줄이 겹칠 수 있어 최소 줄높이를 보장한다.
+  const minLineHeightPx = Math.max(12, Math.ceil(baseFontPx * 1.12));
+  const currentLineHeightPx = resolveInlineLineHeightPx(paragraphEl.style.lineHeight, baseFontPx);
+  if (currentLineHeightPx > 0 && currentLineHeightPx < minLineHeightPx) {
+    paragraphEl.style.lineHeight = `${minLineHeightPx}px`;
+  }
 }
 
 function resolveParagraphLineHeight(para) {
@@ -1439,6 +1466,15 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   wrap.dataset.pageIndex = String(pageIndex);
   wrap.dataset.tableIndex = String(tableIndex);
   if (usePrimaryFormLayout) wrap.dataset.layout = 'first-page-primary';
+  // 대부분의 본문 표는 자리차지(top-and-bottom) 배치로 float 없이 블록 흐름을 유지해야 한다.
+  // applyDeferredObjectLayouts 실행 전(첫 번째 페인트)에도 올바른 레이아웃을 보장하기 위해
+  // 비절대-배치 표에는 미리 clear: both 를 설정한다.
+  if (!tableBlock.inline && !shouldAbsolutePlaceBlock(tableBlock)) {
+    const initialWrapMode = HwpParser._normalizeObjectTextWrap(tableBlock.textWrap);
+    if (initialWrapMode === 'top-and-bottom') {
+      wrap.style.clear = 'both';
+    }
+  }
 
   const table = document.createElement('table');
   table.className = 'hwp-table';
