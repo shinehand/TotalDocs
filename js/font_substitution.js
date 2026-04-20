@@ -723,7 +723,7 @@
     /**
      * CSS font 문자열에서 font-family를 해소하고 fallback 체인을 적용한다.
      *
-     * 입력: `bold 14px "안상수2006가는", sans-serif`
+     * 입력: `bold 14px "안상수2006가는", sans-serif` (또는 `bold 14pt "font-name"`)
      * 출력: `bold 14px "돋움", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", sans-serif`
      *
      * @param {string} cssFont

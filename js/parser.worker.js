@@ -1946,6 +1946,11 @@ function skipControlSubtree(data, startPos, ctrlLevel) {
 function parseTableInfo(body) {
   if (!body || body.length < 18) return null;
 
+  // DWORD at offset 0: attribute flags
+  //   bits 0-4: numHeaderRow (0-31) — 머리 행 수 (반복 출력 행 수)
+  const attrDword = u32(body, 0);
+  const numHeaderRows = attrDword & 0x1F; // bits 0-4
+
   const rowCount = u16(body, 4);
   const colCount = u16(body, 6);
   const cellSpacing = u16(body, 8);
@@ -1964,6 +1969,7 @@ function parseTableInfo(body) {
   }
 
   return {
+    numHeaderRows,
     rowCount,
     colCount,
     cellSpacing,
@@ -2078,6 +2084,7 @@ function sliceTableBlock(tableBlock, startRow, endRow) {
     rowCount: rows.length,
     rows,
     rowHeights: (tableBlock.rowHeights || []).slice(startRow, endRow),
+    startRowOffset: startRow,
     estimatedParagraphs: rows.reduce(
       (sum, row) => sum + row.cells.reduce(
         (cellSum, cell) => cellSum + Math.max(1, (cell.paragraphs || []).length),
@@ -2221,6 +2228,7 @@ function buildTableBlock(tableInfo, cells) {
     columnWidths,
     cellSpacing: tableInfo?.cellSpacing || 0,
     rowHeights: tableInfo?.rowHeights || [],
+    numHeaderRows: Math.max(0, Number(tableInfo?.numHeaderRows) || 0),
     estimatedParagraphs,
     texts: [run('')],
   };
