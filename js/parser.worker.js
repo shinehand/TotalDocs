@@ -924,9 +924,22 @@ function i32(b, o) {
 function parseHwpParaShape(body) {
   if (!body || body.length < 26) return null;
   const attr = u32(body, 0);
-  const modernAttr = body.length >= 46 ? u32(body, 42) : 0;
+  // attr2 is at offset 42 (한 줄 입력 / 자동 간격 flags — not line spacing type).
+  // attr3 at offset 46 holds the new line-spacing kind (bits 0-4).
+  // lineSpacingNew at offset 50 holds the new line-spacing value.
+  const attr3 = body.length >= 50 ? u32(body, 46) : 0;
   const modernLineSpacing = body.length >= 54 ? u32(body, 50) : 0;
   const legacyLineSpacing = body.length >= 28 ? u32(body, 24) : 0;
+  const modernLineSpacingType = modernLineSpacing
+    ? hwpLineSpacingTypeFromCode(attr3 & 0x1F)
+    : null;
+  // Modern percent format stores value×100 (16000=160%); normalise to legacy scale (160=160%)
+  // so that resolveParagraphLineHeight can use a consistent divisor of 100.
+  const lineSpacing = modernLineSpacing
+    ? (modernLineSpacingType === 'percent'
+      ? Math.round(modernLineSpacing / 100)
+      : modernLineSpacing)
+    : (legacyLineSpacing || 0);
   return {
     align: hwpAlignFromAttr(attr),
     marginLeft: i32(body, 4),
@@ -939,10 +952,8 @@ function parseHwpParaShape(body) {
     borderFillId: body.length >= 34 ? u16(body, 32) : 0,
     headShapeType: ['none', 'outline', 'number', 'bullet'][(attr >> 23) & 0x3] || 'none',
     headShapeLevel: Math.max(1, ((attr >> 25) & 0x7) + 1),
-    lineSpacingType: modernLineSpacing
-      ? hwpLineSpacingTypeFromCode(modernAttr & 0x1F)
-      : hwpLineSpacingTypeFromCode(attr & 0x3),
-    lineSpacing: modernLineSpacing || legacyLineSpacing || 0,
+    lineSpacingType: modernLineSpacingType || hwpLineSpacingTypeFromCode(attr & 0x3),
+    lineSpacing,
   };
 }
 
@@ -1139,7 +1150,8 @@ function hwpCellVerticalAlign(listFlags) {
 function summarizeHwpLineSegs(lineSegs = []) {
   const saneSegs = lineSegs.filter(seg => {
     const height = Math.max(Number(seg?.height) || 0, Number(seg?.textHeight) || 0);
-    return height >= 400 && height <= 6000;
+    // Accept lines from tiny text (200 = ~2.7px) up to large headings (14400 = ~192px)
+    return height >= 200 && height <= 14400;
   });
   if (!saneSegs.length) {
     return { lineHeightPx: 0, layoutHeightPx: 0 };
@@ -1148,9 +1160,10 @@ function summarizeHwpLineSegs(lineSegs = []) {
   const heights = saneSegs.map(seg => Math.max(Number(seg.height) || 0, Number(seg.textHeight) || 0));
   const totalHeight = heights.reduce((sum, value) => sum + value, 0);
   const avgHeight = totalHeight / heights.length;
+  // Allow up to 96px per line so large heading fonts are not clamped.
   return {
-    lineHeightPx: Math.max(11, Math.min(56, Math.round(avgHeight / 75))),
-    layoutHeightPx: Math.max(12, Math.min(320, Math.round(totalHeight / 75))),
+    lineHeightPx: Math.max(11, Math.min(96, Math.round(avgHeight / 75))),
+    layoutHeightPx: Math.max(12, Math.min(480, Math.round(totalHeight / 75))),
   };
 }
 

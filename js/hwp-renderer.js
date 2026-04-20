@@ -184,16 +184,22 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     p.style.textIndent = `${hwpSignedUnitToPx(para.textIndent, -170, 226, 1 / 75, 0)}px`;
   }
   if (Number.isFinite(para.spacingBefore) && para.spacingBefore > 0) {
-    p.style.marginTop = `${hwpUnitToPx(para.spacingBefore, 0, 80, 1 / 75, 0)}px`;
+    p.style.marginTop = `${hwpUnitToPx(para.spacingBefore, 0, 120, 1 / 75, 0)}px`;
   }
   if (Number.isFinite(para.spacingAfter) && para.spacingAfter > 0) {
-    p.style.marginBottom = `${hwpUnitToPx(para.spacingAfter, 0, 80, 1 / 75, 4)}px`;
+    p.style.marginBottom = `${hwpUnitToPx(para.spacingAfter, 0, 120, 1 / 75, 4)}px`;
   }
-  const resolvedLineHeight = resolveParagraphLineHeight(para);
-  if (resolvedLineHeight) {
-    p.style.lineHeight = resolvedLineHeight;
-  } else if (Number.isFinite(para.lineHeightPx) && para.lineHeightPx > 0) {
+  // When HWP line-segment heights are available they reflect actual HWP rendering and
+  // should take priority over the abstract lineSpacing formula (which can be affected by
+  // encoding bugs in the modern-format attr3/lineSpacingNew fields).
+  const hasLineSegHeight = Number.isFinite(para.lineHeightPx) && para.lineHeightPx > 0;
+  if (hasLineSegHeight) {
     p.style.lineHeight = `${para.lineHeightPx}px`;
+  } else {
+    const resolvedLineHeight = resolveParagraphLineHeight(para);
+    if (resolvedLineHeight) {
+      p.style.lineHeight = resolvedLineHeight;
+    }
   }
   if (Number.isFinite(para.layoutHeightPx) && para.layoutHeightPx > 0) {
     p.style.minHeight = `${para.layoutHeightPx}px`;
@@ -913,16 +919,16 @@ function applyPageStyle(pageEl, page, pageIndex) {
       pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWP_SCALE)))}px`;
     }
     if (margins.top > 0) {
-      pageEl.style.paddingTop = `${Math.max(22, Math.min(120, Math.round(margins.top * HWP_SCALE)))}px`;
+      pageEl.style.paddingTop = `${Math.max(22, Math.min(140, Math.round(margins.top * HWP_SCALE)))}px`;
     }
     if (margins.right > 0) {
-      pageEl.style.paddingRight = `${Math.max(22, Math.min(120, Math.round(margins.right * HWP_SCALE)))}px`;
+      pageEl.style.paddingRight = `${Math.max(22, Math.min(140, Math.round(margins.right * HWP_SCALE)))}px`;
     }
     if (margins.bottom > 0) {
-      pageEl.style.paddingBottom = `${Math.max(22, Math.min(120, Math.round(margins.bottom * HWP_SCALE)))}px`;
+      pageEl.style.paddingBottom = `${Math.max(22, Math.min(140, Math.round(margins.bottom * HWP_SCALE)))}px`;
     }
     if (margins.left > 0) {
-      pageEl.style.paddingLeft = `${Math.max(22, Math.min(120, Math.round(margins.left * HWP_SCALE)))}px`;
+      pageEl.style.paddingLeft = `${Math.max(22, Math.min(140, Math.round(margins.left * HWP_SCALE)))}px`;
     }
     return;
   }
