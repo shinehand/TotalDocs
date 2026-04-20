@@ -1759,6 +1759,7 @@ async function processBuffer(buffer, filename, sizeBytes, options = {}) {
         console.warn('[APP] 최근 파일 저장 실패:', err?.message || err);
       });
     }
+    addRecentFileLocal(filename);
     hideLoading();
     refreshWasmDiagnostics();
     renderHWP(null, wasmResult);
@@ -1825,11 +1826,26 @@ async function processBuffer(buffer, filename, sizeBytes, options = {}) {
       console.warn('[APP] 최근 파일 저장 실패:', err?.message || err);
     });
   }
+  addRecentFileLocal(filename);
 
   hideLoading();
   renderHWP(doc);
   setWasmEditVisualState(false);
   updateUiAfterLoad(filename, sizeBytes);
+}
+
+/* ── localStorage 기반 최근 파일 저장 (확장 프로그램 없이도 동작) ── */
+function addRecentFileLocal(filename) {
+  if (!filename) return;
+  try {
+    const key = 'recentHwpFiles';
+    const stored = JSON.parse(localStorage.getItem(key) || '[]');
+    const entry = { name: String(filename).trim(), ts: Date.now() };
+    const deduped = [entry, ...stored.filter(f => f.name !== entry.name)].slice(0, 20);
+    localStorage.setItem(key, JSON.stringify(deduped));
+  } catch (e) {
+    // localStorage를 사용할 수 없는 환경에서는 무시
+  }
 }
 
 /* ── 파일 처리 ── */

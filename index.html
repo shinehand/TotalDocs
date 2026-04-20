@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChromeHWP – 브라우저에서 HWP 파일 열기</title>
+  <meta name="description" content="크롬 확장 프로그램으로 HWP, HWPX, OWPML 문서를 브라우저에서 직접 열람하고 편집하세요." />
+  <style>
+    :root {
+      --primary: #1a5cd8;
+      --primary-dark: #1246aa;
+      --bg: #f8f9fb;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --muted: #5a6478;
+      --border: #e2e6ed;
+      --accent: #e8f0fe;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', '맑은 고딕', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* ── 헤더 ── */
+    header {
+      background: linear-gradient(135deg, #1246aa 0%, #1a5cd8 60%, #3d7bff 100%);
+      color: #fff;
+      text-align: center;
+      padding: 64px 24px 56px;
+    }
+    header img.logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+      margin-bottom: 20px;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    header p.tagline {
+      font-size: 1.15rem;
+      opacity: 0.88;
+      max-width: 520px;
+      margin: 0 auto 32px;
+    }
+    .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 13px 28px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.18); }
+    .btn-white { background: #fff; color: var(--primary); }
+    .btn-outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.7); }
+
+    /* ── 배지 ── */
+    .badges {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.35);
+      color: #fff;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+
+    /* ── 본문 ── */
+    main { max-width: 960px; margin: 0 auto; padding: 56px 24px; }
+
+    section { margin-bottom: 64px; }
+    section h2 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: var(--text);
+    }
+    section h2 span.accent {
+      color: var(--primary);
+    }
+
+    /* ── 기능 카드 ── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: box-shadow 0.15s;
+    }
+    .feature-card:hover { box-shadow: 0 4px 20px rgba(26,92,216,0.10); }
+    .feature-card .icon {
+      font-size: 2rem;
+      margin-bottom: 12px;
+    }
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .feature-card p {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    /* ── 설치 단계 ── */
+    .steps { list-style: none; counter-reset: step; }
+    .steps li {
+      counter-increment: step;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 20px 20px 72px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 38px;
+      height: 38px;
+      background: var(--accent);
+      color: var(--primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1rem;
+    }
+    .steps li strong { display: block; font-size: 1rem; margin-bottom: 4px; }
+    .steps li span { font-size: 0.9rem; color: var(--muted); }
+    .steps li code {
+      display: inline-block;
+      background: #f0f3f8;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.85rem;
+      font-family: 'Consolas', 'Courier New', monospace;
+      color: #c0392b;
+    }
+    .steps li a { color: var(--primary); }
+
+    /* ── 지원 형식 ── */
+    .format-list {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .format-pill {
+      background: var(--accent);
+      color: var(--primary);
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    /* ── 푸터 ── */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- ── 헤더 ── -->
+<header>
+  <img class="logo" src="icons/icon128.png" alt="ChromeHWP 아이콘" />
+  <h1>ChromeHWP</h1>
+  <p class="tagline">
+    어떤 브라우저에서든 <strong>HWP · HWPX · OWPML</strong> 문서를<br />
+    설치 없이 바로 열람하고 편집하는 무료 웹 뷰어
+  </p>
+  <div class="btn-group">
+    <a class="btn btn-white"
+       href="viewer.html">
+      🌐 웹 뷰어 바로 열기
+    </a>
+    <a class="btn btn-outline"
+       href="https://github.com/shinehand/ChromeHWP/releases/latest"
+       target="_blank" rel="noopener">
+      ⬇️ 확장 프로그램 다운로드
+    </a>
+    <a class="btn btn-outline"
+       href="https://github.com/shinehand/ChromeHWP"
+       target="_blank" rel="noopener">
+      ⭐ GitHub
+    </a>
+  </div>
+  <div class="badges">
+    <span class="badge">모든 브라우저 지원</span>
+    <span class="badge">Chrome Extension</span>
+    <span class="badge">HWP 5.0</span>
+    <span class="badge">HWPX / OWPML</span>
+    <span class="badge">WASM 렌더링</span>
+    <span class="badge">무료 · 오픈소스</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── 웹 뷰어 CTA ── -->
+  <section style="text-align:center; padding: 8px 0 32px;">
+    <a href="viewer.html"
+       style="display:inline-flex;align-items:center;gap:10px;background:var(--primary);color:#fff;
+              padding:16px 36px;border-radius:10px;font-size:1.1rem;font-weight:700;
+              text-decoration:none;box-shadow:0 4px 16px rgba(26,92,216,0.25);transition:transform 0.15s,box-shadow 0.15s;"
+       onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 28px rgba(26,92,216,0.35)'"
+       onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(26,92,216,0.25)'">
+      🌐 HWP 웹 뷰어 바로 열기 →
+    </a>
+    <p style="margin-top:12px;color:var(--muted);font-size:0.9rem;">
+      설치 불필요 · Chrome · Firefox · Safari · Edge 모두 지원
+    </p>
+  </section>
+
+  <!-- ── 지원 형식 ── -->
+  <section>
+    <h2>지원 파일 형식</h2>
+    <div class="format-list">
+      <div class="format-pill">.hwp</div>
+      <div class="format-pill">.hwpx</div>
+      <div class="format-pill">.owpml</div>
+    </div>
+  </section>
+
+  <!-- ── 주요 기능 ── -->
+  <section>
+    <h2>주요 <span class="accent">기능</span></h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon">📄</div>
+        <h3>HWP / HWPX 열람</h3>
+        <p>한글 문서를 별도 프로그램 없이 크롬 브라우저에서 바로 열 수 있습니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">✏️</div>
+        <h3>직접 편집</h3>
+        <p>텍스트 삽입·삭제·문단 분할 등 기본 편집 기능을 문서 위에서 직접 수행할 수 있습니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">💾</div>
+        <h3>저장 · 다운로드</h3>
+        <p>편집한 내용을 원본 HWP/HWPX 형식으로 저장하거나 다운로드할 수 있습니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔍</div>
+        <h3>텍스트 검색</h3>
+        <p>문서 내 키워드를 빠르게 검색하고 해당 위치로 이동할 수 있습니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🖼️</div>
+        <h3>Canvas 기반 렌더링</h3>
+        <p>WebAssembly 엔진으로 표·그림·수식·차트를 한컴 Viewer와 유사한 화질로 렌더링합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📐</div>
+        <h3>레이아웃 감사 패널</h3>
+        <p>사이드바에서 현재 쪽의 표·그림·수식·차트 집계와 핫스팟 쪽 이동을 확인할 수 있습니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 사용 방법 ── -->
+  <section>
+    <h2>🌐 웹 뷰어 사용 방법</h2>
+    <ol class="steps">
+      <li>
+        <strong>웹 뷰어 열기</strong>
+        <span>위의 <strong>웹 뷰어 바로 열기</strong> 버튼을 클릭하거나 <a href="viewer.html">viewer.html</a> 에 접속합니다. Chrome, Firefox, Safari, Edge 어디서든 작동합니다.</span>
+      </li>
+      <li>
+        <strong>HWP 파일 열기</strong>
+        <span>화면 중앙에 <strong>.hwp / .hwpx / .owpml</strong> 파일을 끌어다 놓거나, <strong>파일 선택</strong> 버튼으로 업로드합니다.</span>
+      </li>
+      <li>
+        <strong>열람 및 편집</strong>
+        <span>문서가 즉시 렌더링됩니다. 툴바의 <strong>편집 모드</strong>를 켜면 텍스트 편집도 가능합니다.</span>
+      </li>
+      <li>
+        <strong>저장</strong>
+        <span>편집 후 <strong>저장</strong> 또는 <strong>다른 이름으로 저장</strong>으로 HWPX·HTML·PDF 등으로 내보낼 수 있습니다.</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ── 크롬 확장 설치 방법 ── -->
+  <section>
+    <h2>🛠️ 크롬 확장 프로그램 설치 <span style="font-size:0.75rem;font-weight:400;color:var(--muted)">(선택사항 — 웹 페이지 HWP 링크 자동 열기 기능)</span></h2>
+    <ol class="steps">
+      <li>
+        <strong>확장 프로그램 파일 다운로드</strong>
+        <span>
+          <a href="https://github.com/shinehand/ChromeHWP/releases/latest" target="_blank" rel="noopener">
+            최신 릴리스 페이지
+          </a>에서 <code>ChromeHWP-vX.X.X.zip</code> 파일을 다운로드하고 압축을 해제합니다.
+        </span>
+      </li>
+      <li>
+        <strong>크롬 확장 프로그램 관리 페이지 열기</strong>
+        <span>크롬 주소창에 <code>chrome://extensions</code> 를 입력하고 이동합니다.</span>
+      </li>
+      <li>
+        <strong>개발자 모드 활성화</strong>
+        <span>오른쪽 상단의 <strong>개발자 모드</strong> 토글을 켭니다.</span>
+      </li>
+      <li>
+        <strong>압축 해제된 폴더 로드</strong>
+        <span><strong>압축해제된 확장 프로그램을 로드합니다</strong> 버튼을 클릭한 뒤, 압축을 해제한 폴더를 선택합니다.</span>
+      </li>
+      <li>
+        <strong>설치 완료</strong>
+        <span>크롬 툴바에 ChromeHWP 아이콘이 나타나면 설치가 완료된 것입니다. 웹 페이지의 HWP 링크를 우클릭하면 뷰어로 바로 열 수 있습니다.</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ── 프로젝트 소개 ── -->
+  <section>
+    <h2>프로젝트 목표</h2>
+    <div class="feature-card" style="max-width:700px">
+      <p style="font-size:0.95rem; color:var(--muted); line-height:1.8">
+        ChromeHWP는 어떤 HWP·HWPX·OWPML 문서라도 원본 형식 데이터에 따라 열리고,
+        한컴 Viewer와 같은 페이지 흐름·레이아웃으로 보이게 하는 것을 목표로 합니다.<br/><br/>
+        현재 대표 샘플 5종에서 한컴 Viewer와 동일한 페이지 수를 달성했으며,
+        표·그림·수식·차트·폰트 렌더링 정밀도를 지속적으로 개선 중입니다.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    © 2024–2026 ChromeHWP Contributors ·
+    <a href="https://github.com/shinehand/ChromeHWP" target="_blank" rel="noopener">GitHub 저장소</a> ·
+    <a href="https://github.com/shinehand/ChromeHWP/issues" target="_blank" rel="noopener">문제 신고</a>
+  </p>
+</footer>
+
+</body>
+</html>
