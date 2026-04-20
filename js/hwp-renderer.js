@@ -1510,6 +1510,18 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     table.appendChild(colgroup);
   }
 
+  const numHeaderRows = Math.max(0, Number(tableBlock.numHeaderRows) || 0);
+  const startRowOffset = Math.max(0, Number(tableBlock.startRowOffset) || 0);
+  // Rows from the original table that fall within the header band (row 0..numHeaderRows-1)
+  // are rendered into <thead>; all other rows go into <tbody>.
+  // For split/slice chunks, startRowOffset tells us which original row index each chunk row maps to.
+  const originalHeaderEnd = numHeaderRows; // original row indices 0 .. numHeaderRows-1 are header rows
+  const chunkHeaderCount = Math.max(0, Math.min(
+    numHeaderRows - startRowOffset,
+    (tableBlock.rowCount || 0),
+  )); // how many rows in this chunk are header rows
+
+  let thead = null;
   const tbody = document.createElement('tbody');
   const rowsToRender = usePrimaryFormLayout
     ? normalizeApplicationFormRows(tableBlock, tableBlock.rows || [])
@@ -1542,6 +1554,16 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     else if (rowLooksLikeCompactHeader) tr.dataset.rowRole = 'header';
     else if (rowLooksLikePersonForm) tr.dataset.rowRole = 'person-form';
     else tr.dataset.rowRole = 'body';
+
+    // Determine if this row is a header row (belongs in <thead>).
+    // chunkHeaderCount > 0 means some rows at the top of this chunk are header rows.
+    const isHeaderRow = chunkHeaderCount > 0 && !usePrimaryFormLayout && rowVisualIndex < chunkHeaderCount;
+    if (isHeaderRow) {
+      if (!thead) {
+        thead = document.createElement('thead');
+        thead.className = 'hwp-table-head';
+      }
+    }
 
     const rowHeight = tableBlock.rowHeights?.[row.index];
     const maxCellHeight = cells.reduce((max, cell) => Math.max(max, Number(cell.height) || 0), 0);
@@ -1804,9 +1826,14 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       tr.appendChild(td);
     });
 
-    tbody.appendChild(tr);
+    if (isHeaderRow) {
+      thead.appendChild(tr);
+    } else {
+      tbody.appendChild(tr);
+    }
   });
 
+  if (thead) table.appendChild(thead);
   table.appendChild(tbody);
   wrap.appendChild(table);
   parent.appendChild(wrap);

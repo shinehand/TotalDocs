@@ -1366,6 +1366,17 @@ body {
   vertical-align: middle;
 }
 
+/* 머리행 반복: <thead> 영역 스타일 — 인쇄 시 각 페이지에서 반복 */
+.hwp-table-head {
+  display: table-header-group;
+}
+
+@media print {
+  .hwp-table-head {
+    display: table-header-group;
+  }
+}
+
 .hwp-table-row[data-row-role="header"] > .hwp-table-cell .hwp-table-paragraph,
 .hwp-table-cell[data-role="group-label"] .hwp-table-paragraph {
   text-align: center;

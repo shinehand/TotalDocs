@@ -905,10 +905,12 @@ const HwpParser = {
       });
     });
 
+    const repeatHeader = HwpParser._hwpxAttrNum(tblEl, 'repeatHeader', 0);
     const table = HwpParser._hwpxNormalizeTableMetrics(HwpParser._withObjectLayout(HwpParser._buildTableBlock({
       rowCount: Math.max(rowEls.length, HwpParser._hwpxAttrNum(tblEl, 'rowCnt', rowEls.length)),
       colCount: HwpParser._hwpxAttrNum(tblEl, 'colCnt', 0),
       cellSpacing: HwpParser._hwpxAttrNum(tblEl, 'cellSpacing', 0),
+      numHeaderRows: repeatHeader > 0 ? repeatHeader : 0,
       sourceFormat: 'hwpx',
     }, cells), objectInfo));
 
@@ -3016,6 +3018,11 @@ const HwpParser = {
   _parseTableInfo(body) {
     if (!body || body.length < 18) return null;
 
+    // DWORD at offset 0: attribute flags
+    //   bits 0-4: numHeaderRow (0-31) — 머리 행 수 (반복 출력 행 수)
+    const attrDword = HwpParser._u32(body, 0);
+    const numHeaderRows = attrDword & 0x1F; // bits 0-4
+
     const rowCount = HwpParser._u16(body, 4);
     const colCount = HwpParser._u16(body, 6);
     const cellSpacing = HwpParser._u16(body, 8);
@@ -3034,6 +3041,7 @@ const HwpParser = {
     }
 
     return {
+      numHeaderRows,
       rowCount,
       colCount,
       cellSpacing,
@@ -3184,6 +3192,9 @@ const HwpParser = {
       rowCount: rows.length,
       rows,
       rowHeights: (tableBlock.rowHeights || []).slice(startRow, endRow),
+      // startRowOffset lets the renderer know which rows in the original table these rows correspond to
+      // (used to determine if header rows should be rendered as <thead>)
+      startRowOffset: startRow,
       estimatedParagraphs: rows.reduce(
         (sum, row) => sum + row.cells.reduce(
           (cellSum, cell) => cellSum + Math.max(1, (cell.paragraphs || []).length),
@@ -3328,6 +3339,7 @@ const HwpParser = {
       cellSpacing: tableInfo?.cellSpacing || 0,
       defaultCellPadding: tableInfo?.defaultCellPadding || null,
       rowHeights: tableInfo?.rowHeights || [],
+      numHeaderRows: Math.max(0, Number(tableInfo?.numHeaderRows) || 0),
       estimatedParagraphs,
       sourceFormat: tableInfo?.sourceFormat || '',
       texts: [HwpParser._run('')],
