@@ -749,10 +749,13 @@ const HwpParser = {
     const sideChar = body.length >= 6
       ? HwpParser._decodeHwpUtf16String(body, 4, 1).replace(/\u0000/g, '').trim()
       : '';
+    // offset 6: WORD startPageNumber (일부 HWP 버전에만 존재)
+    const startPageNum = body.length >= 8 ? HwpParser._u16(body, 6) : 0;
     return {
       position: HwpParser._hwpPageNumPositionCode(posCode),
       formatType: formatCode === 0 ? 'DIGIT' : 'OTHER',
       sideChar,
+      startPageNum: startPageNum > 0 ? startPageNum : 1,
     };
   },
 
@@ -854,13 +857,19 @@ const HwpParser = {
     const rowEls = HwpParser._hwpxChildren(tblEl, 'tr');
     const cells = [];
     const objectInfo = HwpParser._hwpxParseObjectLayout(tblEl);
+    // Table-level default inner margin (used when a cell has hasMargin="0")
+    const tblInMarginEl = HwpParser._hwpxFirstChild(tblEl, 'inMargin');
 
     rowEls.forEach((trEl, rowIndex) => {
       HwpParser._hwpxChildren(trEl, 'tc').forEach((tcEl, cellIndex) => {
         const addrEl = HwpParser._hwpxFirstChild(tcEl, 'cellAddr');
         const spanEl = HwpParser._hwpxFirstChild(tcEl, 'cellSpan');
         const sizeEl = HwpParser._hwpxFirstChild(tcEl, 'cellSz');
-        const marginEl = HwpParser._hwpxFirstChild(tcEl, 'cellMargin');
+        // Use per-cell margin when hasMargin="1", otherwise fall back to table inMargin
+        const hasOwnMargin = tcEl.getAttribute?.('hasMargin') === '1';
+        const marginEl = hasOwnMargin
+          ? HwpParser._hwpxFirstChild(tcEl, 'cellMargin')
+          : tblInMarginEl || HwpParser._hwpxFirstChild(tcEl, 'cellMargin');
         const subListEl = HwpParser._hwpxFirstChild(tcEl, 'subList');
         const blocks = subListEl ? HwpParser._hwpxBlocksFromContainer(subListEl, header) : [];
         const contentHeight = HwpParser._hwpxAttrNum(subListEl, 'textHeight', 0);
@@ -1105,7 +1114,11 @@ const HwpParser = {
               sectionPageIndex,
               sectionVisibility.hideFirstFooter === '1',
             );
-            const pageNumber = pages.length + 1;
+            // secd startPageNum이 설정된 경우 해당 섹션의 시작 번호를 사용, 없으면 누적 번호
+            const sectionBasePageNum = Number(section.pageStyle?.startPageNum) > 0
+              ? Number(section.pageStyle.startPageNum)
+              : pages.length + 1;
+            const pageNumber = sectionBasePageNum + sectionPageIndex;
             // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 footer가 없을 때만 추가해 중복을 막는다.
             const pageNumMeta = section.pageStyle?.pageNumber;
             const hideFirstPageNum = sectionVisibility.hideFirstPageNum === '1';
@@ -1158,8 +1171,10 @@ const HwpParser = {
           const pageNumMeta = parsedBody.pageStyle?.pageNumber;
           const hideFirstPageNum = bodyVisibility.hideFirstPageNum === '1';
           if (pageNumMeta && !resolvedFooterBlocks.length && !resolvedHeaderBlocks.length) {
+            const startPageNum = Number(parsedBody.pageStyle?.startPageNum) > 0
+              ? Number(parsedBody.pageStyle.startPageNum) : 1;
             const autoPageNumBlock = HwpParser._hwpxCreatePageNumberBlock(
-              pageNumMeta, pageIndex + 1, hideFirstPageNum && pageIndex === 0,
+              pageNumMeta, startPageNum + pageIndex, hideFirstPageNum && pageIndex === 0,
             );
             if (autoPageNumBlock) {
               const isTopNum = String(pageNumMeta.position || '').toUpperCase().includes('TOP');
@@ -3496,7 +3511,13 @@ const HwpParser = {
               scanPos = sub.nextPos;
             }
             if (secDef) {
-              if (pageNumMeta) secDef.pageNumber = pageNumMeta;
+              if (pageNumMeta) {
+                secDef.pageNumber = pageNumMeta;
+                // startPageNum: tag-76 PAGE_NUM_PARA에서 읽은 시작 쪽번호 (기본 1)
+                if (pageNumMeta.startPageNum > 1) {
+                  secDef.startPageNum = pageNumMeta.startPageNum;
+                }
+              }
               extras.sectionMeta = secDef;
             }
           }

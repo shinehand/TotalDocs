@@ -1087,3 +1087,35 @@
   - `node --check js/hwp-parser.js` 통과
   - `node --check js/parser.worker.js` 통과
   - `node --check js/hwp-renderer.js` 통과
+
+---
+
+### 문서 정확성 — 영향도 높은 항목 5차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `index.html`, `favicon.ico`
+
+#### 11. HWPX 테이블 셀 `inMargin` fallback
+
+- 문제: HWPX 표에서 셀의 `hasMargin="0"` 속성이 설정된 경우 셀 고유 `cellMargin`이 없고 테이블 레벨 `<hp:inMargin>`을 사용해야 하는데, 기존 코드는 항상 `cellMargin`만 읽어 zero padding이 됨.
+- 수정: `_hwpxTableBlocks`에서 `tblInMarginEl = _hwpxFirstChild(tblEl, 'inMargin')` 추출 후, `hasOwnMargin = tcEl.getAttribute('hasMargin') === '1'`이 false이면 `tblInMarginEl`을 fallback으로 사용.
+
+#### 12. HWP `PAGE_NUM_PARA` (tag-76) `startPageNum` 추출
+
+- 문제: HWP secd sub-record tag-76 (PAGE_NUM_PARA)이 4+2바이트만 읽고, 일부 HWP 버전에서 offset 6에 존재하는 WORD startPageNum을 읽지 않았음.
+- 수정:
+  - `_parseHwpPageNumMeta` (hwp-parser.js) / `parseHwpPageNumMeta` (parser.worker.js): body.length >= 8이면 offset 6의 u16을 `startPageNum`으로 읽음. 0이면 1로 기본값.
+  - secd scan 결과 병합 시 `pageNumMeta.startPageNum > 1`이면 `secDef.startPageNum`으로 전달.
+  - HWP 다중 섹션 루프: `section.pageStyle.startPageNum`이 양수이면 `pageNumber = sectionBasePageNum + sectionPageIndex`, 없으면 기존 누적 방식 유지.
+  - HWP 단일 섹션 경로: `parsedBody.pageStyle.startPageNum`으로 동일 처리.
+
+#### 13. 파비콘 `favicon.ico` / `index.html` 아이콘 링크 추가
+
+- 문제: `http://127.0.0.1:4174/favicon.ico` 요청 시 404가 반복되어 개발·검증 콘솔이 오염됨. `index.html`에 favicon link tag가 없었음.
+- 수정:
+  - `favicon.ico` 파일을 루트에 추가 (icon32.png 복사본).
+  - `index.html`에 `<link rel="icon">`, `<link rel="apple-touch-icon">`, `<link rel="shortcut icon">` 추가.
+
+- 검증:
+  - `node --check js/hwp-parser.js` 통과
+  - `node --check js/parser.worker.js` 통과
+  - `node --check js/hwp-renderer.js` 통과

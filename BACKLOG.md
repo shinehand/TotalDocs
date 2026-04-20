@@ -19,24 +19,20 @@
 ## Next Session Start
 
 - 이번 세션에서 완료한 것:
-  - `HWP secd PAGE_DEF flags` → `hideFirstHeader / hideFirstFooter / hideFirstPageNum` 추출 및 적용
-  - `HWP GSO 텍스트박스` 파싱 (LIST_HEADER + 단락 레코드 수집 → `type: 'textbox'` 블록)
-  - `HWP GSO 벡터 도형 플레이스홀더` (`type: 'shape'`, 크기 유지)
+  - HWPX 테이블 셀 `hasMargin="0"` → 테이블 `inMargin` fallback
+  - HWP `PAGE_NUM_PARA` (tag-76) `startPageNum` 추출 (offset 6 WORD)
+  - HWP 다중 섹션·단일 섹션 경로에서 `startPageNum` 반영
+  - `favicon.ico` 루트 추가 + `index.html` favicon link 추가
 - 바로 이어서 할 일:
-  - `HWP secd` 섹션 시작 쪽번호(`startPageNum`) 반영 — 현재는 누적 페이지 번호만 사용
-  - `pageStyle.height/margins`를 pagination budget에 직접 반영 (단위 재검증 필요)
-  - `HWP header/footer odd/even` 실 샘플 검증 (홀짝 헤더를 쓰는 문서 없으면 확인 곤란)
-- 이번 턴에서 보류한 것:
-  - `pageStyle.height/margins`를 pagination budget에 직접 반영하는 실험
-  - 이유: 다운로드 샘플 기준으로 즉시 과분할이 발생했고, 단위 해석을 다시 검증해야 함
+  - `pageStyle.height/margins`를 pagination budget에 반영 (단위 재검증)
+  - HWP 파서 핵심 로직 `js/hwp-parser.js` ↔ `js/parser.worker.js` 중복 해소
+  - HWPX 도형 (`drawingObject`) 지원 — 현재 샘플에는 없지만 일반 문서에 빈번
+  - 표 행 높이·세로 정렬 정밀화
 - 다음 시작 시 체크포인트:
-  - `secd` 컨트롤 body의 `startPageNum` 위치 (PAGE_NUM_PARA tag-76 또는 secd 본체 offset)
-  - `_paginateSectionBlocks`에서 `pageStyle.height` 사용 시 단위(HWPUNIT 1/7200 inch → px)
-  - GSO 텍스트박스가 있는 실 샘플 문서로 `type: 'textbox'` 렌더 확인
-- 완료 기준:
-  - `goyeopje.hwp` 3페이지 유지
-  - `attachment-sale-notice.hwp` 14페이지 유지
-  - header/footer/page number 적용이 원본과 더 가깝게 보일 것
+  - `_paginateSectionBlocks`에서 `pageStyle.height` 단위 확인 (HWPUNIT 1/7200 inch)
+  - 96 DPI 기준 변환: HWPUNIT / 7200 * 96 = HWPUNIT / 75
+  - `attachment-sale-notice.hwp` 14페이지 / `goyeopje.hwp` 3페이지 유지 여부
+
 
 ## P0
 

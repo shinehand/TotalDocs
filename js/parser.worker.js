@@ -1551,10 +1551,13 @@ function parseHwpPageNumMeta(body) {
   const sideChar = body.length >= 6
     ? decodeHwpUtf16String(body, 4, 1).replace(/\u0000/g, '').trim()
     : '';
+  // offset 6: WORD startPageNumber (일부 HWP 버전에만 존재)
+  const startPageNum = body.length >= 8 ? u16(body, 6) : 0;
   return {
     position: hwpPageNumPositionCode(posCode),
     formatType: formatCode === 0 ? 'DIGIT' : 'OTHER',
     sideChar,
+    startPageNum: startPageNum > 0 ? startPageNum : 1,
   };
 }
 
@@ -2407,7 +2410,12 @@ function parseHwpBlockRange(data, startPos = 0, docInfo = null, stopLevel = null
             scanPos = sub.nextPos;
           }
           if (secDef) {
-            if (pageNumMeta) secDef.pageNumber = pageNumMeta;
+            if (pageNumMeta) {
+              secDef.pageNumber = pageNumMeta;
+              if (pageNumMeta.startPageNum > 1) {
+                secDef.startPageNum = pageNumMeta.startPageNum;
+              }
+            }
             extras.sectionMeta = secDef;
           }
         }
