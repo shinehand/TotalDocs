@@ -2641,7 +2641,10 @@ const HwpParser = {
   },
 
   _hwpObjectTextWrap(code = 0) {
-    return ['square', 'tight', 'through', 'top-and-bottom', 'behind-text', 'in-front-of-text'][Number(code) || 0]
+    // HWP 5 CTRL_HEADER bits 21-23 (obTextWrapStyle):
+    // 0: 자리차지 (top-and-bottom), 1: 정사각형 (square), 2: 빡빡하게 (tight),
+    // 3: 투명하게 (through), 4: 글 뒤에 (behind-text), 5: 글 앞에 (in-front-of-text)
+    return ['top-and-bottom', 'square', 'tight', 'through', 'behind-text', 'in-front-of-text'][Number(code) || 0]
       || 'top-and-bottom';
   },
 

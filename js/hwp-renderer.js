@@ -1466,6 +1466,15 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   wrap.dataset.pageIndex = String(pageIndex);
   wrap.dataset.tableIndex = String(tableIndex);
   if (usePrimaryFormLayout) wrap.dataset.layout = 'first-page-primary';
+  // 대부분의 본문 표는 자리차지(top-and-bottom) 배치로 float 없이 블록 흐름을 유지해야 한다.
+  // applyDeferredObjectLayouts 실행 전(첫 번째 페인트)에도 올바른 레이아웃을 보장하기 위해
+  // 비절대-배치 표에는 미리 clear: both 를 설정한다.
+  if (!tableBlock.inline && !shouldAbsolutePlaceBlock(tableBlock)) {
+    const initialWrapMode = HwpParser._normalizeObjectTextWrap(tableBlock.textWrap);
+    if (initialWrapMode === 'top-and-bottom') {
+      wrap.style.clear = 'both';
+    }
+  }
 
   const table = document.createElement('table');
   table.className = 'hwp-table';
