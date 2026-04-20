@@ -1777,6 +1777,33 @@ function ctrlId(body) {
   return String.fromCharCode(body[3], body[2], body[1], body[0]);
 }
 
+function pageTypeMatches(applyPageType, pageIndex) {
+  const type = String(applyPageType || 'BOTH').toUpperCase();
+  const pageNo = pageIndex + 1;
+  if (type === 'EVEN') return pageNo % 2 === 0;
+  if (type === 'ODD') return pageNo % 2 === 1;
+  if (type === 'FIRST' || type === 'FIRST_PAGE') return pageIndex === 0;
+  return true;
+}
+
+function parseHwpHeaderFooterApplyPageType(controlBody) {
+  if (!controlBody || controlBody.length < 8) return 'BOTH';
+  const attr = u32(controlBody, 4);
+  const scope = attr & 0x3;
+  if (scope === 1) return 'EVEN';
+  if (scope === 2) return 'ODD';
+  return 'BOTH';
+}
+
+function resolveHwpHeaderFooterBlocks(areaDefs, fallbackBlocks, pageIndex) {
+  if (!Array.isArray(areaDefs) || !areaDefs.length) {
+    return Array.isArray(fallbackBlocks) ? fallbackBlocks : [];
+  }
+  return areaDefs
+    .filter(area => pageTypeMatches(area.applyPageType, pageIndex))
+    .flatMap(area => area.blocks || []);
+}
+
 function skipControlSubtree(data, startPos, ctrlLevel) {
   let pos = startPos;
   while (pos < data.length) {
@@ -2211,9 +2238,17 @@ function parseHwpBlockRange(data, startPos = 0, docInfo = null, stopLevel = null
       if (controlId === 'head' || controlId === 'foot') {
         pushParagraph();
         const subtree = parseHwpBlockRange(data, rec.nextPos, docInfo, rec.level, null);
+        const applyPageType = parseHwpHeaderFooterApplyPageType(rec.body);
         const target = controlId === 'head' ? extras?.headerBlocks : extras?.footerBlocks;
+        const targetAreas = controlId === 'head' ? extras?.headerAreas : extras?.footerAreas;
         if (target && subtree.blocks.length) {
           target.push(...subtree.blocks);
+        }
+        if (targetAreas && subtree.blocks.length) {
+          targetAreas.push({
+            applyPageType,
+            blocks: subtree.blocks,
+          });
         }
         pos = subtree.nextPos;
         continue;
@@ -2411,11 +2446,19 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
   let bestParas = [];
   let bestHeaderBlocks = [];
   let bestFooterBlocks = [];
+  let bestHeaderAreas = [];
+  let bestFooterAreas = [];
   let bestSectionMeta = null;
   let bestScore = 0;
 
   for (const { mode, bytes } of attempts) {
-    const extras = { headerBlocks: [], footerBlocks: [], sectionMeta: null };
+    const extras = {
+      headerBlocks: [],
+      footerBlocks: [],
+      headerAreas: [],
+      footerAreas: [],
+      sectionMeta: null,
+    };
     const paras = parseHwpRecords(bytes, docInfo, extras);
     const score = scoreParas(paras);
     if (score > bestScore) {
@@ -2423,6 +2466,8 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
       bestParas = paras;
       bestHeaderBlocks = extras.headerBlocks;
       bestFooterBlocks = extras.footerBlocks;
+      bestHeaderAreas = extras.headerAreas || [];
+      bestFooterAreas = extras.footerAreas || [];
       bestSectionMeta = extras.sectionMeta || null;
     }
     if (score > 0) {
@@ -2435,6 +2480,8 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
       paras: bestParas,
       headerBlocks: bestHeaderBlocks,
       footerBlocks: bestFooterBlocks,
+      headerAreas: bestHeaderAreas,
+      footerAreas: bestFooterAreas,
       sectionMeta: bestSectionMeta,
     };
   }
@@ -2446,11 +2493,25 @@ async function extractSectionParas(data, compressedHint, sectionName, docInfo = 
       const score = scoreParas(paras);
       if (score > 0) {
         self.postMessage({ type: 'progress', msg: `${sectionName}: 텍스트 블록 복구 (${mode})` });
-        return { paras, headerBlocks: [], footerBlocks: [], sectionMeta: null };
+        return {
+          paras,
+          headerBlocks: [],
+          footerBlocks: [],
+          headerAreas: [],
+          footerAreas: [],
+          sectionMeta: null,
+        };
       }
     }
 
-  return { paras: [], headerBlocks: [], footerBlocks: [], sectionMeta: null };
+  return {
+    paras: [],
+    headerBlocks: [],
+    footerBlocks: [],
+    headerAreas: [],
+    footerAreas: [],
+    sectionMeta: null,
+  };
 }
 
 /* ════════════════════════════════════════════════════════
@@ -2550,6 +2611,8 @@ async function parseBodyText(b) {
   const sections = [];
   let headerBlocks = [];
   let footerBlocks = [];
+  let headerAreas = [];
+  let footerAreas = [];
   let pageStyle = null;
   for (const sn of sectionNumbers) {
     const entry = entries['Section' + sn];
@@ -2576,6 +2639,12 @@ async function parseBodyText(b) {
     if (!footerBlocks.length && parsed?.footerBlocks?.length) {
       footerBlocks = parsed.footerBlocks;
     }
+    if (!headerAreas.length && parsed?.headerAreas?.length) {
+      headerAreas = parsed.headerAreas;
+    }
+    if (!footerAreas.length && parsed?.footerAreas?.length) {
+      footerAreas = parsed.footerAreas;
+    }
     if (!pageStyle && parsed?.sectionMeta) {
       pageStyle = parsed.sectionMeta;
     }
@@ -2585,6 +2654,8 @@ async function parseBodyText(b) {
         paragraphs: parsed.paras,
         headerBlocks: parsed.headerBlocks || [],
         footerBlocks: parsed.footerBlocks || [],
+        headerAreas: parsed.headerAreas || [],
+        footerAreas: parsed.footerAreas || [],
         pageStyle: parsed.sectionMeta || null,
       });
     }
@@ -2594,6 +2665,8 @@ async function parseBodyText(b) {
     paragraphs: allParas,
     headerBlocks,
     footerBlocks,
+    headerAreas,
+    footerAreas,
     pageStyle,
     sections,
   } : null;
@@ -2760,8 +2833,16 @@ self.onmessage = async ({ data }) => {
               section.pageStyle,
             );
             sectionPages.forEach((page, sectionPageIndex) => {
-              page.headerBlocks = section.headerBlocks || [];
-              page.footerBlocks = section.footerBlocks || [];
+              page.headerBlocks = resolveHwpHeaderFooterBlocks(
+                section.headerAreas,
+                section.headerBlocks,
+                sectionPageIndex,
+              );
+              page.footerBlocks = resolveHwpHeaderFooterBlocks(
+                section.footerAreas,
+                section.footerBlocks,
+                sectionPageIndex,
+              );
               page.pageStyle = section.pageStyle || null;
               page.sectionIndex = sectionIndex;
               page.sectionOrder = section.order ?? sectionIndex;
@@ -2781,12 +2862,18 @@ self.onmessage = async ({ data }) => {
           parsedBody.pageStyle,
         );
         if (pages.length) {
-          if (parsedBody.headerBlocks?.length) {
-            pages[0].headerBlocks = parsedBody.headerBlocks;
-          }
-          if (parsedBody.footerBlocks?.length) {
-            pages[0].footerBlocks = parsedBody.footerBlocks;
-          }
+          pages.forEach((page, pageIndex) => {
+            page.headerBlocks = resolveHwpHeaderFooterBlocks(
+              parsedBody.headerAreas,
+              parsedBody.headerBlocks,
+              pageIndex,
+            );
+            page.footerBlocks = resolveHwpHeaderFooterBlocks(
+              parsedBody.footerAreas,
+              parsedBody.footerBlocks,
+              pageIndex,
+            );
+          });
           if (parsedBody.pageStyle) {
             pages.forEach(page => { page.pageStyle = parsedBody.pageStyle; });
           }
