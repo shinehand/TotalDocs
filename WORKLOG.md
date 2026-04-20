@@ -1033,3 +1033,57 @@
     - HWP `쪽번호 시작 번호/숨김` 규칙
     - `pageStyle.height/margins` 기반 pagination은 과분할 문제를 재검증한 뒤 재도입 여부 판단
     - 구체 우선순위는 `BACKLOG.md`의 `Next Session Start` 섹션 참조
+
+---
+
+### 문서 정확성 — 영향도 높은 항목 4차 구현
+
+- 수행 범위: `js/hwp-parser.js`, `js/parser.worker.js`, `js/hwp-renderer.js`, `css/viewer.css`
+
+#### 8. HWP GSO 텍스트박스 파싱
+
+- 문제: GSO 컨트롤이 그림/수식/OLE 서브레코드를 갖지 않는 경우(텍스트박스, 벡터 도형 등) 블록이 `null`로 반환돼 해당 개체가 완전히 사라짐.
+- 수정 내용:
+  - `_parseGsoControl` (hwp-parser.js) / `parseGsoControl` (parser.worker.js):
+    - 스캔 루프에서 `LIST_HEADER` (tag 72) 를 감지하면 `hasListHeader = true` 로 전환.
+    - 이후 `PARA_HEADER`(66) / `PARA_TEXT`(67) / `PARA_CHAR_SHAPE`(68) / `PARA_LINE_SEG`(69) 레코드를 수집해 `textBoxParas` 배열에 단락 블록으로 조립.
+    - `equationBody / pictureBody / oleBody`가 없고 `hasListHeader && textBoxParas.length`이면 `_parseHwpTextBoxBlock` 호출.
+  - `_parseHwpTextBoxBlock` (hwp-parser.js) / `parseHwpTextBoxBlock` (parser.worker.js) 신규 추가:
+    - `type: 'textbox'`를 갖는 블록 생성, `paragraphs` 배열과 `width/height` 포함.
+    - `_withObjectLayout` / `withObjectLayout`으로 앵커 정보 적용.
+  - `appendTextBoxBlock` (hwp-renderer.js) 신규 추가:
+    - 래퍼 `div.hwp-textbox-block` + 내부 `div.hwp-textbox-content` 생성.
+    - 폭·높이 적용 후 `paragraphs` 각각을 `appendBlockByType`으로 렌더링.
+    - `registerPlacedBlock`으로 float/절대 배치 사후 처리에 참여.
+  - `appendBlockByType` (hwp-renderer.js): `type === 'textbox'` 분기 추가.
+
+#### 9. HWP GSO 벡터 도형 플레이스홀더
+
+- 문제: 텍스트박스도 아니고 그림/수식/OLE도 없는 GSO (선·사각형·타원 등 순수 벡터 도형)도 `null`로 드롭됨.
+- 수정 내용:
+  - `_parseGsoControl` / `parseGsoControl`: 위의 모든 경우가 해당 없고 `objectInfo.width > 0`이면 `_parseHwpShapePlaceholder` 호출.
+  - `_parseHwpShapePlaceholder` (hwp-parser.js) / `parseHwpShapePlaceholder` (parser.worker.js) 신규 추가:
+    - `type: 'shape'`를 갖는 최소 블록 생성, 크기 정보 유지.
+  - `appendShapePlaceholder` (hwp-renderer.js) 신규 추가:
+    - `div.hwp-shape-block` + `div.hwp-shape` 생성, 폭·높이 적용.
+    - `registerPlacedBlock`으로 앵커 배치 사후 처리에 참여.
+  - `appendBlockByType`: `type === 'shape'` 분기 추가.
+  - `css/viewer.css`: `.hwp-textbox-block`, `.hwp-textbox-content`, `.hwp-shape-block`, `.hwp-shape` CSS 추가.
+  - 표 셀 내부 인라인 렌더 경로에도 `textbox`/`shape` 분기 추가.
+
+#### 10. HWP secd PAGE_DEF flags — hideFirstHeader/Footer 파싱
+
+- 문제: `_parseHwpSecDef` (tag 73 PAGE_DEF 레코드)가 offset 36의 flags 필드를 읽지 않아 "첫 페이지에서 헤더/푸터 숨김" 설정이 무시됨.
+- 수정 내용:
+  - `_parseHwpSecDef` (hwp-parser.js) / `parseHwpSecDef` (parser.worker.js):
+    - `body.length >= 40`이면 `flags = u32(body, 36)` 추출.
+    - bit 8 → `hideFirstHeader`, bit 9 → `hideFirstFooter`, bit 10 → `hideFirstPageNum`.
+    - 결과를 `visibility: { hideFirstHeader, hideFirstFooter, hideFirstPageNum }` 으로 `sectionMeta` 에 포함.
+  - `_resolveHwpHeaderFooterBlocks` (hwp-parser.js): `hideFirst = false` 파라미터 추가. `hideFirst && pageIndex === 0`이면 빈 배열 반환.
+  - `_parseHwp5` 섹션 루프 및 단일 섹션 경로:
+    - `section.pageStyle?.visibility` / `parsedBody.pageStyle?.visibility`에서 hideFirstHeader/Footer/PageNum을 꺼내 `_resolveHwpHeaderFooterBlocks`와 자동 쪽번호 블록 생성에 전달.
+
+- 검증:
+  - `node --check js/hwp-parser.js` 통과
+  - `node --check js/parser.worker.js` 통과
+  - `node --check js/hwp-renderer.js` 통과

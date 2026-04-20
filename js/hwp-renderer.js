@@ -380,6 +380,58 @@ function appendObjectTextBlock(parent, block, kind = 'equation', className = '')
   registerPlacedBlock(wrap, box, block);
 }
 
+function appendTextBoxBlock(parent, block, context = {}) {
+  const { pageIndex = 0, tableIndexRef = { value: 0 }, listStateRef = null } = context;
+  const wrap = document.createElement('div');
+  wrap.className = 'hwp-textbox-block';
+  if (block.inline) wrap.dataset.inline = 'true';
+
+  const content = document.createElement('div');
+  content.className = 'hwp-textbox-content';
+
+  const isHwp = block.sourceFormat === 'hwp';
+  const widthPx = isHwp
+    ? hwpUnitToPx(block.width, 24, 960, 1 / 75, 0)
+    : hwpUnitToPx(block.width, 24, 960, 1 / 26, 0);
+  const heightPx = isHwp
+    ? hwpUnitToPx(block.height, 24, 1280, 1 / 75, 0)
+    : hwpUnitToPx(block.height, 24, 1280, 1 / 26, 0);
+  if (widthPx) content.style.minWidth = `${widthPx}px`;
+  if (heightPx) content.style.minHeight = `${heightPx}px`;
+
+  (block.paragraphs || []).forEach(para => {
+    appendBlockByType(content, para, { pageIndex, tableIndexRef, listStateRef });
+  });
+
+  wrap.appendChild(content);
+  parent.appendChild(wrap);
+  registerPlacedBlock(wrap, content, block);
+}
+
+function appendShapePlaceholder(parent, block) {
+  const isHwp = block.sourceFormat === 'hwp';
+  const widthPx = isHwp
+    ? hwpUnitToPx(block.width, 8, 960, 1 / 75, 0)
+    : hwpUnitToPx(block.width, 8, 960, 1 / 26, 0);
+  const heightPx = isHwp
+    ? hwpUnitToPx(block.height, 4, 960, 1 / 75, 0)
+    : hwpUnitToPx(block.height, 4, 960, 1 / 26, 0);
+  if (!widthPx && !heightPx) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'hwp-shape-block';
+  if (block.inline) wrap.dataset.inline = 'true';
+
+  const box = document.createElement('div');
+  box.className = 'hwp-shape';
+  if (widthPx) box.style.width = `${widthPx}px`;
+  if (heightPx) box.style.height = `${heightPx}px`;
+
+  wrap.appendChild(box);
+  parent.appendChild(wrap);
+  registerPlacedBlock(wrap, box, block);
+}
+
 function appendBlockByType(parent, block, context = {}) {
   const {
     pageIndex = Number(parent?.dataset?.pageIndex ?? 0),
@@ -409,6 +461,16 @@ function appendBlockByType(parent, block, context = {}) {
 
   if (block.type === 'ole') {
     appendObjectTextBlock(parent, block, 'ole');
+    return;
+  }
+
+  if (block.type === 'textbox') {
+    appendTextBoxBlock(parent, block, { pageIndex, tableIndexRef, listStateRef });
+    return;
+  }
+
+  if (block.type === 'shape') {
+    appendShapePlaceholder(parent, block);
     return;
   }
 
@@ -1668,6 +1730,16 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
 
         if (paragraphToRender?.type === 'ole') {
           appendObjectTextBlock(content, paragraphToRender, 'ole', 'hwp-object-inline');
+          return;
+        }
+
+        if (paragraphToRender?.type === 'textbox') {
+          appendTextBoxBlock(content, paragraphToRender, { pageIndex, tableIndexRef: { value: 0 }, listStateRef });
+          return;
+        }
+
+        if (paragraphToRender?.type === 'shape') {
+          appendShapePlaceholder(content, paragraphToRender);
           return;
         }
 

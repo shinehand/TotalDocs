@@ -18,17 +18,21 @@
 
 ## Next Session Start
 
+- 이번 세션에서 완료한 것:
+  - `HWP secd PAGE_DEF flags` → `hideFirstHeader / hideFirstFooter / hideFirstPageNum` 추출 및 적용
+  - `HWP GSO 텍스트박스` 파싱 (LIST_HEADER + 단락 레코드 수집 → `type: 'textbox'` 블록)
+  - `HWP GSO 벡터 도형 플레이스홀더` (`type: 'shape'`, 크기 유지)
 - 바로 이어서 할 일:
-  - `HWP header/footer`의 `first/odd/even` 적용 규칙을 실제 페이지 단위로 붙이기
-  - `쪽번호(page number)`의 섹션 시작 번호와 숨김 규칙을 HWP 쪽에도 반영하기
-  - `section pageStyle`을 렌더 단계에서 더 직접적으로 활용할 수 있는지 확인하기
+  - `HWP secd` 섹션 시작 쪽번호(`startPageNum`) 반영 — 현재는 누적 페이지 번호만 사용
+  - `pageStyle.height/margins`를 pagination budget에 직접 반영 (단위 재검증 필요)
+  - `HWP header/footer odd/even` 실 샘플 검증 (홀짝 헤더를 쓰는 문서 없으면 확인 곤란)
 - 이번 턴에서 보류한 것:
   - `pageStyle.height/margins`를 pagination budget에 직접 반영하는 실험
   - 이유: 다운로드 샘플 기준으로 즉시 과분할이 발생했고, 단위 해석을 다시 검증해야 함
 - 다음 시작 시 체크포인트:
-  - `js/hwp-parser.js`의 `sections` 수집 경로
-  - `js/parser.worker.js`의 동일 섹션 처리 경로
-  - HWP section control에서 `secd`, `head`, `foot` 외에 page-number 관련 레코드가 더 있는지 재확인
+  - `secd` 컨트롤 body의 `startPageNum` 위치 (PAGE_NUM_PARA tag-76 또는 secd 본체 offset)
+  - `_paginateSectionBlocks`에서 `pageStyle.height` 사용 시 단위(HWPUNIT 1/7200 inch → px)
+  - GSO 텍스트박스가 있는 실 샘플 문서로 `type: 'textbox'` 렌더 확인
 - 완료 기준:
   - `goyeopje.hwp` 3페이지 유지
   - `attachment-sale-notice.hwp` 14페이지 유지

@@ -1510,10 +1510,15 @@ function parseHwpSecDef(body) {
   // offset  0: paperWidth (HWPUNIT), 4: paperHeight (HWPUNIT)
   // offset  8: marginLeft, 12: marginRight, 16: marginTop, 20: marginBottom
   // offset 24: marginHeader, 28: marginFooter, 32: gutter, 36: flags
+  // flags bit 8: hide header on first page, bit 9: hide footer on first page
   if (!body || body.length < 32) return null;
   const paperWidth  = i32(body, 0);
   const paperHeight = i32(body, 4);
   if (paperWidth <= 0 || paperHeight <= 0) return null;
+  const flags = body.length >= 40 ? u32(body, 36) : 0;
+  const hideFirstHeader = Boolean(flags & (1 << 8));
+  const hideFirstFooter = Boolean(flags & (1 << 9));
+  const hideFirstPageNum = Boolean(flags & (1 << 10));
   return {
     sourceFormat: 'hwp',
     width:  paperWidth,
@@ -1525,6 +1530,11 @@ function parseHwpSecDef(body) {
       bottom: i32(body, 20),
       header: i32(body, 24),
       footer: i32(body, 28),
+    },
+    visibility: {
+      hideFirstHeader: hideFirstHeader ? '1' : '0',
+      hideFirstFooter: hideFirstFooter ? '1' : '0',
+      hideFirstPageNum: hideFirstPageNum ? '1' : '0',
     },
   };
 }
@@ -1768,6 +1778,18 @@ function parseGsoControl(data, startPos, ctrlLevel, ctrlBody, docInfo = null) {
   let hasChartData = false;
   let hasVideoData = false;
 
+  // Text box support: track LIST_HEADER (tag 72) and collect paragraph records
+  let hasListHeader = false;
+  const textBoxParas = [];
+  let textBoxCurrentText = null;
+  let textBoxParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+  const pushTextBoxPara = () => {
+    if (textBoxCurrentText === null) return;
+    textBoxParas.push(createHwpParagraphBlock(textBoxCurrentText, textBoxParaState, docInfo));
+    textBoxCurrentText = null;
+    textBoxParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+  };
+
   while (pos < data.length) {
     const rec = readRecord(data, pos);
     if (!rec) break;
@@ -1782,9 +1804,27 @@ function parseGsoControl(data, startPos, ctrlLevel, ctrlBody, docInfo = null) {
       hasChartData = true;
     } else if (rec.tagId === 98) {
       hasVideoData = true;
+    } else if (rec.tagId === 72 && !hasListHeader) {
+      hasListHeader = true;
+      textBoxCurrentText = '';
+    } else if (hasListHeader && !pictureBody && !oleBody && !equationBody) {
+      if (rec.tagId === 66) {
+        pushTextBoxPara();
+        textBoxCurrentText = '';
+        textBoxParaState = parseHwpParaHeader(rec.body);
+        textBoxParaState.lineSegs = [];
+      } else if (rec.tagId === 67) {
+        if (textBoxCurrentText === null) textBoxCurrentText = '';
+        textBoxCurrentText += decodeParaText(rec.body, 0, rec.body.length);
+      } else if (rec.tagId === 68) {
+        textBoxParaState.charShapes = parseHwpParaCharShape(rec.body);
+      } else if (rec.tagId === 69) {
+        textBoxParaState.lineSegs = parseHwpParaLineSeg(rec.body);
+      }
     }
     pos = rec.nextPos;
   }
+  pushTextBoxPara();
 
   let block = null;
   if (equationBody) {
@@ -1793,6 +1833,10 @@ function parseGsoControl(data, startPos, ctrlLevel, ctrlBody, docInfo = null) {
     block = parseHwpGsoBlock(objectInfo, pictureBody, docInfo);
   } else if (oleBody) {
     block = parseHwpOleBlock(objectInfo, oleBody, docInfo, { hasChartData, hasVideoData });
+  } else if (hasListHeader && textBoxParas.length) {
+    block = parseHwpTextBoxBlock(objectInfo, textBoxParas);
+  } else if (objectInfo?.width > 0 && objectInfo?.height > 0) {
+    block = parseHwpShapePlaceholder(objectInfo);
   }
 
   return {
@@ -1831,6 +1875,29 @@ function readRecord(data, pos) {
 function ctrlId(body) {
   if (!body || body.length < 4) return '';
   return String.fromCharCode(body[3], body[2], body[1], body[0]);
+}
+
+function parseHwpTextBoxBlock(objectInfo, paragraphs) {
+  if (!objectInfo) return null;
+  return withObjectLayout({
+    type: 'textbox',
+    paragraphs: paragraphs || [],
+    width: objectInfo.width || 0,
+    height: objectInfo.height || 0,
+    sourceFormat: 'hwp',
+    texts: (paragraphs || []).flatMap(p => p.texts || []),
+  }, objectInfo);
+}
+
+function parseHwpShapePlaceholder(objectInfo) {
+  if (!objectInfo || !(objectInfo.width > 0)) return null;
+  return withObjectLayout({
+    type: 'shape',
+    width: objectInfo.width || 0,
+    height: objectInfo.height || 0,
+    sourceFormat: 'hwp',
+    texts: [run('')],
+  }, objectInfo);
 }
 
 function matchesHeaderFooterScope(applyPageType, pageIndex) {

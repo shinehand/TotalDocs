@@ -720,7 +720,8 @@ const HwpParser = {
     return 'BOTH';
   },
 
-  _resolveHwpHeaderFooterBlocks(areaDefs, fallbackBlocks, pageIndex) {
+  _resolveHwpHeaderFooterBlocks(areaDefs, fallbackBlocks, pageIndex, hideFirst = false) {
+    if (hideFirst && pageIndex === 0) return [];
     if (!Array.isArray(areaDefs) || !areaDefs.length) {
       return Array.isArray(fallbackBlocks) ? fallbackBlocks : [];
     }
@@ -1091,21 +1092,25 @@ const HwpParser = {
             section.pageStyle,
           );
           sectionPages.forEach((page, sectionPageIndex) => {
+            const sectionVisibility = section.pageStyle?.visibility || {};
             const resolvedHeaderBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
               section.headerAreas,
               section.headerBlocks,
               sectionPageIndex,
+              sectionVisibility.hideFirstHeader === '1',
             );
             const resolvedFooterBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
               section.footerAreas,
               section.footerBlocks,
               sectionPageIndex,
+              sectionVisibility.hideFirstFooter === '1',
             );
             const pageNumber = pages.length + 1;
             // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 footer가 없을 때만 추가해 중복을 막는다.
             const pageNumMeta = section.pageStyle?.pageNumber;
+            const hideFirstPageNum = sectionVisibility.hideFirstPageNum === '1';
             const autoPageNumBlock = (!resolvedFooterBlocks.length && !resolvedHeaderBlocks.length)
-              ? HwpParser._hwpxCreatePageNumberBlock(pageNumMeta, pageNumber, sectionPageIndex === 0)
+              ? HwpParser._hwpxCreatePageNumberBlock(pageNumMeta, pageNumber, hideFirstPageNum && sectionPageIndex === 0)
               : null;
             const isTopNum = String(pageNumMeta?.position || '').toUpperCase().includes('TOP');
             page.headerBlocks = [
@@ -1134,23 +1139,27 @@ const HwpParser = {
       );
       if (pages.length) {
         pages.forEach((page, pageIndex) => {
+          const bodyVisibility = parsedBody.pageStyle?.visibility || {};
           const resolvedHeaderBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
             parsedBody.headerAreas,
             parsedBody.headerBlocks,
             pageIndex,
+            bodyVisibility.hideFirstHeader === '1',
           );
           const resolvedFooterBlocks = HwpParser._resolveHwpHeaderFooterBlocks(
             parsedBody.footerAreas,
             parsedBody.footerBlocks,
             pageIndex,
+            bodyVisibility.hideFirstFooter === '1',
           );
           page.headerBlocks = resolvedHeaderBlocks.map(cloneParagraphBlock);
           page.footerBlocks = resolvedFooterBlocks.map(cloneParagraphBlock);
           // secd tag-76 기반 자동 쪽번호 — 섹션에 명시적 header/footer가 없을 때만 추가
           const pageNumMeta = parsedBody.pageStyle?.pageNumber;
+          const hideFirstPageNum = bodyVisibility.hideFirstPageNum === '1';
           if (pageNumMeta && !resolvedFooterBlocks.length && !resolvedHeaderBlocks.length) {
             const autoPageNumBlock = HwpParser._hwpxCreatePageNumberBlock(
-              pageNumMeta, pageIndex + 1, pageIndex === 0,
+              pageNumMeta, pageIndex + 1, hideFirstPageNum && pageIndex === 0,
             );
             if (autoPageNumBlock) {
               const isTopNum = String(pageNumMeta.position || '').toUpperCase().includes('TOP');
@@ -2638,10 +2647,15 @@ const HwpParser = {
     // offset  0: paperWidth (HWPUNIT), 4: paperHeight (HWPUNIT)
     // offset  8: marginLeft, 12: marginRight, 16: marginTop, 20: marginBottom
     // offset 24: marginHeader, 28: marginFooter, 32: gutter, 36: flags
+    // flags bit 8: hide header on first page, bit 9: hide footer on first page
     if (!body || body.length < 32) return null;
     const paperWidth  = HwpParser._i32(body, 0);
     const paperHeight = HwpParser._i32(body, 4);
     if (paperWidth <= 0 || paperHeight <= 0) return null;
+    const flags = body.length >= 40 ? HwpParser._u32(body, 36) : 0;
+    const hideFirstHeader = Boolean(flags & (1 << 8));
+    const hideFirstFooter = Boolean(flags & (1 << 9));
+    const hideFirstPageNum = Boolean(flags & (1 << 10));
     return {
       sourceFormat: 'hwp',
       width:  paperWidth,
@@ -2653,6 +2667,11 @@ const HwpParser = {
         bottom: HwpParser._i32(body, 20),
         header: HwpParser._i32(body, 24),
         footer: HwpParser._i32(body, 28),
+      },
+      visibility: {
+        hideFirstHeader: hideFirstHeader ? '1' : '0',
+        hideFirstFooter: hideFirstFooter ? '1' : '0',
+        hideFirstPageNum: hideFirstPageNum ? '1' : '0',
       },
     };
   },
@@ -2834,6 +2853,18 @@ const HwpParser = {
     let hasChartData = false;
     let hasVideoData = false;
 
+    // Text box support: track LIST_HEADER (tag 72) and collect paragraph records
+    let hasListHeader = false;
+    const textBoxParas = [];
+    let textBoxCurrentText = null;
+    let textBoxParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+    const pushTextBoxPara = () => {
+      if (textBoxCurrentText === null) return;
+      textBoxParas.push(HwpParser._createHwpParagraphBlock(textBoxCurrentText, textBoxParaState, docInfo));
+      textBoxCurrentText = null;
+      textBoxParaState = { paraShapeId: 0, charShapes: [], lineSegs: [] };
+    };
+
     while (pos < data.length) {
       const rec = HwpParser._readRecord(data, pos);
       if (!rec) break;
@@ -2848,9 +2879,27 @@ const HwpParser = {
         hasChartData = true;
       } else if (rec.tagId === 98) {
         hasVideoData = true;
+      } else if (rec.tagId === 72 && !hasListHeader) {
+        hasListHeader = true;
+        textBoxCurrentText = '';
+      } else if (hasListHeader && !pictureBody && !oleBody && !equationBody) {
+        if (rec.tagId === 66) {
+          pushTextBoxPara();
+          textBoxCurrentText = '';
+          textBoxParaState = HwpParser._parseHwpParaHeader(rec.body);
+          textBoxParaState.lineSegs = [];
+        } else if (rec.tagId === 67) {
+          if (textBoxCurrentText === null) textBoxCurrentText = '';
+          textBoxCurrentText += HwpParser._decodeParaText(rec.body, 0, rec.body.length);
+        } else if (rec.tagId === 68) {
+          textBoxParaState.charShapes = HwpParser._parseHwpParaCharShape(rec.body);
+        } else if (rec.tagId === 69) {
+          textBoxParaState.lineSegs = HwpParser._parseHwpParaLineSeg(rec.body);
+        }
       }
       pos = rec.nextPos;
     }
+    pushTextBoxPara();
 
     let block = null;
     if (equationBody) {
@@ -2859,12 +2908,39 @@ const HwpParser = {
       block = HwpParser._parseHwpGsoBlock(objectInfo, pictureBody, docInfo);
     } else if (oleBody) {
       block = HwpParser._parseHwpOleBlock(objectInfo, oleBody, docInfo, { hasChartData, hasVideoData });
+    } else if (hasListHeader && textBoxParas.length) {
+      block = HwpParser._parseHwpTextBoxBlock(objectInfo, textBoxParas);
+    } else if (objectInfo?.width > 0 && objectInfo?.height > 0) {
+      block = HwpParser._parseHwpShapePlaceholder(objectInfo);
     }
 
     return {
       block,
       nextPos: pos,
     };
+  },
+
+  _parseHwpTextBoxBlock(objectInfo, paragraphs) {
+    if (!objectInfo) return null;
+    return HwpParser._withObjectLayout({
+      type: 'textbox',
+      paragraphs: paragraphs || [],
+      width: objectInfo.width || 0,
+      height: objectInfo.height || 0,
+      sourceFormat: 'hwp',
+      texts: (paragraphs || []).flatMap(p => p.texts || []),
+    }, objectInfo);
+  },
+
+  _parseHwpShapePlaceholder(objectInfo) {
+    if (!objectInfo || !(objectInfo.width > 0)) return null;
+    return HwpParser._withObjectLayout({
+      type: 'shape',
+      width: objectInfo.width || 0,
+      height: objectInfo.height || 0,
+      sourceFormat: 'hwp',
+      texts: [HwpParser._run('')],
+    }, objectInfo);
   },
 
   _createParagraphBlock(text, align = 'left', runOpts = {}, blockOpts = {}) {
