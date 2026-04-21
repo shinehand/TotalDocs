@@ -193,7 +193,8 @@ const HwpParser = {
           align: HwpParser._hwpxMapAlign(alignEl?.getAttribute?.('horizontal')),
           marginLeft: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'left'), 'value', 0),
           marginRight: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'right'), 'value', 0),
-          textIndent: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'indent'), 'value', 0),
+          // HWPX 들여쓰기 요소는 'hc:indent'가 아닌 'hc:intent'로 표기된다 (HWPML 스펙).
+          textIndent: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'intent'), 'value', 0),
           spacingBefore: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'prev'), 'value', 0),
           spacingAfter: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'next'), 'value', 0),
           lineSpacingType: HwpParser._normalizeLineSpacingType(lineSpacingEl?.getAttribute?.('type')),
