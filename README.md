@@ -12,17 +12,18 @@
 
 `HWP`, `HWPX`, `OWPML` 문서를 어떤 브라우저에서든 설치 없이 열고, 가능한 한 실제 한글 프로그램과 비슷한 화면과 동선으로 확인·편집·저장하려는 프로젝트이옵니다.
 
-현재 프로젝트는 `웹 뷰어(GitHub Pages) + 크롬 확장 프로그램 셸 + HWP 엔진 기반 Canvas 렌더링 + 직접 편집 경로 + 다운로드 원본 기준 QA` 구조로 움직이고 있사옵니다.
+현재 프로젝트는 `웹 뷰어(GitHub Pages) + 크롬 확장 프로그램 셸 + ChromeHWP 자체 JS 파서/DOM 렌더러 + 다운로드 원본 기준 QA` 구조로 움직이고 있사옵니다.
 
 ## 현재 상태
 
-- `HWP` / `HWPX` 는 `js/hwp-wasm-renderer.js` 를 통해 HWP 엔진 기반 Canvas 렌더링을 우선 사용하옵니다.
-- 문서 위 직접 편집, 현재 파일 저장, 검색, 줌, 상태바, 썸네일 탐색이 연결되어 있사옵니다.
+- `HWP` / `HWPX` 는 분리된 `HwpParser` 모듈과 `js/hwp-renderer.js` DOM 렌더러를 공식 경로로 사용하옵니다.
+- 외부 WASM 엔진 실험 경로는 2026-04-22 기준으로 비활성화하고 번들에서 제거했사옵니다.
+- 검색, 줌, 상태바, 썸네일 탐색이 ChromeHWP 자체 렌더링 경로에 연결되어 있사옵니다.
 - 사이드바에는 현재 쪽 집계와 집중 확인 쪽을 보여 주는 `레이아웃 감사 패널` 이 붙어 있사옵니다.
 - QA는 저장소 fixture보다 `/Users/shinehandmac/Downloads` 의 실제 원본 `HWP/HWPX` 파일을 기준으로 돌고 있사옵니다.
 - 검증 스크립트는 다운로드 폴더의 지원 문서를 자동 발견하므로, 새 파일이 들어와도 QA 범위에 바로 편입되옵니다.
 - 구조 진단 데이터도 함께 수집하여 `표`, `수식`, `차트`, `개체`, `구역`, `페이지` 단위로 검증할 수 있사옵니다.
-- HWPX 글자모양의 `shadow` 서식은 `type`, `color`, `offsetX`, `offsetY`까지 읽고, `DROP`과 `CONTINUOUS`를 구분하여 Canvas/SVG 텍스트 그림자로 반영하옵니다.
+- HWPX 글자모양의 `shadow` 서식은 `type`, `color`, `offsetX`, `offsetY`까지 읽고, `DROP`과 `CONTINUOUS`를 구분하여 DOM 텍스트 그림자로 반영하옵니다.
 
 아직 남은 큰 과제는 `페이지 내부 레이아웃 충실도`이옵니다.
 
@@ -42,17 +43,17 @@
 - `incheon-2a.hwpx`: visiblePageDiff `29.208`, titleDiff `26.707`
 - 최신 비교 리포트: [hancom-page-compare-report.json](output/hancom-oracle/hancom-page-compare-report.json)
 
-최근 반영된 충실도 개선은 아래와 같사옵니다.
+최근 반영했거나 검증 중인 충실도 항목은 아래와 같사옵니다.
 
 - `HY헤드라인M` 계열은 한컴 Viewer 비교에서 가장 나은 결과를 보인 `dotum-Regular.ttf` 대체로 정식 매핑했사옵니다.
 - HWPX 제목 글자 그림자는 `charPr/shadow` 의 `type`, `color`, `offsetX`, `offsetY`를 반영하고, `CONTINUOUS`는 원본과 오프셋 사이를 채운 연속 그림자로 렌더링하옵니다.
 - 표 셀 안 비인라인 그림의 `horzRelTo="COLUMN"` 앵커는 셀 패딩이 아닌 셀 경계 기준으로 보정했사옵니다.
 - `incheon-2a.hwpx` 제목 LH 로고는 `x=164.2px` 오배치에서 `x=114.2px`로 이동하여 한컴 Viewer 위치에 더 가까워졌사옵니다.
 - HWPX 문단의 제어개체 오프셋은 스트림 순서대로 8 UTF-16 단위로 누적하여, 로고 뒤 제목처럼 `charPrIDRef` 경계가 한 글자 밀리는 문제를 바로잡았사옵니다.
-- TAC 표는 저장된 object 높이가 셀 내용보다 작을 때 행 높이를 강제 축소하지 않도록 배치기와 페이지 측정기 양쪽에서 보호하여, 한컴 Viewer처럼 내용 우선 높이를 유지하게 했사옵니다.
-- `incheon-2a.hwpx` 2페이지는 큰 표 셀 안에서 `LineSeg.vertical_pos`가 되감기는 continuation window를 감지하여, 한컴 Viewer처럼 `[무주택세대구성원]` 박스부터 이어지도록 보정했사옵니다.
-- 같은 행이 여러 페이지로 쪼개질 때 `split_end`를 `split_start + visible_length` 기준으로 해석하도록 방어하여, 중첩 표가 이전/다음 continuation 구간에서 되살아나는 위험을 줄였사옵니다.
-- 셀 안의 중첩 표도 `Table.caption` 방향과 간격을 그대로 적용하도록 일반화하여, `Top` 캡션이 표 머리행과 겹치거나 누락되는 문제를 바로잡았사옵니다.
+- TAC 표처럼 저장된 object 높이가 셀 내용보다 작을 때도 내용 우선 높이를 유지해야 한다는 검증 기준을 세웠사옵니다.
+- `incheon-2a.hwpx` 2페이지 겹침은 큰 표 셀, `LineSeg.vertical_pos`, continuation window 해석 문제로 분류했사옵니다.
+- 같은 행이 여러 페이지로 쪼개질 때는 `split_start`, `visible_length`, 중첩 표 continuation을 ChromeHWP 자체 레이아웃 규칙으로 다시 구현해야 하옵니다.
+- 셀 안의 중첩 표 `Table.caption` 방향과 간격도 자체 렌더러에서 일반 규칙으로 다루어야 하옵니다.
 - 최신 2페이지 직접 비교 캡처는 [incheon-p2-side-by-side-vpos3.png](output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png)에 남겨 두었사옵니다.
 
 즉, 지금 단계는 “열람 가능”과 “대표 샘플 쪽수 일치”를 넘었으나, “한컴 Viewer 화면과 매우 비슷한 표 높이·개체 위치·폰트 조판”을 향한 본수술이 계속 필요한 상태이옵니다.
@@ -70,21 +71,20 @@
 
 ### 지금까지 완료한 일
 
-1. `HWP/HWPX` 렌더링 경로를 WASM 기반 `hwp` 엔진으로 통합했다.
-2. 외부 표기는 `hwp`로 통일했다.
-3. 실제 한글 프로그램과 유사한 메뉴/툴바/눈금자/페이지/상태바 레이아웃을 구성했다.
-4. 다운로드 폴더 원본 문서 기준 QA 체계를 만들었다.
-5. 대표 5개 문서의 한컴 Viewer 페이지 수와 ChromeHWP 페이지 수를 일치시켰다.
-6. 한컴 Viewer 기준 전 페이지 감사 리포트를 만들었다.
-7. HWPX 제목 그림자, 폰트 대체, 그림 앵커, TAC 표 높이, 대형 셀 continuation, 중첩 표 캡션 누락 문제를 일반 규칙으로 수정했다.
-8. README와 렌더링 상태 문서에 하드코딩 금지 원칙을 명문화했다.
+1. 한 파일에 몰려 있던 JS 파서를 `hwp-parser.js`, `hwp-parser-hwp5-records.js`, `hwp-parser-hwpx.js`, `hwp-parser-hwp5-container.js`로 분리했다.
+2. 실제 한글 프로그램과 유사한 메뉴/툴바/눈금자/페이지/상태바 레이아웃을 구성했다.
+3. 다운로드 폴더 원본 문서 기준 QA 체계를 만들었다.
+4. 한컴 Viewer 기준 전 페이지 감사 리포트를 만들었다.
+5. HWPX 제목 그림자, 폰트 대체, 그림 앵커, TAC 표 높이, 대형 셀 continuation, 중첩 표 캡션 누락 문제를 자체 렌더러의 과제로 정리했다.
+6. README와 렌더링 상태 문서에 하드코딩 금지 원칙을 명문화했다.
+7. 외부 WASM 실험 경로가 ChromeHWP의 기준 엔진이 되지 않도록 실행 경로와 문서에서 제거했다.
 
 ### 현재 진행 중인 일
 
 1. `incheon-2a.hwpx` 15쪽 mismatch 원인 분석.
 2. 대형 셀 안의 `LineSeg.vertical_pos` 리셋 구간과 페이지 continuation 분할 매핑 검증.
 3. 한컴 감사 crop 도구가 부분 페이지나 표 내부 흰 영역을 페이지로 오인하지 않도록 보강.
-4. 수정할 때마다 `cargo test --lib --quiet`, `node scripts/verify_samples.mjs`, 전 페이지 한컴 감사를 반복하는 검증 루프 유지.
+4. 수정할 때마다 `node --check`, `node scripts/verify_samples.mjs`, 전 페이지 한컴 감사를 반복하는 검증 루프 유지.
 
 ### 남은 작업 목록
 
@@ -103,7 +103,7 @@
 1. diff가 큰 페이지부터 보되, 수정은 항상 HWP/HWPX 형식의 일반 규칙으로 만든다.
 2. 한 페이지를 맞추기 위해 다른 문서의 페이지 흐름이 깨지지 않도록 먼저 최소 원인 단위를 분리한다.
 3. 원인 분류 순서는 `페이지 흐름`, `표/셀 분할`, `개체 anchor`, `문단 조판`, `폰트 계량`, `색/선/농도` 순서로 한다.
-4. 수정 후에는 Rust 단위 테스트, WASM 재빌드, 다운로드 샘플 검증, 한컴 전 페이지 감사를 순서대로 수행한다.
+4. 수정 후에는 JS 문법 검사, 다운로드 샘플 검증, 한컴 전 페이지 감사를 순서대로 수행한다.
 5. 검증 결과와 다음 우선순위는 README와 `docs/rendering-status.md`에 계속 갱신한다.
 
 ## 핵심 구조
@@ -119,19 +119,16 @@
 현재 셸은 메뉴/툴바/눈금자/캔버스/상태바 구조를 갖추고 있으며, 상태바에는 페이지/구역/모드와 함께 구조 진단 요약도 표시하옵니다.
 사이드바 하단의 `레이아웃 감사 패널` 은 현재 쪽의 `표/그림/수식/차트/텍스트` 집계와 hotspot 쪽 이동 버튼을 보여 주옵니다.
 
-### 2. HWP 엔진 브리지
+### 2. Parser / Renderer Core
 
-- 브리지: [js/hwp-wasm-renderer.js](js/hwp-wasm-renderer.js)
-- 엔진 번들: [lib/hwp.js](lib/hwp.js), `lib/hwp_bg.wasm`
+- 파서 facade: [js/hwp-parser.js](js/hwp-parser.js)
+- HWP5 레코드 파서: [js/hwp-parser-hwp5-records.js](js/hwp-parser-hwp5-records.js)
+- HWPX 파서: [js/hwp-parser-hwpx.js](js/hwp-parser-hwpx.js)
+- HWP5 컨테이너 파서: [js/hwp-parser-hwp5-container.js](js/hwp-parser-hwp5-container.js)
+- DOM 렌더러: [js/hwp-renderer.js](js/hwp-renderer.js)
+- Worker 진입점: [js/parser.worker.js](js/parser.worker.js)
 
-브리지는 아래 역할을 맡고 있사옵니다.
-
-- 문서 렌더링
-- 검색
-- hit test / 커서 rect
-- 직접 편집용 삽입/삭제/문단 분할
-- 페이지 정보 / 컨트롤 레이아웃 / 구역 정의 / 표/그림/수식/양식 진단
-- `collectDocumentDiagnostics()` 를 통한 문서 구조 집계
+이 경로가 ChromeHWP의 공식 파서/레이아웃 구현체이옵니다. 외부 WASM 번들은 기준 엔진으로 삼지 않사옵니다.
 
 ### 3. QA / 회귀검증
 
@@ -232,55 +229,19 @@ python3 scripts/build_hancom_page_audit.py
 - [Font Strategy](docs/font-strategy-2026-04-18.md)
 - [Hancom Oracle Page Baseline](docs/hancom-oracle-page-baseline.json)
 
-## 2026-04-19 종료 메모
+## 2026-04-22 방향 전환 메모
 
-오늘 종료 시점의 핵심 전황이옵니다.
+외부 WASM 실험 경로는 ChromeHWP의 기준 엔진이 아니옵니다.
 
-- 엔진 참조 저장소의 HWPX 대형 셀 continuation 처리를 보강하고, 최신 엔진을 `lib/hwp.js`, `lib/hwp_bg.wasm`, `lib/hwp.d.ts`로 다시 반영했사옵니다.
-- `LineSeg.vertical_pos`가 큰 셀 안에서 여러 번 되감기는 구간을 continuation window로 분리하고, 분할 렌더링 시 문단 y를 저장된 vpos 기준으로 앵커링하는 규칙을 추가했사옵니다.
-- 중첩 표가 split window 안에서 렌더링될 때 `split_start`와 `split_end`를 절대 좌표처럼 오해하지 않도록 보정했사옵니다.
-- `incheon-2a.hwpx`는 한컴 기준 `18쪽`과 ChromeHWP `18쪽`이 계속 일치하오나, 15~16쪽의 내부 시각 흐름은 아직 원본과 완전히 같지 않사옵니다.
-- 남은 핵심 원인은 큰 셀 안의 page-like vpos window와 중첩 표 분할이 결합될 때 일부 페이지가 한컴보다 늦게 흘러가거나 겹쳐 보이는 문제이옵니다.
-- 이 문제는 문서명/페이지번호 하드코딩 없이 `LineSeg.vertical_pos`, 중첩 표 실제 높이, 셀 continuation window, partial table clipping 규칙으로 계속 해결해야 하옵니다.
-
-오늘 확인한 테스트이옵니다.
-
-- `cargo test --lib split_line_ranges_can_span_multiple_vpos_windows --quiet`: 통과, `1 passed`, `811 filtered out`.
-- `cargo build --release --target wasm32-unknown-unknown --lib`: 통과.
-- `wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>`: 통과.
-- `node scripts/verify_samples.mjs`: 대표 5개 문서 통과.
-- 페이지 수 재확인: `goyeopje.hwp 2/2`, `goyeopje-full-2024.hwp 11/11`, `gyeolseokgye.hwp 1/1`, `attachment-sale-notice.hwp 4/4`, `incheon-2a.hwpx 18/18`.
-
-## 2026-04-20 진행 메모
-
-- split row 안의 중첩 표가 앞 텍스트 없이 시작하더라도 `LineSeg.vertical_pos`로 이미 보정된 문단 y를 유지하도록 엔진을 보강했사옵니다.
-- `wasm-bindgen --out-name hwp`로 ChromeHWP의 `hwp_bg.wasm` 배치명과 생성 JS의 기대 파일명을 맞췄사옵니다.
-- 다운로드 폴더 샘플 로드 실패 보고 시 served-inputs URL을 사용하도록 `scripts/verify_samples.mjs`를 보강했사옵니다.
-- `node scripts/verify_samples.mjs` 재검증 결과, 대표 5개 다운로드 문서는 한컴 기준 쪽수와 모두 일치했사옵니다: `2/2`, `11/11`, `1/1`, `4/4`, `18/18`.
-- 한컴 Viewer 전 페이지 감사 도구는 35% 줌 기본값과 crop 품질 판정을 추가해 부분 페이지를 별도 `capture-review`로 표시하도록 보강했사옵니다.
-- 최신 `incheon-2a.hwpx` 단독 감사 기준, 12~15쪽은 `review`, 16쪽은 `mismatch`, 17쪽은 `review`, 18쪽은 `close`이옵니다.
-- 아직 남은 핵심 판단은 `incheon-2a.hwpx` 16~18쪽의 page-like vpos window와 중첩 표 분할 흐름이옵니다.
-
-## 2026-04-20 종료 메모
-
-오늘 종료 시점의 추가 전황이옵니다.
-
-- 대형 셀 continuation 안에서 중첩 표가 물리 vpos window 아래로 넘치는 경우, 다음 페이지의 첫 흐름으로 이어 받도록 엔진을 보강하고 최신 WASM을 다시 반영했사옵니다.
-- 로컬 엔진 SVG 확인 기준 `incheon-2a.hwpx` 16~17쪽의 큰 흐름은 한컴 순서에 더 가까워졌사오나, 18쪽 이후 경계는 아직 추가 감사가 필요하옵니다.
-- 정적 검증은 통과했사옵니다: `node --check scripts/capture_hancom_page_audit.mjs`, `node --check scripts/verify_samples.mjs`, `python3 -m py_compile scripts/build_hancom_page_audit.py`.
-- 엔진 단위 검증은 통과했사옵니다: `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet`.
-- 단, 최신 WASM 반영 뒤 `node scripts/verify_samples.mjs`는 대표 5개 문서 모두 viewer load timeout으로 실패했사옵니다. 보고서에는 `hasRenderer=false`, `canvasCount=0`으로 남았으므로 렌더링 diff 판단이 아니라 로더/검증 하네스 차단으로 보아야 하옵니다.
-- 위 실패 산출물은 오늘 커밋 대상에서 제외하고, 다음 작업의 첫 번째 진단 대상으로 남겨두는 것이 옳사옵니다.
-
-로컬 빌드 주의사항이옵니다.
-
-- 현재 셸의 기본 `cargo/rustc`가 Homebrew x86_64 경로(`/usr/local/bin`)를 먼저 잡으면 WASM 타깃을 못 찾아 실패할 수 있사옵니다.
-- WASM 빌드 시에는 `cargo build --release --target wasm32-unknown-unknown --lib`처럼 rustup 경로를 명시하는 편이 안전하옵니다.
+- ChromeHWP의 공식 구현은 저장소 안의 JS 파서와 DOM 렌더러이옵니다.
+- 외부 WASM 브리지와 번들은 실행 경로에서 제거했사옵니다.
+- 과거 WASM 실험에서 얻은 관찰은 참고 기록일 뿐, 이후 구현은 HWP/HWPX 형식 문서와 ChromeHWP 자체 코드 기준으로 진행하옵니다.
+- HWPX 레이아웃 고도화는 `docs/hwp-spec/` 원문, `docs/hwp-spec-analysis/` 분석 문서, 한컴 Viewer 캡처 비교를 기준으로 삼사옵니다.
 
 ## 다음 우선순위
 
-1. 최신 WASM 반영 뒤 발생한 `node scripts/verify_samples.mjs` viewer load timeout을 먼저 진단한다.
-2. 대표 5개 문서 검증을 다시 통과시킨 뒤, `incheon-2a.hwpx` focused audit을 재실행한다.
+1. JS 파서/DOM 렌더러 경로로 대표 문서 검증을 다시 통과시킨다.
+2. `incheon-2a.hwpx` 2쪽 겹침을 자체 렌더러 기준으로 재현하고 수정한다.
 3. `incheon-2a.hwpx` 16~18쪽의 대형 셀 continuation과 중첩 표 흐름을 연쇄 검증한다.
 4. `attachment-sale-notice.hwp` 1~4쪽의 표/이미지/헤더 정렬 문제를 해결한다.
 5. `goyeopje-full-2024.hwp` 6·9쪽의 표 높이와 문단 조판 잔여 오차를 줄인다.

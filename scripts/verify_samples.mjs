@@ -617,6 +617,7 @@ function baseSampleState() {
     modeInfo: '',
     message: '',
     canvasCount: 0,
+    pageElementCount: 0,
     thumbnailCount: 0,
     hasRenderer: false,
     keywordHits: {},
@@ -634,6 +635,7 @@ function readSampleState(keywords = []) {
       const statusSectionInfo = document.getElementById('statusSectionInfo')?.textContent?.trim() || '';
       const statusMode = document.getElementById('statusMode')?.textContent?.trim() || '';
       const statusMessage = document.getElementById('statusMessage')?.textContent?.trim() || '';
+      const documentText = document.getElementById('documentCanvas')?.innerText || '';
       const diagnostics = globalThis.__ChromeHwpDiagnostics?.getCurrent?.()
         || renderer?.collectDocumentDiagnostics?.({ includePageInfo: true, includeSectionDetails: true, includeControlDetails: false })
         || null;
@@ -671,20 +673,34 @@ function readSampleState(keywords = []) {
       } : null;
       const keywordHits = Object.fromEntries(keywords.map(keyword => {
         try {
-          const hits = renderer?.searchText?.(keyword) || [];
-          return [keyword, Array.isArray(hits) ? hits.length : 0];
+          if (renderer?.searchText) {
+            const hits = renderer.searchText(keyword) || [];
+            return [keyword, Array.isArray(hits) ? hits.length : 0];
+          }
+          const compactText = documentText.replace(/\\s+/g, '');
+          const compactKeyword = String(keyword).replace(/\\s+/g, '');
+          if (!compactKeyword) return [keyword, 0];
+          let count = 0;
+          let index = compactText.indexOf(compactKeyword);
+          while (index >= 0) {
+            count += 1;
+            index = compactText.indexOf(compactKeyword, index + compactKeyword.length);
+          }
+          return [keyword, count];
         } catch {
           return [keyword, -1];
         }
       }));
+      const pageElementCount = document.querySelectorAll('.hwp-page').length;
       return {
         pageInfo: statusPageInfo,
         sectionInfo: statusSectionInfo,
         modeInfo: statusMode,
         message: statusMessage,
         canvasCount: document.querySelectorAll('.hwp-page canvas').length,
+        pageElementCount,
         thumbnailCount: document.querySelectorAll('.page-thumb, .thumbnail-item, .thumb-item').length,
-        hasRenderer: Boolean(renderer),
+        hasRenderer: Boolean(renderer) || pageElementCount > 0,
         keywordHits,
         diagnostics: diagnosticsSummary,
       };
@@ -698,9 +714,9 @@ async function waitForDocument(sample) {
 
   while (Date.now() - started < LOAD_TIMEOUT_MS) {
     lastState = readSampleState(sample.keywords);
+    const renderedPageCount = Math.max(lastState.pageElementCount || 0, lastState.canvasCount || 0);
     const loaded = lastState.hasRenderer
-      && lastState.canvasCount > 0
-      && lastState.message.includes(sample.filename)
+      && renderedPageCount > 0
       && /쪽/.test(lastState.pageInfo);
     if (loaded) {
       return lastState;
@@ -716,7 +732,7 @@ async function walkPages(totalPages) {
   for (let index = 0; index < totalPages; index += 1) {
     evalPage(
       `(function() {
-        const target = document.querySelectorAll('.hwp-page-canvas')[${index}];
+        const target = document.querySelectorAll('.hwp-page')[${index}];
         if (!target) return 'missing';
         target.scrollIntoView({ block: 'center', inline: 'nearest' });
         return 'ok';
@@ -802,6 +818,7 @@ async function verifySample(sample, hancomOracleBaseline) {
     modeInfo: state.modeInfo,
     message: state.message,
     canvasCount: state.canvasCount,
+    pageElementCount: state.pageElementCount,
     thumbnailCount: state.thumbnailCount,
     pageCount: totalPages,
     pageWalk,
@@ -844,7 +861,7 @@ async function verifySample(sample, hancomOracleBaseline) {
     issues.push(`스크린샷 저장 실패: ${screenshotError}`);
   }
   if (!diagnostics) {
-    issues.push('엔진 구조 진단 데이터 수집 실패');
+    issues.push('구조 진단 데이터 수집 실패');
   } else {
     if (diagnosticPageMatch === false) {
       issues.push(`진단 페이지 수 불일치: 상태바 ${totalPages}, 진단 ${diagnosticPageCount}`);

@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-04-22
+
+### 외부 WASM 실험 경로 제거
+
+- 결정:
+  - 외부 WASM 실험 저장소는 ChromeHWP의 기준 엔진으로 삼지 않는다.
+  - ChromeHWP의 공식 파서/레이아웃 구현은 저장소 내부 JS 파서와 DOM 렌더러다.
+- 수행:
+  - viewer 로딩에서 외부 WASM 브리지 script를 제거했다.
+  - 생성된 WASM 번들과 브리지 파일을 저장소에서 제거했다.
+  - 외부 엔진 중심 마이그레이션 계획 문서를 삭제했다.
+  - README와 `docs/rendering-status.md`를 새 방향으로 갱신했다.
+- 남은 일:
+  - JS 파서/DOM 렌더러 경로에서 대표 문서 검증을 다시 통과시킨다.
+  - `incheon-2a.hwpx` 2쪽 겹침을 자체 렌더러에서 재현하고 수정한다.
+
 ## 2026-04-20
 
 ### 문서 정확성 — 영향도 높은 항목 1차 구현
@@ -1090,58 +1106,22 @@
 
 ---
 
-### WASM 엔진 continuation 보정 및 번들 재반영
+### 폐기된 외부 WASM 실험 기록
 
-- 수행 범위:
-  - 엔진 참조 저장소의 `src/renderer/layout/table_partial.rs`
-  - `lib/hwp.js`, `lib/hwp_bg.wasm`
-  - `scripts/verify_samples.mjs`
+- 2026-04-22 결정:
+  - 이 구간의 외부 WASM 실험은 ChromeHWP 공식 방향에서 제외한다.
+  - 이후 레이아웃 구현은 ChromeHWP 내부 JS 파서/DOM 렌더러 기준으로 진행한다.
+  - 당시 관찰한 `LineSeg.vertical_pos`, split row, nested table continuation 문제는 자체 구현의 참고 이슈로만 남긴다.
 
-#### 14. HWPX split row 안의 중첩 표 y 기준 보정
-
-- 문제: HWPX 큰 셀 continuation에서 `LineSeg.vertical_pos` 기반으로 문단 y를 보정한 뒤에도,
-  해당 문단이 중첩 표만 가진 경우 `has_preceding_text == false` 분기 때문에 중첩 표 y가 다시 셀 상단(`inner_area.y`)으로 되돌아갈 수 있었음.
-- 수정:
-  - split row에서는 앞 텍스트가 없어도 중첩 표가 `para_y`를 따르도록 `nested_block_y()` 보조 규칙 추가.
-  - 비분할 row의 기존 동작은 유지해, 텍스트 없는 단독 중첩 표는 셀 상단에서 시작하도록 보존.
-  - 단위 테스트 추가:
-    - `split_row_nested_block_keeps_vpos_anchored_y_without_preceding_text`
-    - `full_row_nested_block_without_preceding_text_stays_at_cell_top`
-
-#### 15. WASM 번들 이름 정합성
-
-- 문제: `wasm-bindgen` 기본 산출물 이름으로 생성하면 `lib/hwp.js`가 `<crate>_bg.wasm`을 찾게 되어 ChromeHWP의 `hwp_bg.wasm` 배치와 어긋날 수 있음.
-- 수정:
-  - `wasm-bindgen --target web --out-dir pkg --out-name hwp ...`로 생성해 `hwp.js` / `hwp_bg.wasm` 이름을 맞춤.
-  - ChromeHWP `lib/hwp.js`, `lib/hwp_bg.wasm`에 반영.
-
-#### 16. 검증 스크립트 실패 보고 경로 보정
+#### 14. 검증 스크립트 실패 보고 경로 보정
 
 - 문제: 다운로드 폴더 샘플이 로드 실패했을 때, catch 보고서 생성 중 원본 `/Users/.../Downloads` 경로를 직접 fetch URL로 변환하려 해 실제 실패 원인을 가릴 수 있었음.
 - 수정:
   - `safeServedUrlForReport(sample)` 추가.
   - 실패 보고서도 `resolveSampleAccess()`의 served-inputs URL을 우선 사용하도록 변경.
 
-- 검증:
-  - `cargo test nested_block --quiet` 통과 (`2 passed`)
-  - `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet` 통과 (`1 passed`)
-  - `cargo test --lib --quiet` 통과 (`813 passed`, `1 ignored`)
-  - `cargo build --release --target wasm32-unknown-unknown --lib` 통과
-  - `wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>` 통과
-  - `node --check js/hwp-wasm-renderer.js` 통과
-  - `node --check scripts/verify_samples.mjs` 통과
-  - `node scripts/verify_samples.mjs` 통과
-    - `goyeopje.hwp` 2/2
-    - `goyeopje-full-2024.hwp` 11/11
-    - `gyeolseokgye.hwp` 1/1
-    - `attachment-sale-notice.hwp` 4/4
-    - `incheon-2a.hwpx` 18/18
+#### 15. 한컴 감사 안정화
 
-#### 17. 옛 엔진 표기 잔재 정리 및 한컴 감사 안정화
-
-- 표기 정리:
-  - ChromeHWP 문서와 주석에서 불필요한 옛 엔진 소문자 표기를 제거.
-  - 외부 노출 번들명은 `hwp.js` / `hwp_bg.wasm` 기준으로 유지.
 - 감사 도구 보강:
   - `scripts/capture_hancom_page_audit.mjs`의 한컴 Viewer 기본 줌을 35%로 조정해 뒤쪽 페이지가 화면에서 잘리지 않도록 개선.
   - `scripts/build_hancom_page_audit.py`의 페이지 폭 검출 하한을 낮춰 35% 줌의 작은 HWP 페이지도 잡도록 보정.
@@ -1152,34 +1132,7 @@
   - `incheon-2a.hwpx` focused audit: `review 16`, `mismatch 1`, `close 1`.
   - 남은 핵심 mismatch는 16쪽이며, 17~18쪽은 16쪽의 소비량에 연동되어 연쇄 검증 필요.
 - 주의:
-  - 중첩 표 마지막 행 포함 기준을 보수화하는 실험은 `incheon-2a` mismatch를 늘려 즉시 되돌렸음. 현재 엔진 diff에는 해당 실험이 남아 있지 않음.
-
-#### 18. 종료 정리: 중첩 표 continuation 보강 및 다음 전선 고정
-
-- 엔진 보강:
-  - 대형 셀 split window의 논리 높이에, window 하단에서 시작한 중첩 표의 overflow tail을 반영.
-  - 물리 페이지 clipping은 유지하면서 다음 split page가 이전 window의 남은 중첩 표 꼬리를 먼저 이어 받도록 보정.
-  - split row 안에서 앞 텍스트 없이 시작한 중첩 블록도 이미 보정된 `LineSeg.vertical_pos` 기반 y를 유지하도록 정리.
-- 반영:
-  - 최신 엔진 WASM을 ChromeHWP `lib/hwp.js`, `lib/hwp_bg.wasm`에 재반영.
-  - 옛 엔진 소문자 표기 잔재는 ChromeHWP의 보이는 문서/주석 기준으로 제거 상태를 유지.
-- 확인:
-  - 로컬 엔진 SVG 확인 기준 `incheon-2a.hwpx` 16쪽은 5번 항목 표 continuation이 상단에서 이어지고, 17쪽은 8번 항목/분양가 표 흐름으로 이동해 한컴 순서에 더 가까워짐.
-  - 18쪽 이후의 소비량 경계는 아직 확정하지 않았고, focused audit 재실행으로 확인해야 함.
-- 통과한 검증:
-  - `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet`
-  - `node --check scripts/capture_hancom_page_audit.mjs`
-  - `node --check scripts/verify_samples.mjs`
-  - `python3 -m py_compile scripts/build_hancom_page_audit.py`
-- 종료 시점 blocker:
-  - 최신 WASM 반영 뒤 `node scripts/verify_samples.mjs`가 대표 5개 문서 모두 viewer load timeout으로 실패.
-  - 실패 리포트 공통 증상은 `hasRenderer=false`, `canvasCount=0`이므로 문서별 렌더링 오차보다 viewer bootstrap 또는 검증 하네스 로딩 문제로 우선 분류.
-  - 해당 실패 산출물은 진단용으로만 남기고 커밋 대상에서 제외.
-- 다음 작업:
-  1. viewer load timeout 원인 진단 및 `node scripts/verify_samples.mjs` 재통과.
-  2. 통과 후 `incheon-2a.hwpx` focused Hancom audit 재실행.
-  3. 16~18쪽 sequence boundary와 18쪽 이후 누락 가능성 재검토.
-  4. 실패 산출물 유지/재생성 여부 결정.
+  - 중첩 표 마지막 행 포함 기준을 보수화하는 실험은 `incheon-2a` mismatch를 늘려 즉시 되돌렸음.
 
 ---
 

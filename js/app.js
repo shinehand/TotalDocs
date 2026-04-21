@@ -154,7 +154,7 @@ const HwpExporter = {
   buildHwpBlob() {
     const renderer = getHwpWasmRenderer();
     if (!renderer?.exportHwp) {
-      throw new Error('HWP 엔진 저장 기능을 사용할 수 없습니다.');
+      throw new Error('HWP 바이너리 저장 기능을 사용할 수 없습니다.');
     }
     const bytes = renderer.exportHwp();
     return new Blob([bytes], { type: 'application/x-hwp' });
@@ -1024,7 +1024,7 @@ function getSaveAsDisabledReason(format = UI.saveAsFormat?.value || 'hwpx') {
     return '현재 문서는 HWPX/OWPML로 재패키징할 수 없습니다. HTML, PDF 또는 HWP 저장을 사용해 주세요.';
   }
   if (format === 'hwp' && !state.wasmRenderResult) {
-    return '현재 문서는 HWP 바이너리 저장을 지원하지 않습니다. HWP 엔진 경로로 연 문서에서만 저장할 수 있습니다.';
+    return '현재 문서는 HWP 바이너리 저장을 지원하지 않습니다. 직접 저장 지원 경로로 연 문서에서만 저장할 수 있습니다.';
   }
   if (format === 'pdf' && state.mode === 'edit' && state.hasUnsavedChanges) {
     return '';
@@ -1162,7 +1162,8 @@ function parseWithWorker(buffer, filename) {
   });
 }
 
-/* ── WASM 렌더링 (HWP 엔진 기반 Canvas 렌더링) ── */
+/* ── 폐기된 외부 WASM 렌더링 경로 ── */
+const HWP_WASM_RENDERER_ENABLED = false;
 const WASM_INIT_TIMEOUT_MS = 10000; // WASM 초기화 최대 대기 시간 (10초)
 const ZOOM_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
 const ZOOM_MIN = 0.5;
@@ -1182,6 +1183,8 @@ async function waitForHwpWasmRenderer() {
 }
 
 async function tryWasmRender(buffer, filename) {
+  if (!HWP_WASM_RENDERER_ENABLED) return null;
+
   const renderer = await waitForHwpWasmRenderer();
   if (!renderer) return null;
 
@@ -1732,10 +1735,10 @@ function scrollToWasmSearchResult(idx) {
 async function processBuffer(buffer, filename, sizeBytes, options = {}) {
   showLoading(`파싱 중... (${(sizeBytes/1024).toFixed(0)} KB)`);
 
-  // 1차: HWP 엔진 WASM 렌더링 시도 (HWP/HWPX 모두 지원, 훨씬 정확한 레이아웃)
+  // 공식 경로는 ChromeHWP 내부 JS 파서/DOM 렌더러다. 외부 WASM 실험 경로는 비활성화한다.
   const ext = (filename.split('.').pop() || '').toLowerCase();
   let wasmResult = null;
-  if (ext === 'hwp' || ext === 'hwpx') {
+  if (HWP_WASM_RENDERER_ENABLED && (ext === 'hwp' || ext === 'hwpx')) {
     try {
       showLoading('WASM 렌더링 중...');
       wasmResult = await tryWasmRender(buffer.slice(0), filename);

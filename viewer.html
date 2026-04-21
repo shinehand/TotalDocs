@@ -34,7 +34,7 @@
       { name: '새돋움', file: CDN_HAMCHOD_R, format: 'woff', localFallback: { file: 'lib/fonts/NotoSansKR-Regular.woff2', format: 'woff2' } },
       { name: '새바탕', file: CDN_HAMCHOB_R, format: 'woff', localFallback: { file: 'lib/fonts/NotoSerifKR-Regular.woff2', format: 'woff2' } },
       { name: '새바탕', file: CDN_HAMCHOB_B, format: 'woff', weight: 700, localFallback: { file: 'lib/fonts/NotoSerifKR-Bold.woff2', format: 'woff2' } },
-      // reference 편집기와 같은 오픈소스 대체 폰트 세트
+      // ChromeHWP 자체 렌더링용 오픈소스 대체 폰트 세트
       { name: 'HY헤드라인M', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
       { name: 'HYHeadLine M', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
       { name: 'HYHeadLine Medium', file: 'lib/fonts/dotum-Regular.ttf', format: 'truetype' },
@@ -210,8 +210,7 @@
     });
   })();
 
-  // ── measureTextWidth LRU 캐시 (WASM용) ─────────────────────────────────────
-  // hwp-wasm-renderer.js와 중복 방지: 여기서 먼저 정의하면 모듈 로드 전에도 동작
+  // ── measureTextWidth LRU 캐시 (문서 렌더링 공통) ───────────────────────────
   (function() {
     if (typeof globalThis.measureTextWidth !== 'undefined') return;
     let ctx = null, lastFont = '';
@@ -486,8 +485,6 @@
 <script src="lib/pako.min.js"></script>
 <!-- 폰트 치환 모듈 (전역 FontSubstitution 객체 등록) -->
 <script src="js/font_substitution.js"></script>
-<!-- HWP 엔진 WASM 렌더러 (ES module) — app.js보다 먼저 선언, 초기화는 비동기 -->
-<script type="module" src="js/hwp-wasm-renderer.js"></script>
 <script src="js/hwp-parser.js"></script>
 <script src="js/hwp-parser-hwp5-records.js"></script>
 <script src="js/hwp-parser-hwpx.js"></script>
