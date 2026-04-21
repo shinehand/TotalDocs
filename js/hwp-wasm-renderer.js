@@ -16,8 +16,8 @@ if (typeof globalThis.measureTextWidth === 'undefined') {
   let _ctx = null;
   let _lastFont = '';
   const _cache = new Map();
-  const MAX_CACHE = 256;
-  const EVICT_COUNT = 64; // 25% 퇴거
+  const MAX_CACHE = 2048;
+  const EVICT_COUNT = 400; // 약 20% 퇴거
 
   globalThis.measureTextWidth = function(font, text) {
     const key = font + '\0' + text;
@@ -147,16 +147,22 @@ function _renderAllPages(zoom) {
 
   for (let i = 0; i < pageCount; i++) {
     const canvas = document.createElement('canvas');
+    canvas.setAttribute('aria-label', `${i + 1}페이지`);
     doc.renderPageToCanvas(i, canvas, zoom);
 
     // 이미지 데이터 재렌더 (비동기 이미지 디코딩 대응)
+    // 첫 번째(200ms), 두 번째(700ms), 세 번째(1800ms) 총 3회 재렌더하여
+    // JPEG/PNG 임베드 이미지가 디코딩 완료된 뒤 캔버스에 반영되도록 한다.
     const capturedI = i;
     const capturedCanvas = canvas;
-    setTimeout(() => {
+    const _rerender = () => {
       if (_currentDoc === doc) {
         try { doc.renderPageToCanvas(capturedI, capturedCanvas, zoom); } catch (e) { /* ignore */ }
       }
-    }, 200);
+    };
+    setTimeout(_rerender, 200);
+    setTimeout(_rerender, 700);
+    setTimeout(_rerender, 1800);
 
     pages.push({
       canvas,

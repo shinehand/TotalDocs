@@ -193,7 +193,8 @@ const HwpParser = {
           align: HwpParser._hwpxMapAlign(alignEl?.getAttribute?.('horizontal')),
           marginLeft: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'left'), 'value', 0),
           marginRight: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'right'), 'value', 0),
-          textIndent: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'indent'), 'value', 0),
+          // HWPX 들여쓰기 요소는 'hc:indent'가 아닌 'hc:intent'로 표기된다 (HWPML 스펙).
+          textIndent: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'intent'), 'value', 0),
           spacingBefore: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'prev'), 'value', 0),
           spacingAfter: HwpParser._hwpxAttrNum(HwpParser._hwpxDescendant(marginEl, 'next'), 'value', 0),
           lineSpacingType: HwpParser._normalizeLineSpacingType(lineSpacingEl?.getAttribute?.('type')),
@@ -305,6 +306,51 @@ const HwpParser = {
     return HwpParser._hwpxSectionData(xmlStr, header).blocks;
   },
 
+  /**
+   * HWPX hp:t 요소의 텍스트 내용을 추출한다.
+   * hp:t 내부에 <hp:fwSpace/> (전각 공백, U+3000) 같은 자식 요소가 있으면
+   * textContent만 쓰면 누락되므로 child 노드를 직접 순회해 처리한다.
+   * (hp:run이나 hp:compose 같이 hp:t 밖에 있는 요소는 각 호출 지점에서 별도로 처리한다.)
+   */
+  _hwpxTElementText(tEl) {
+    let text = '';
+    for (const node of tEl.childNodes || []) {
+      if (node.nodeType === 3 /* TEXT_NODE */) {
+        text += node.textContent || '';
+      } else if (node.nodeType === 1 /* ELEMENT_NODE */) {
+        const name = HwpParser._hwpxLocalName(node);
+        if (name === 'fwSpace') {
+          text += '\u3000'; // 전각 공백 (IDEOGRAPHIC SPACE)
+        }
+        // 기타 자식 요소는 무시 (hp:run 내부는 이미 처리됨)
+      }
+    }
+    return text || tEl.textContent || '';
+  },
+
+  /**
+   * HWPX compose 요소를 원문자(①②③...) 유니코드 문자로 변환한다.
+   * Hancom HWPX는 원문자를 Private Use Area(PUA) 2-char 시퀀스로 인코딩한다:
+   *   첫 번째 문자: 0xF02D7 (외곽 원 모양)
+   *   두 번째 문자: 0xF02DF + n (n = 1..20)
+   * 이를 Unicode 원문자 U+2460 + (n-1) (① = U+2460)으로 매핑한다.
+   * 대응 문자가 없으면 composeText를 그대로 반환한다.
+   */
+  _hwpxDecodeComposeChar(composeEl) {
+    const text = composeEl?.getAttribute?.('composeText') || '';
+    if (!text) return '';
+    // PUA 원문자: 두 번째 코드포인트가 0xF02E0..0xF02F3 범위이면 ①..⑳ 으로 변환
+    const codePoints = [...text].map(ch => ch.codePointAt(0));
+    const secondCP = codePoints[1];
+    if (Number.isFinite(secondCP) && secondCP >= 0xF02E0 && secondCP <= 0xF02F3) {
+      const n = secondCP - 0xF02DF; // 1..20
+      if (n >= 1 && n <= 20) return String.fromCodePoint(0x2460 + n - 1);
+    }
+    // 원 안에 다른 문자: circleType/composeType 기반 fallback
+    // 두 번째 PUA 문자가 없거나 범위 밖이면 composeText를 그대로 쓴다
+    return text.replace(/[\uE000-\uF8FF]/gu, '').trim() || text;
+  },
+
   _hwpxLocalName(node) {
     if (!node) return '';
     return node.localName || String(node.nodeName || '').replace(/^.*:/, '');
@@ -329,6 +375,18 @@ const HwpParser = {
   _hwpxAttrNum(node, attr, fallback = 0) {
     const value = Number(node?.getAttribute?.(attr));
     return Number.isFinite(value) ? value : fallback;
+  },
+
+  /**
+   * HWPX 셀 여백(cellMargin/inMargin) 속성값을 읽는다.
+   * 0xFFFFFFFF(-1, signed int32 표현)는 "테이블 기본값 상속"을 의미하므로 0으로 변환한다.
+   * 0x80000000 이상 = signed int32로 음수 범위이며 모두 유효하지 않은 값으로 처리한다.
+   */
+  _hwpxCellMarginVal(node, attr) {
+    const value = Number(node?.getAttribute?.(attr));
+    // 0x80000000 이상은 signed int32 음수 범위 → "inherit" 또는 미설정을 의미하므로 0 반환
+    if (!Number.isFinite(value) || value < 0 || value >= 0x80000000) return 0;
+    return value;
   },
 
   _hwpxCharAttrNum(node, fallback = 0) {
@@ -513,6 +571,19 @@ const HwpParser = {
     const posEl = HwpParser._hwpxFirstChild(node, 'pos');
     const sizeEl = HwpParser._hwpxFirstChild(node, 'sz');
     const outMarginEl = HwpParser._hwpxFirstChild(node, 'outMargin');
+    // hp:pic 계열은 <hp:pos> 대신 <hp:offset x="..." y="..."/> 로 위치를 지정한다.
+    const offsetEl = posEl ? null : HwpParser._hwpxFirstChild(node, 'offset');
+    const horzOffsetRaw = posEl
+      ? HwpParser._hwpxAttrNum(posEl, 'horzOffset', 0)
+      : HwpParser._hwpxAttrNum(offsetEl, 'x', 0);
+    const vertOffsetRaw = posEl
+      ? HwpParser._hwpxAttrNum(posEl, 'vertOffset', 0)
+      : HwpParser._hwpxAttrNum(offsetEl, 'y', 0);
+    // HWPUNIT offset은 부호 있는 32-bit 값으로 저장되므로 wrap-around 처리한다.
+    // XML에서 읽으면 Number("4294965716") 같은 큰 양수로 파싱되므로,
+    // >>> 0 으로 unsigned 32-bit 범위로 강제한 뒤 0x7FFFFFFF 초과 시 2^32 빼서 음수로 변환한다.
+    // 예: 4294965716 → 0xFFFFFB14 → -1260 HWPUNIT (= -16.8px @ 96DPI, 앵커 좌측)
+    const toSignedU32 = v => (v >>> 0) > 0x7FFFFFFF ? (v >>> 0) - 0x100000000 : v;
     return {
       inline: posEl?.getAttribute?.('treatAsChar') === '1',
       affectLineSpacing: posEl?.getAttribute?.('affectLSpacing') === '1',
@@ -520,8 +591,8 @@ const HwpParser = {
       vertAlign: HwpParser._normalizeObjectAlign(posEl?.getAttribute?.('vertAlign'), 'vert'),
       horzRelTo: HwpParser._normalizeObjectRelTo(posEl?.getAttribute?.('horzRelTo'), 'horz'),
       horzAlign: HwpParser._normalizeObjectAlign(posEl?.getAttribute?.('horzAlign'), 'horz'),
-      vertOffset: HwpParser._hwpxAttrNum(posEl, 'vertOffset', 0),
-      horzOffset: HwpParser._hwpxAttrNum(posEl, 'horzOffset', 0),
+      vertOffset: toSignedU32(vertOffsetRaw),
+      horzOffset: toSignedU32(horzOffsetRaw),
       flowWithText: posEl?.getAttribute?.('flowWithText') === '1',
       allowOverlap: posEl?.getAttribute?.('allowOverlap') === '1',
       holdAnchorAndSO: posEl?.getAttribute?.('holdAnchorAndSO') === '1',
@@ -544,15 +615,19 @@ const HwpParser = {
     const imgEl = HwpParser._hwpxDescendant(picEl, 'img');
     const curSizeEl = HwpParser._hwpxFirstChild(picEl, 'curSz');
     const orgSizeEl = HwpParser._hwpxFirstChild(picEl, 'orgSz');
-    const sizeEl = HwpParser._hwpxFirstChild(picEl, 'sz') || curSizeEl || orgSizeEl;
     const objectInfo = HwpParser._hwpxParseObjectLayout(picEl);
     const ref = imgEl?.getAttribute?.('binaryItemIDRef') || '';
     const src = header?.images?.[ref] || '';
     if (!src) return null;
-    const width = HwpParser._hwpxAttrNum(sizeEl, 'width',
-      HwpParser._hwpxAttrNum(curSizeEl, 'width', HwpParser._hwpxAttrNum(orgSizeEl, 'width', 0)));
-    const height = HwpParser._hwpxAttrNum(sizeEl, 'height',
-      HwpParser._hwpxAttrNum(curSizeEl, 'height', HwpParser._hwpxAttrNum(orgSizeEl, 'height', 0)));
+    // curSz가 0,0 이면 렌더링 크기가 없으므로 orgSz(원본 크기)로 fallback.
+    // 한 dimension만 0이면 aspect ratio 일관성을 위해 양쪽 모두 orgSz를 사용한다.
+    const curW = HwpParser._hwpxAttrNum(curSizeEl, 'width', 0);
+    const curH = HwpParser._hwpxAttrNum(curSizeEl, 'height', 0);
+    const orgW = HwpParser._hwpxAttrNum(orgSizeEl, 'width', 0);
+    const orgH = HwpParser._hwpxAttrNum(orgSizeEl, 'height', 0);
+    const useCurSz = curW > 0 && curH > 0;
+    const width = useCurSz ? curW : orgW;
+    const height = useCurSz ? curH : orgH;
 
     return HwpParser._withObjectLayout({
       type: 'image',
@@ -580,6 +655,7 @@ const HwpParser = {
       HwpParser._hwpxChildren(runEl).some(child => {
         const name = HwpParser._hwpxLocalName(child);
         if (name === 'lineBreak' || name === 'tab') return true;
+        if (name === 'compose') return Boolean(HwpParser._hwpxDecodeComposeChar(child));
         return name === 't' && Boolean((child.textContent || '').trim());
       })
     ));
@@ -590,11 +666,13 @@ const HwpParser = {
     HwpParser._hwpxChildren(runEl).forEach(child => {
       const name = HwpParser._hwpxLocalName(child);
       if (name === 't') {
-        text += child.textContent || '';
+        text += HwpParser._hwpxTElementText(child);
       } else if (name === 'lineBreak') {
         text += '\n';
       } else if (name === 'tab') {
         text += '\t';
+      } else if (name === 'compose') {
+        text += HwpParser._hwpxDecodeComposeChar(child);
       }
     });
     return text;
@@ -840,7 +918,11 @@ const HwpParser = {
           flushText();
           if (imageBlock) blocks.push(imageBlock);
         } else if (name === 't') {
-          HwpParser._hwpxPushTextRun(runBuffer, child.textContent || '', charInfo || {});
+          HwpParser._hwpxPushTextRun(runBuffer, HwpParser._hwpxTElementText(child), charInfo || {});
+        } else if (name === 'compose') {
+          // 원문자 (①②③...) - PUA 인코딩을 Unicode 원문자로 변환
+          const circleChar = HwpParser._hwpxDecodeComposeChar(child);
+          if (circleChar) HwpParser._hwpxPushTextRun(runBuffer, circleChar, charInfo || {});
         } else if (name === 'lineBreak') {
           HwpParser._hwpxPushTextRun(runBuffer, '\n', charInfo || {});
         } else if (name === 'tab') {
@@ -890,10 +972,10 @@ const HwpParser = {
             subListEl?.getAttribute?.('vertAlign') || tcEl?.getAttribute?.('vertAlign') || '',
           ),
           padding: [
-            HwpParser._hwpxAttrNum(marginEl, 'left', 0),
-            HwpParser._hwpxAttrNum(marginEl, 'right', 0),
-            HwpParser._hwpxAttrNum(marginEl, 'top', 0),
-            HwpParser._hwpxAttrNum(marginEl, 'bottom', 0),
+            HwpParser._hwpxCellMarginVal(marginEl, 'left'),
+            HwpParser._hwpxCellMarginVal(marginEl, 'right'),
+            HwpParser._hwpxCellMarginVal(marginEl, 'top'),
+            HwpParser._hwpxCellMarginVal(marginEl, 'bottom'),
           ],
           borderFillId: HwpParser._hwpxAttrNum(tcEl, 'borderFillIDRef', 0),
           borderStyle: header?.borderFills?.[HwpParser._hwpxAttrNum(tcEl, 'borderFillIDRef', 0)] || null,
@@ -3164,6 +3246,18 @@ const HwpParser = {
       return '[이미지]';
     }
 
+    if (block.type === 'shape') {
+      return '[도형]';
+    }
+
+    if (block.type === 'textbox') {
+      const inner = (block.paragraphs || [])
+        .map(para => HwpParser._blockText(para))
+        .join('\n')
+        .trim();
+      return inner || '[텍스트박스]';
+    }
+
     if (block.type === 'equation') {
       return (block.texts || []).map(run => run.text || '').join('') || '[수식]';
     }
@@ -3185,7 +3279,22 @@ const HwpParser = {
     }
     if (block.type === 'image') {
       if (block.inline) return 1;
-      return Math.max(1, Math.min(6, Math.round((Number(block.height) || 1200) / 1000)));
+      const h = Number(block.height) || 0;
+      // HWPX 이미지: height는 1/100mm 단위 (orgSz/curSz 기준)
+      // 1/100mm × (96px/inch ÷ 25.4mm/inch) ÷ (20px/weight)
+      //   = 96 / (25.4 × 100 × 20) = 96 / 50800 ≈ 1/529
+      // 즉, height(1/100mm) / 529 ≈ weight unit 수
+      const HWPX_IMAGE_WEIGHT_DIVISOR = 529; // 1/100mm → weight unit (96DPI, 20px/weight)
+      const HWPX_IMAGE_WEIGHT_MAX = 10;
+      if (block.sourceFormat === 'hwpx') {
+        return Math.max(1, Math.min(HWPX_IMAGE_WEIGHT_MAX, Math.round(h / HWPX_IMAGE_WEIGHT_DIVISOR)));
+      }
+      return Math.max(1, Math.min(6, Math.round((h || 1200) / 1000)));
+    }
+    if (block.type === 'shape' || block.type === 'textbox') {
+      if (block.inline) return 1;
+      // shape/textbox height는 HWP HWPUNIT 기준
+      return Math.max(1, Math.min(8, Math.round((Number(block.height) || 1200) / 1000)));
     }
     if (block.type === 'equation' || block.type === 'ole') {
       return block.inline ? 1 : 2;

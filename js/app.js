@@ -1255,6 +1255,20 @@ function renderWasmPages(result) {
     drawGuidelineRulers();
     syncWasmCursorVisual();
   });
+
+  // 이미지 재렌더 완료 후 썸네일 갱신 (마지막 재렌더 1800ms + 여유 400ms)
+  setTimeout(() => {
+    document.querySelectorAll('.page-thumb').forEach((thumb) => {
+      const pi = Number(thumb.dataset.page);
+      const pageEl = document.getElementById('page-' + pi);
+      const canvas = pageEl?.querySelector('canvas');
+      const img = thumb.querySelector('img');
+      if (!canvas || !img) return;
+      try {
+        img.src = canvas.toDataURL('image/jpeg', 0.6);
+      } catch (e) { /* cross-origin 등 무시 */ }
+    });
+  }, 2200);
 }
 
 function isWasmEditMode() {

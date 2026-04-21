@@ -1466,6 +1466,8 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   // HWP·HWPX 모두 HWPUNIT (1/7200 inch) 기준 단위 사용 확인됨 (실제 HWPX XML 분석 기준)
   // 96 DPI 환산 스케일 = 1/75 (1 HWPUNIT = 96/7200 ≈ 1/75 px)
   const TABLE_UNIT_SCALE = 1 / 75;
+  // 얇은 구분선 행 임계값 (HWPUNIT → px): 1125 HWPUNIT 미만 = 약 15px
+  const THIN_ROW_THRESHOLD_PX = 15;
   const cellSpacingPx = Math.max(0, Math.min(48, Math.round((Number(tableBlock.cellSpacing) || 0) * TABLE_UNIT_SCALE)));
   if (cellSpacingPx > 0) {
     wrap.dataset.cellSpacing = String(tableBlock.cellSpacing || 0);
@@ -1560,7 +1562,13 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     const contentHeightPx = isHwpxTable
       ? Math.max(0, Math.min(200, Math.round(maxContentHeight * TABLE_UNIT_SCALE)))
       : 0;
-    let minRowHeight = Math.max(30, rowHeightPx, cellHeightPx, contentHeightPx);
+    // 명시적으로 얇은 구분선 행은 30px 강제 최솟값을 적용하지 않는다.
+    // 예: 한컴 HWPX 구분선 행 height=482 HWPUNIT = 6.4px
+    const isThinSeparatorRow = (rowHeightPx > 0 && rowHeightPx < THIN_ROW_THRESHOLD_PX)
+      || (cellHeightPx > 0 && cellHeightPx < THIN_ROW_THRESHOLD_PX && !contentHeightPx);
+    let minRowHeight = isThinSeparatorRow
+      ? Math.max(4, rowHeightPx, cellHeightPx)
+      : Math.max(30, rowHeightPx, cellHeightPx, contentHeightPx);
     if (rowLooksLikeTitle) {
       const titleBase = rowLooksLikeOptions ? 108 : 94;
       const lineBonus = Math.max(0, maxParagraphLines - 1) * 14;
