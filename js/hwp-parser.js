@@ -307,6 +307,27 @@ const HwpParser = {
   },
 
   /**
+   * HWPX hp:t 요소의 텍스트 내용을 추출한다.
+   * hp:t 내부에 <hp:fwSpace/> (전각 공백, U+3000) 같은 자식 요소가 있으면
+   * textContent만 쓰면 누락되므로 child 노드를 순회한다.
+   */
+  _hwpxTElementText(tEl) {
+    let text = '';
+    for (const node of tEl.childNodes || []) {
+      if (node.nodeType === 3 /* TEXT_NODE */) {
+        text += node.textContent || '';
+      } else if (node.nodeType === 1 /* ELEMENT_NODE */) {
+        const name = HwpParser._hwpxLocalName(node);
+        if (name === 'fwSpace') {
+          text += '\u3000'; // 전각 공백 (IDEOGRAPHIC SPACE)
+        }
+        // 기타 자식 요소는 무시 (hp:run 내부는 이미 처리됨)
+      }
+    }
+    return text || tEl.textContent || '';
+  },
+
+  /**
    * HWPX compose 요소를 원문자(①②③...) 유니코드 문자로 변환한다.
    * Hancom HWPX는 원문자를 Private Use Area(PUA) 2-char 시퀀스로 인코딩한다:
    *   첫 번째 문자: 0xF02D7 (외곽 원 모양)
@@ -585,13 +606,15 @@ const HwpParser = {
     const ref = imgEl?.getAttribute?.('binaryItemIDRef') || '';
     const src = header?.images?.[ref] || '';
     if (!src) return null;
-    // curSz가 0,0 이면 렌더링 크기가 없으므로 orgSz(원본 크기)로 fallback
+    // curSz가 0,0 이면 렌더링 크기가 없으므로 orgSz(원본 크기)로 fallback.
+    // 한 dimension만 0이면 aspect ratio 일관성을 위해 양쪽 모두 orgSz를 사용한다.
     const curW = HwpParser._hwpxAttrNum(curSizeEl, 'width', 0);
     const curH = HwpParser._hwpxAttrNum(curSizeEl, 'height', 0);
     const orgW = HwpParser._hwpxAttrNum(orgSizeEl, 'width', 0);
     const orgH = HwpParser._hwpxAttrNum(orgSizeEl, 'height', 0);
-    const width = curW > 0 ? curW : orgW;
-    const height = curH > 0 ? curH : orgH;
+    const useCurSz = curW > 0 && curH > 0;
+    const width = useCurSz ? curW : orgW;
+    const height = useCurSz ? curH : orgH;
 
     return HwpParser._withObjectLayout({
       type: 'image',
@@ -629,7 +652,7 @@ const HwpParser = {
     HwpParser._hwpxChildren(runEl).forEach(child => {
       const name = HwpParser._hwpxLocalName(child);
       if (name === 't') {
-        text += child.textContent || '';
+        text += HwpParser._hwpxTElementText(child);
       } else if (name === 'lineBreak') {
         text += '\n';
       } else if (name === 'tab') {
@@ -881,7 +904,7 @@ const HwpParser = {
           flushText();
           if (imageBlock) blocks.push(imageBlock);
         } else if (name === 't') {
-          HwpParser._hwpxPushTextRun(runBuffer, child.textContent || '', charInfo || {});
+          HwpParser._hwpxPushTextRun(runBuffer, HwpParser._hwpxTElementText(child), charInfo || {});
         } else if (name === 'compose') {
           // 원문자 (①②③...) - PUA 인코딩을 Unicode 원문자로 변환
           const circleChar = HwpParser._hwpxDecodeComposeChar(child);
@@ -3247,8 +3270,10 @@ const HwpParser = {
       // 1/100mm × (96px/inch ÷ 25.4mm/inch) ÷ (20px/weight)
       //   = 96 / (25.4 × 100 × 20) = 96 / 50800 ≈ 1/529
       // 즉, height(1/100mm) / 529 ≈ weight unit 수
+      const HWPX_IMAGE_WEIGHT_DIVISOR = 529; // 1/100mm → weight unit (96DPI, 20px/weight)
+      const HWPX_IMAGE_WEIGHT_MAX = 10;
       if (block.sourceFormat === 'hwpx') {
-        return Math.max(1, Math.min(10, Math.round(h / 529)));
+        return Math.max(1, Math.min(HWPX_IMAGE_WEIGHT_MAX, Math.round(h / HWPX_IMAGE_WEIGHT_DIVISOR)));
       }
       return Math.max(1, Math.min(6, Math.round((h || 1200) / 1000)));
     }
