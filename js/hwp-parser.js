@@ -309,7 +309,8 @@ const HwpParser = {
   /**
    * HWPX hp:t 요소의 텍스트 내용을 추출한다.
    * hp:t 내부에 <hp:fwSpace/> (전각 공백, U+3000) 같은 자식 요소가 있으면
-   * textContent만 쓰면 누락되므로 child 노드를 순회한다.
+   * textContent만 쓰면 누락되므로 child 노드를 직접 순회해 처리한다.
+   * (hp:run이나 hp:compose 같이 hp:t 밖에 있는 요소는 각 호출 지점에서 별도로 처리한다.)
    */
   _hwpxTElementText(tEl) {
     let text = '';
@@ -378,10 +379,12 @@ const HwpParser = {
 
   /**
    * HWPX 셀 여백(cellMargin/inMargin) 속성값을 읽는다.
-   * 0xFFFFFFFF(-1, signed) 는 "테이블 기본값 상속"을 의미하므로 0으로 변환한다.
+   * 0xFFFFFFFF(-1, signed int32 표현)는 "테이블 기본값 상속"을 의미하므로 0으로 변환한다.
+   * 0x80000000 이상 = signed int32로 음수 범위이며 모두 유효하지 않은 값으로 처리한다.
    */
   _hwpxCellMarginVal(node, attr) {
     const value = Number(node?.getAttribute?.(attr));
+    // 0x80000000 이상은 signed int32 음수 범위 → "inherit" 또는 미설정을 의미하므로 0 반환
     if (!Number.isFinite(value) || value < 0 || value >= 0x80000000) return 0;
     return value;
   },
@@ -651,7 +654,8 @@ const HwpParser = {
     return HwpParser._hwpxChildren(pEl, 'run').some(runEl => (
       HwpParser._hwpxChildren(runEl).some(child => {
         const name = HwpParser._hwpxLocalName(child);
-        if (name === 'lineBreak' || name === 'tab' || name === 'compose') return true;
+        if (name === 'lineBreak' || name === 'tab') return true;
+        if (name === 'compose') return Boolean(HwpParser._hwpxDecodeComposeChar(child));
         return name === 't' && Boolean((child.textContent || '').trim());
       })
     ));
