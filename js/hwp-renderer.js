@@ -1560,7 +1560,13 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     const contentHeightPx = isHwpxTable
       ? Math.max(0, Math.min(200, Math.round(maxContentHeight * TABLE_UNIT_SCALE)))
       : 0;
-    let minRowHeight = Math.max(30, rowHeightPx, cellHeightPx, contentHeightPx);
+    // 명시적으로 얇은 구분선 행(HWPX: < 15px, HWP: < 15px)은 30px 강제 최솟값을 적용하지 않는다.
+    // 예: 한컴 HWPX 구분선 행 height=482 HWPUNIT = 6.4px
+    const isThinSeparatorRow = (rowHeightPx > 0 && rowHeightPx < 15)
+      || (cellHeightPx > 0 && cellHeightPx < 15 && !contentHeightPx);
+    let minRowHeight = isThinSeparatorRow
+      ? Math.max(4, rowHeightPx, cellHeightPx)
+      : Math.max(30, rowHeightPx, cellHeightPx, contentHeightPx);
     if (rowLooksLikeTitle) {
       const titleBase = rowLooksLikeOptions ? 108 : 94;
       const lineBonus = Math.max(0, maxParagraphLines - 1) * 14;

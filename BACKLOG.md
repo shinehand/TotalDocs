@@ -19,19 +19,18 @@
 ## Next Session Start
 
 - 이번 세션에서 완료한 것:
-  - HWPX 테이블 셀 `hasMargin="0"` → 테이블 `inMargin` fallback
-  - HWP `PAGE_NUM_PARA` (tag-76) `startPageNum` 추출 (offset 6 WORD)
-  - HWP 다중 섹션·단일 섹션 경로에서 `startPageNum` 반영
-  - `favicon.ico` 루트 추가 + `index.html` favicon link 추가
+  - HWPX `_hwpxPictureBlock`: `curSz=0,0` 시 `orgSz` fallback → pic 1,2(장식 밴드, 로고) 렌더링 복구
+  - HWPX `_hwpxParseObjectLayout`: `hp:offset x/y` 요소에서 horzOffset/vertOffset 읽기 (pic 위치 오프셋 수정)
+    - 부호 있는 32-bit 정수 변환(`toSignedU32`) 추가 (0xFFFFF... overflow 값 → 음수 오프셋)
+  - 렌더러 표 행 최소 높이: `isThinSeparatorRow` 판별로 얇은 구분선 행(< 15px)은 30px 강제 해제 → 4px 수준 유지
 - 바로 이어서 할 일:
-  - `pageStyle.height/margins`를 pagination budget에 반영 (단위 재검증)
-  - HWP 파서 핵심 로직 `js/hwp-parser.js` ↔ `js/parser.worker.js` 중복 해소
-  - HWPX 도형 (`drawingObject`) 지원 — 현재 샘플에는 없지만 일반 문서에 빈번
-  - 표 행 높이·세로 정렬 정밀화
+  - HWPX `_hwpxParagraphBlocks`: `hp:shp` 도형 요소 지원 (일반 HWPX 문서에 빈번)
+  - HWP 개체/도형 앵커 복원 (`HWPTAG_CTRL_HEADER` + shape/picture 파싱 정밀화)
+  - `attachment-sale-notice.hwp` 14페이지 / `goyeopje.hwp` 3페이지 유지 여부 재검증
 - 다음 시작 시 체크포인트:
-  - `_paginateSectionBlocks`에서 `pageStyle.height` 단위 확인 (HWPUNIT 1/7200 inch)
-  - 96 DPI 기준 변환: HWPUNIT / 7200 * 96 = HWPUNIT / 75
-  - `attachment-sale-notice.hwp` 14페이지 / `goyeopje.hwp` 3페이지 유지 여부
+  - `_hwpxParseObjectLayout`은 이제 `hp:pos`(tbl계열) / `hp:offset`(pic계열) 양쪽을 처리함
+  - incheon-2a.hwpx 샘플에는 `hp:shp` 없음 — 다른 HWPX 문서에서 확인 필요
+  - 얇은 행 임계값 15px = 약 1125 HWPUNIT (감사 문서의 구분선은 모두 < 1000 HWPUNIT)
 
 
 ## P0

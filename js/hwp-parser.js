@@ -513,6 +513,17 @@ const HwpParser = {
     const posEl = HwpParser._hwpxFirstChild(node, 'pos');
     const sizeEl = HwpParser._hwpxFirstChild(node, 'sz');
     const outMarginEl = HwpParser._hwpxFirstChild(node, 'outMargin');
+    // hp:pic 계열은 <hp:pos> 대신 <hp:offset x="..." y="..."/> 로 위치를 지정한다.
+    const offsetEl = posEl ? null : HwpParser._hwpxFirstChild(node, 'offset');
+    const horzOffsetRaw = posEl
+      ? HwpParser._hwpxAttrNum(posEl, 'horzOffset', 0)
+      : HwpParser._hwpxAttrNum(offsetEl, 'x', 0);
+    const vertOffsetRaw = posEl
+      ? HwpParser._hwpxAttrNum(posEl, 'vertOffset', 0)
+      : HwpParser._hwpxAttrNum(offsetEl, 'y', 0);
+    // HWPUNIT offset은 부호 있는 32-bit 값으로 저장되므로 wrap-around 처리한다
+    // (예: 0xFFFFFFE4 = -28 HWPUNIT = 문단 기준 미세 위 오프셋)
+    const toSignedU32 = v => (v >>> 0) > 0x7FFFFFFF ? (v >>> 0) - 0x100000000 : v;
     return {
       inline: posEl?.getAttribute?.('treatAsChar') === '1',
       affectLineSpacing: posEl?.getAttribute?.('affectLSpacing') === '1',
@@ -520,8 +531,8 @@ const HwpParser = {
       vertAlign: HwpParser._normalizeObjectAlign(posEl?.getAttribute?.('vertAlign'), 'vert'),
       horzRelTo: HwpParser._normalizeObjectRelTo(posEl?.getAttribute?.('horzRelTo'), 'horz'),
       horzAlign: HwpParser._normalizeObjectAlign(posEl?.getAttribute?.('horzAlign'), 'horz'),
-      vertOffset: HwpParser._hwpxAttrNum(posEl, 'vertOffset', 0),
-      horzOffset: HwpParser._hwpxAttrNum(posEl, 'horzOffset', 0),
+      vertOffset: toSignedU32(vertOffsetRaw),
+      horzOffset: toSignedU32(horzOffsetRaw),
       flowWithText: posEl?.getAttribute?.('flowWithText') === '1',
       allowOverlap: posEl?.getAttribute?.('allowOverlap') === '1',
       holdAnchorAndSO: posEl?.getAttribute?.('holdAnchorAndSO') === '1',
@@ -544,15 +555,17 @@ const HwpParser = {
     const imgEl = HwpParser._hwpxDescendant(picEl, 'img');
     const curSizeEl = HwpParser._hwpxFirstChild(picEl, 'curSz');
     const orgSizeEl = HwpParser._hwpxFirstChild(picEl, 'orgSz');
-    const sizeEl = HwpParser._hwpxFirstChild(picEl, 'sz') || curSizeEl || orgSizeEl;
     const objectInfo = HwpParser._hwpxParseObjectLayout(picEl);
     const ref = imgEl?.getAttribute?.('binaryItemIDRef') || '';
     const src = header?.images?.[ref] || '';
     if (!src) return null;
-    const width = HwpParser._hwpxAttrNum(sizeEl, 'width',
-      HwpParser._hwpxAttrNum(curSizeEl, 'width', HwpParser._hwpxAttrNum(orgSizeEl, 'width', 0)));
-    const height = HwpParser._hwpxAttrNum(sizeEl, 'height',
-      HwpParser._hwpxAttrNum(curSizeEl, 'height', HwpParser._hwpxAttrNum(orgSizeEl, 'height', 0)));
+    // curSz가 0,0 이면 렌더링 크기가 없으므로 orgSz(원본 크기)로 fallback
+    const curW = HwpParser._hwpxAttrNum(curSizeEl, 'width', 0);
+    const curH = HwpParser._hwpxAttrNum(curSizeEl, 'height', 0);
+    const orgW = HwpParser._hwpxAttrNum(orgSizeEl, 'width', 0);
+    const orgH = HwpParser._hwpxAttrNum(orgSizeEl, 'height', 0);
+    const width = curW > 0 ? curW : orgW;
+    const height = curH > 0 ? curH : orgH;
 
     return HwpParser._withObjectLayout({
       type: 'image',
