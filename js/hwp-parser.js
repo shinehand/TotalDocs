@@ -3213,10 +3213,19 @@ const HwpParser = {
     }
     if (block.type === 'image') {
       if (block.inline) return 1;
-      return Math.max(1, Math.min(6, Math.round((Number(block.height) || 1200) / 1000)));
+      const h = Number(block.height) || 0;
+      // HWPX 이미지: height는 1/100mm 단위 (orgSz/curSz 기준)
+      // 1/100mm × (96px/inch ÷ 25.4mm/inch) ÷ (20px/weight)
+      //   = 96 / (25.4 × 100 × 20) = 96 / 50800 ≈ 1/529
+      // 즉, height(1/100mm) / 529 ≈ weight unit 수
+      if (block.sourceFormat === 'hwpx') {
+        return Math.max(1, Math.min(10, Math.round(h / 529)));
+      }
+      return Math.max(1, Math.min(6, Math.round((h || 1200) / 1000)));
     }
     if (block.type === 'shape' || block.type === 'textbox') {
       if (block.inline) return 1;
+      // shape/textbox height는 HWP HWPUNIT 기준
       return Math.max(1, Math.min(8, Math.round((Number(block.height) || 1200) / 1000)));
     }
     if (block.type === 'equation' || block.type === 'ole') {
