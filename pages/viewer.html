@@ -160,6 +160,7 @@
           font.format = lower.endsWith('.woff')
             ? 'woff'
             : lower.endsWith('.ttf') ? 'truetype' : 'woff2';
+          font.localFallback = null; // QA 오버라이드 시 로컬 폴백 비활성화
         }
       }
       console.log(`[폰트] QA 오버라이드 ${overrides.size}개 적용`);

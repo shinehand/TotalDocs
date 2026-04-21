@@ -147,6 +147,7 @@ function _renderAllPages(zoom) {
 
   for (let i = 0; i < pageCount; i++) {
     const canvas = document.createElement('canvas');
+    canvas.setAttribute('aria-label', `${i + 1}페이지`);
     doc.renderPageToCanvas(i, canvas, zoom);
 
     // 이미지 데이터 재렌더 (비동기 이미지 디코딩 대응)
