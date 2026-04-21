@@ -198,8 +198,9 @@
       const src = f.localFallback
         ? `url(${f.file}) format('${fmt}'), url(${f.localFallback.file}) format('${f.localFallback.format || 'woff2'}')`
         : `url(${f.file}) format('${fmt}')`;
-      return _loadFontFace(f.name, src, descriptors).catch(() => {
+      return _loadFontFace(f.name, src, descriptors).catch(e => {
         failedCount++;
+        console.debug(`[폰트] 로드 실패: "${f.name}" (${e?.message || e})`);
         return null;
       });
     })).then(async () => {
