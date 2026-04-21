@@ -28,20 +28,25 @@
   - HWPX 이미지 pagination 가중치: 1/100mm 단위 → 올바른 제수 529 적용
 - 이번 세션에서 완료한 것 (현재):
   - HWPX `compose` 요소 → 원문자(①②③...) 유니코드 변환 (`_hwpxDecodeComposeChar`)
-    - Hancom PUA 인코딩: 0xF02D7(원 모양) + 0xF02DF+n → U+2460+(n-1)
+    - Hancom PUA 인코딩: 0xF02D7(원 모양) + 0xF02DF+n → U+2460+(n-1), incheon-2a.hwpx에 19개
   - HWPX `hp:t > hp:fwSpace` → 전각 공백(U+3000) 변환 (`_hwpxTElementText`)
-  - `_hwpxParagraphHasText`에 `compose` 포함
+    - fwSpace는 `hp:t` 내부에만 등장 (section에 75개, direct-in-run 0개)
+  - `_hwpxParagraphHasText`에 `compose` 포함 (`_hwpxDecodeComposeChar` 결과 검증)
+  - HWPX `cellMargin/inMargin` 0xFFFFFFFF(-1 signed) 버그 수정: `_hwpxCellMarginVal` 헬퍼
+    - 기존: 4294967295 → TABLE_UNIT_SCALE 곱 후 30px로 클램핑 → 셀 안쪽 여백 과대
+    - 수정: 0x80000000 이상(signed int32 음수 범위) → 0으로 변환 → 휴리스틱 여백으로 fallback
+  - `curSz` fallback: 한 dimension만 0이면 양쪽 모두 `orgSz` 사용 (aspect ratio 일관성)
+  - `_estimateBlockWeight` HWPX 이미지: named constants (`HWPX_IMAGE_WEIGHT_DIVISOR=529`, `HWPX_IMAGE_WEIGHT_MAX=10`)
 - 바로 이어서 할 일:
-  - HWPX `_hwpxParagraphBlocks`: `hp:shp` 도형 요소 지원 (일반 HWPX 문서에 빈번)
+  - HWPX `_hwpxParagraphBlocks`: `hp:shp` 도형 요소 지원 (일반 HWPX 문서에 빈번, incheon-2a에는 없음)
   - HWP 개체/도형 앵커 복원 (`HWPTAG_CTRL_HEADER` + shape/picture 파싱 정밀화)
   - `attachment-sale-notice.hwp` 4페이지 / `goyeopje.hwp` 2페이지 유지 여부 재검증 (Hancom oracle 기준)
 - 다음 시작 시 체크포인트:
   - `_hwpxParseObjectLayout`은 이제 `hp:pos`(tbl계열) / `hp:offset`(pic계열) 양쪽을 처리함
-  - incheon-2a.hwpx 샘플에는 `hp:shp` 없음 — 다른 HWPX 문서에서 확인 필요
-  - 얇은 행 임계값 15px = 약 1125 HWPUNIT (감사 문서의 구분선은 모두 < 1000 HWPUNIT)
   - incheon-2a.hwpx의 `hp:ctrl` 요소: colPr×1, pageNum×1, footer×1, header×1, newNum×2, fieldBegin/End×18
   - `compose` PUA base: 0xF02DF (second char - base = n, 1≤n≤20 → ①..⑳)
-  - `fwSpace`는 `hp:t` 내부에만 등장 (section에 75개, direct-in-run 0개)
+  - cellMargin 0xFFFFFFFF = hasOwnMargin=1이지만 값이 없음 → 0 처리 후 heuristic fallback
+  - `_hwpxCellMarginVal`: 0x80000000 이상은 모두 0으로 처리 (signed int32 음수 범위)
 
 
 ## P0
