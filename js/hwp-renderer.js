@@ -32,13 +32,8 @@ function appendRunSpan(parent, run) {
     img.className = 'hwp-inline-image';
     img.src = run.src;
     img.alt = run.alt || 'image';
-    const isHwpImage = run.sourceFormat === 'hwp';
-    const widthPx = isHwpImage
-      ? hwpUnitToPx(run.width, 12, 240, 1 / 75, 18)
-      : hwpUnitToPx(run.width, 12, 180, 1 / 26, 18);
-    const heightPx = isHwpImage
-      ? hwpUnitToPx(run.height, 12, 180, 1 / 75, 12)
-      : hwpUnitToPx(run.height, 12, 180, 1 / 26, 12);
+    const widthPx = objectUnitToPx(run, run.width, 12, 240, 18);
+    const heightPx = objectUnitToPx(run, run.height, 12, 180, 12);
     if (widthPx) img.style.width = `${widthPx}px`;
     if (heightPx) img.style.height = `${heightPx}px`;
     if ((Number(run.offsetX) || 0) > 20000) {
@@ -321,13 +316,8 @@ function appendImageBlock(parent, block, className = '') {
   img.src = block.src;
   img.alt = block.alt || 'image';
 
-  const isHwpImage = block.sourceFormat === 'hwp';
-  const widthPx = isHwpImage
-    ? hwpUnitToPx(block.width, 24, 720, 1 / 75, 0)
-    : hwpUnitToPx(block.width, 24, 720, 1 / 26, 0);
-  const heightPx = isHwpImage
-    ? hwpUnitToPx(block.height, 24, 960, 1 / 75, 0)
-    : hwpUnitToPx(block.height, 24, 960, 1 / 26, 0);
+  const widthPx = objectUnitToPx(block, block.width, 24, 720, 0);
+  const heightPx = objectUnitToPx(block, block.height, 24, 960, 0);
   if (widthPx) img.style.width = `${widthPx}px`;
   if (heightPx) img.style.maxHeight = `${heightPx}px`;
   if (block.inline && !treatLargeOffsetAsRightAligned) {
@@ -390,13 +380,8 @@ function appendTextBoxBlock(parent, block, context = {}) {
   const content = document.createElement('div');
   content.className = 'hwp-textbox-content';
 
-  const isHwp = block.sourceFormat === 'hwp';
-  const widthPx = isHwp
-    ? hwpUnitToPx(block.width, 24, 960, 1 / 75, 0)
-    : hwpUnitToPx(block.width, 24, 960, 1 / 26, 0);
-  const heightPx = isHwp
-    ? hwpUnitToPx(block.height, 24, 1280, 1 / 75, 0)
-    : hwpUnitToPx(block.height, 24, 1280, 1 / 26, 0);
+  const widthPx = objectUnitToPx(block, block.width, 24, 960, 0);
+  const heightPx = objectUnitToPx(block, block.height, 24, 1280, 0);
   if (widthPx) content.style.minWidth = `${widthPx}px`;
   if (heightPx) content.style.minHeight = `${heightPx}px`;
 
@@ -410,13 +395,8 @@ function appendTextBoxBlock(parent, block, context = {}) {
 }
 
 function appendShapePlaceholder(parent, block) {
-  const isHwp = block.sourceFormat === 'hwp';
-  const widthPx = isHwp
-    ? hwpUnitToPx(block.width, 8, 960, 1 / 75, 0)
-    : hwpUnitToPx(block.width, 8, 960, 1 / 26, 0);
-  const heightPx = isHwp
-    ? hwpUnitToPx(block.height, 4, 960, 1 / 75, 0)
-    : hwpUnitToPx(block.height, 4, 960, 1 / 26, 0);
+  const widthPx = objectUnitToPx(block, block.width, 8, 960, 0);
+  const heightPx = objectUnitToPx(block, block.height, 4, 960, 0);
   if (!widthPx && !heightPx) return;
 
   const wrap = document.createElement('div');
@@ -594,9 +574,7 @@ function hwpSignedPageUnitToPx(value, minPx, maxPx, fallbackPx = 0) {
 }
 
 function objectUnitScale(block, kind = 'size') {
-  if (block?.sourceFormat === 'hwpx') {
-    return kind === 'position' ? (1 / 75) : (1 / 26);
-  }
+  if (block?.sourceFormat === 'hwpx') return 1 / 75;
   return 1 / 75;
 }
 

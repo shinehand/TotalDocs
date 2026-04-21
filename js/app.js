@@ -1,7 +1,7 @@
 /**
  * app.js — HWP Web Viewer & Editor (에디터 · 익스포터 · 상태 · UI 핸들러)
  * (Chrome 확장 plain-script 로딩, type="module" 없음)
- * 의존 로드 순서: pako → jszip → quill → hwp-parser.js → hwp-renderer.js → app.js
+ * 의존 로드 순서: pako → jszip → quill → hwp-parser.js → hwp-parser-hwp5-records.js → hwp-parser-hwpx.js → hwp-parser-hwp5-container.js → hwp-renderer.js → app.js
  */
 
 

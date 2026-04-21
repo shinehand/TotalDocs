@@ -155,6 +155,34 @@
   2. Re-run the focused `incheon-2a.hwpx` Hancom audit.
   3. Continue the page 16-18 sequence review from the new continuation behavior.
 
+## 2026-04-21 End-of-Day Handoff
+- Completed:
+  - Split the legacy one-file JavaScript parser into focused modules:
+    - `js/hwp-parser.js`: shared parser facade and utility surface
+    - `js/hwp-parser-hwp5-records.js`: HWP5 binary record parsing helpers
+    - `js/hwp-parser-hwpx.js`: HWPX/JSZip XML parsing helpers
+    - `js/hwp-parser-hwp5-container.js`: HWP5 CFB/container parsing helpers
+  - Updated viewer and worker script loading order so the split parser modules are available in both the main thread and worker path.
+  - Aligned legacy fallback image/object sizing to use one HWP/HWPX object-unit scale rule instead of treating HWPX size as a separate 1/26 path.
+  - Confirmed HWPX layout source material is available in the local HWPML 3.0 spec and analysis docs:
+    - `docs/hwp-spec/hwpml-3.0-revision1.2.pdf`
+    - `docs/hwp-spec-analysis/hwpml-3.0-revision1.2.md`
+  - Reproduced the user-reported `incheon-2a.hwpx` page 2 overlap with the actual file from Downloads.
+  - Fixed the engine-side split-cell vpos rewind case in `/Users/shinehandmac/Github/rhwp-reference/src/renderer/layout/table_partial.rs`.
+    - First selected paragraphs still honor stored `LineSeg.vertical_pos`.
+    - Later paragraphs in the same visible continuation fragment no longer rewind above already rendered visible content.
+  - Rebuilt the release WASM bundle and copied it into `lib/hwp_bg.wasm`.
+- Verification:
+  - `cargo test vpos_anchor --lib`: passed.
+  - `node scripts/verify_samples.mjs`: passed for all five representative documents.
+  - Page-count result: `goyeopje.hwp 2/2`, `goyeopje-full-2024.hwp 11/11`, `gyeolseokgye.hwp 1/1`, `attachment-sale-notice.hwp 4/4`, `incheon-2a.hwpx 18/18`.
+  - Latest report: `/tmp/chromehwp-verify-hwpx-layout-fix/report.json`.
+- Remaining work:
+  - HWPX layout fidelity is not finished globally; continue visual review against Hancom Viewer for object anchoring, repeat headers, long split cells, and late-page page-flow consumption.
+  - `incheon-2a.hwpx` page 2 no longer shows the immediate top overlap in the verified path, but pages 12-18 still deserve a sequence-based visual audit because prior page consumption controls later page starts.
+  - Add automated screenshot/perceptual regression coverage for the page 2 split-cell rewind case so this bug does not return.
+  - Keep parser-module split behavior under regression checks in both direct viewer loading and worker parsing paths.
+
 ## Playwright Session Rule
 - Always run `close-all` before verification.
 - Always use one fixed session name: `verify-current`.
