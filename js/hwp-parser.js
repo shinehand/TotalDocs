@@ -376,6 +376,16 @@ const HwpParser = {
     return Number.isFinite(value) ? value : fallback;
   },
 
+  /**
+   * HWPX 셀 여백(cellMargin/inMargin) 속성값을 읽는다.
+   * 0xFFFFFFFF(-1, signed) 는 "테이블 기본값 상속"을 의미하므로 0으로 변환한다.
+   */
+  _hwpxCellMarginVal(node, attr) {
+    const value = Number(node?.getAttribute?.(attr));
+    if (!Number.isFinite(value) || value < 0 || value >= 0x80000000) return 0;
+    return value;
+  },
+
   _hwpxCharAttrNum(node, fallback = 0) {
     const attrs = ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user'];
     for (const attr of attrs) {
@@ -958,10 +968,10 @@ const HwpParser = {
             subListEl?.getAttribute?.('vertAlign') || tcEl?.getAttribute?.('vertAlign') || '',
           ),
           padding: [
-            HwpParser._hwpxAttrNum(marginEl, 'left', 0),
-            HwpParser._hwpxAttrNum(marginEl, 'right', 0),
-            HwpParser._hwpxAttrNum(marginEl, 'top', 0),
-            HwpParser._hwpxAttrNum(marginEl, 'bottom', 0),
+            HwpParser._hwpxCellMarginVal(marginEl, 'left'),
+            HwpParser._hwpxCellMarginVal(marginEl, 'right'),
+            HwpParser._hwpxCellMarginVal(marginEl, 'top'),
+            HwpParser._hwpxCellMarginVal(marginEl, 'bottom'),
           ],
           borderFillId: HwpParser._hwpxAttrNum(tcEl, 'borderFillIDRef', 0),
           borderStyle: header?.borderFills?.[HwpParser._hwpxAttrNum(tcEl, 'borderFillIDRef', 0)] || null,
