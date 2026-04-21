@@ -521,8 +521,10 @@ const HwpParser = {
     const vertOffsetRaw = posEl
       ? HwpParser._hwpxAttrNum(posEl, 'vertOffset', 0)
       : HwpParser._hwpxAttrNum(offsetEl, 'y', 0);
-    // HWPUNIT offset은 부호 있는 32-bit 값으로 저장되므로 wrap-around 처리한다
-    // (예: 0xFFFFFFE4 = -28 HWPUNIT = 문단 기준 미세 위 오프셋)
+    // HWPUNIT offset은 부호 있는 32-bit 값으로 저장되므로 wrap-around 처리한다.
+    // XML에서 읽으면 Number("4294965716") 같은 큰 양수로 파싱되므로,
+    // >>> 0 으로 unsigned 32-bit 범위로 강제한 뒤 0x7FFFFFFF 초과 시 2^32 빼서 음수로 변환한다.
+    // 예: 4294965716 → 0xFFFFFB14 → -1260 HWPUNIT (= -16.8px @ 96DPI, 앵커 좌측)
     const toSignedU32 = v => (v >>> 0) > 0x7FFFFFFF ? (v >>> 0) - 0x100000000 : v;
     return {
       inline: posEl?.getAttribute?.('treatAsChar') === '1',
@@ -3177,6 +3179,18 @@ const HwpParser = {
       return '[이미지]';
     }
 
+    if (block.type === 'shape') {
+      return '[도형]';
+    }
+
+    if (block.type === 'textbox') {
+      const inner = (block.paragraphs || [])
+        .map(para => HwpParser._blockText(para))
+        .join('\n')
+        .trim();
+      return inner || '[텍스트박스]';
+    }
+
     if (block.type === 'equation') {
       return (block.texts || []).map(run => run.text || '').join('') || '[수식]';
     }
@@ -3199,6 +3213,10 @@ const HwpParser = {
     if (block.type === 'image') {
       if (block.inline) return 1;
       return Math.max(1, Math.min(6, Math.round((Number(block.height) || 1200) / 1000)));
+    }
+    if (block.type === 'shape' || block.type === 'textbox') {
+      if (block.inline) return 1;
+      return Math.max(1, Math.min(8, Math.round((Number(block.height) || 1200) / 1000)));
     }
     if (block.type === 'equation' || block.type === 'ole') {
       return block.inline ? 1 : 2;
