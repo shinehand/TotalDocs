@@ -306,6 +306,29 @@ const HwpParser = {
     return HwpParser._hwpxSectionData(xmlStr, header).blocks;
   },
 
+  /**
+   * HWPX compose 요소를 원문자(①②③...) 유니코드 문자로 변환한다.
+   * Hancom HWPX는 원문자를 Private Use Area(PUA) 2-char 시퀀스로 인코딩한다:
+   *   첫 번째 문자: 0xF02D7 (외곽 원 모양)
+   *   두 번째 문자: 0xF02DF + n (n = 1..20)
+   * 이를 Unicode 원문자 U+2460 + (n-1) (① = U+2460)으로 매핑한다.
+   * 대응 문자가 없으면 composeText를 그대로 반환한다.
+   */
+  _hwpxDecodeComposeChar(composeEl) {
+    const text = composeEl?.getAttribute?.('composeText') || '';
+    if (!text) return '';
+    // PUA 원문자: 두 번째 코드포인트가 0xF02E0..0xF02F3 범위이면 ①..⑳ 으로 변환
+    const codePoints = [...text].map(ch => ch.codePointAt(0));
+    const secondCP = codePoints[1];
+    if (Number.isFinite(secondCP) && secondCP >= 0xF02E0 && secondCP <= 0xF02F3) {
+      const n = secondCP - 0xF02DF; // 1..20
+      if (n >= 1 && n <= 20) return String.fromCodePoint(0x2460 + n - 1);
+    }
+    // 원 안에 다른 문자: circleType/composeType 기반 fallback
+    // 두 번째 PUA 문자가 없거나 범위 밖이면 composeText를 그대로 쓴다
+    return text.replace(/[\uE000-\uF8FF]/gu, '').trim() || text;
+  },
+
   _hwpxLocalName(node) {
     if (!node) return '';
     return node.localName || String(node.nodeName || '').replace(/^.*:/, '');
@@ -595,7 +618,7 @@ const HwpParser = {
     return HwpParser._hwpxChildren(pEl, 'run').some(runEl => (
       HwpParser._hwpxChildren(runEl).some(child => {
         const name = HwpParser._hwpxLocalName(child);
-        if (name === 'lineBreak' || name === 'tab') return true;
+        if (name === 'lineBreak' || name === 'tab' || name === 'compose') return true;
         return name === 't' && Boolean((child.textContent || '').trim());
       })
     ));
@@ -611,6 +634,8 @@ const HwpParser = {
         text += '\n';
       } else if (name === 'tab') {
         text += '\t';
+      } else if (name === 'compose') {
+        text += HwpParser._hwpxDecodeComposeChar(child);
       }
     });
     return text;
@@ -857,6 +882,10 @@ const HwpParser = {
           if (imageBlock) blocks.push(imageBlock);
         } else if (name === 't') {
           HwpParser._hwpxPushTextRun(runBuffer, child.textContent || '', charInfo || {});
+        } else if (name === 'compose') {
+          // 원문자 (①②③...) - PUA 인코딩을 Unicode 원문자로 변환
+          const circleChar = HwpParser._hwpxDecodeComposeChar(child);
+          if (circleChar) HwpParser._hwpxPushTextRun(runBuffer, circleChar, charInfo || {});
         } else if (name === 'lineBreak') {
           HwpParser._hwpxPushTextRun(runBuffer, '\n', charInfo || {});
         } else if (name === 'tab') {
