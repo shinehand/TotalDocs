@@ -1,7 +1,7 @@
 # Rendering Status
 
 ## Scope
-- Project: `ChromeHWP`
+- Project: `TotalDocs`
 - Baseline samples:
 `/Users/shinehandmac/Downloads/고엽제등록신청서.hwp`
 `/Users/shinehandmac/Downloads/231229 고엽제후유(의)증환자 등 등록신청서 일체(2024.1.1. 기준).hwp`
@@ -51,12 +51,12 @@
     - `gyeolseokgye.hwp`: `1쪽`
     - `attachment-sale-notice.hwp`: `4쪽`
     - `incheon-2a.hwpx`: `18쪽`
-  - ChromeHWP now matches the Hancom Viewer page-count baseline for all five downloaded QA documents.
+  - TotalDocs now matches the Hancom Viewer page-count baseline for all five downloaded QA documents.
   - Full-page visual audit now captures every page of the five downloaded QA documents:
     - total: `5 documents / 36 pages`
     - command 1: `node scripts/capture_hancom_page_audit.mjs`
     - command 2: `python3 scripts/build_hancom_page_audit.py`
-    - report: `/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit/hancom-page-audit-report.html`
+    - report: `/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/page-audit/hancom-page-audit-report.html`
   - Full-page audit status is not yet "identical to Hancom Viewer"; remaining high-priority pages are `goyeopje-full-2024.hwp` page 9, plus `attachment-sale-notice.hwp` page 1.
   - Most residual page-audit diffs are currently caused by top-origin drift, font raster/weight differences, line-height accumulation, and table stroke density rather than page-count failure.
   - `incheon-2a.hwpx` was fixed by preserving fixed CellBreak row height, including blank vertical extent, during table continuation pagination.
@@ -69,7 +69,7 @@
   - Partial table nested-control clipping now treats same-row `split_end_content_limit` as a visible length after `split_start_content_offset`, preventing non-vpos fallback paths from comparing against an inverted end boundary.
   - Nested tables now render `Table.caption` using the same direction and spacing rules as top-level tables, including TAC top-caption flow where the table body must move below the caption.
   - Current visual residuals for `incheon-2a.hwpx` page 2 are mostly small top-origin drift, accumulated line-height risk on later pages, and border/text weight differences; the major page-flow mismatch has been fixed.
-  - Page 2 comparison capture: `/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png`
+  - Page 2 comparison capture: `/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png`
   - Latest Hancom comparison after the font, image-anchor, HWPX offset, continuous-shadow, and TAC measurement fixes:
     - `goyeopje.hwp`: visiblePageDiff `10.856`, titleDiff `10.350`
     - `goyeopje-full-2024.hwp`: visiblePageDiff `18.053`, titleDiff `20.679`
@@ -86,7 +86,7 @@
 - Rebuilt web bundle:
   - `RUSTC=/Users/shinehandmac/.cargo/bin/rustc /Users/shinehandmac/.cargo/bin/cargo build --release --target wasm32-unknown-unknown --lib`
   - `/Users/shinehandmac/.cargo/bin/wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>`
-  - Copied generated artifacts into `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.js`, `/Users/shinehandmac/Github/ChromeHWP/lib/hwp_bg.wasm`, and `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.d.ts`.
+  - Copied generated artifacts into `/Users/shinehandmac/Github/TotalDocs/lib/hwp.js`, `/Users/shinehandmac/Github/TotalDocs/lib/hwp_bg.wasm`, and `/Users/shinehandmac/Github/TotalDocs/lib/hwp.d.ts`.
 - Tests run:
   - `cargo test --lib split_line_ranges_can_span_multiple_vpos_windows --quiet`: passed.
   - `node scripts/verify_samples.mjs`: passed for the five representative documents.
@@ -100,7 +100,7 @@
   - spaced title text such as `등 록 신 청 서` is also matched by whitespace-insensitive page search
   - audited samples on 2026-04-18 returned keyword hits successfully
 - Detailed audit notes:
-  - `/Users/shinehandmac/Github/ChromeHWP/docs/fidelity-audit-2026-04-17.md`
+  - `/Users/shinehandmac/Github/TotalDocs/docs/fidelity-audit-2026-04-17.md`
 
 ## 2026-04-20 Continuation Follow-Up
 - Engine source update:
@@ -110,7 +110,7 @@
 - Rebuilt web bundle:
   - `RUSTC=/Users/shinehandmac/.cargo/bin/rustc /Users/shinehandmac/.cargo/bin/cargo build --release --target wasm32-unknown-unknown --lib`
   - `/Users/shinehandmac/.cargo/bin/wasm-bindgen --target web --out-dir pkg --out-name hwp <engine-release-wasm>`
-  - Copied generated artifacts into `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.js`, `/Users/shinehandmac/Github/ChromeHWP/lib/hwp_bg.wasm`, and `/Users/shinehandmac/Github/ChromeHWP/lib/hwp.d.ts`.
+  - Copied generated artifacts into `/Users/shinehandmac/Github/TotalDocs/lib/hwp.js`, `/Users/shinehandmac/Github/TotalDocs/lib/hwp_bg.wasm`, and `/Users/shinehandmac/Github/TotalDocs/lib/hwp.d.ts`.
 - Verification:
   - `cargo test nested_block --quiet`: passed.
   - `cargo test split_line_ranges_can_span_multiple_vpos_windows --quiet`: passed.
@@ -125,13 +125,13 @@
 
 ## 2026-04-20 Audit Follow-Up
 - Project naming cleanup:
-  - Removed stale lowercase legacy engine naming from visible ChromeHWP docs/comments while keeping the public bundle names `hwp.js` and `hwp_bg.wasm`.
+  - Removed stale lowercase legacy engine naming from visible TotalDocs docs/comments while keeping the public bundle names `hwp.js` and `hwp_bg.wasm`.
 - Hancom page-audit hardening:
   - `scripts/capture_hancom_page_audit.mjs` now defaults Hancom Viewer capture zoom to 35%, which keeps full pages visible for `incheon-2a.hwpx` late-page comparisons.
   - `scripts/build_hancom_page_audit.py` accepts smaller page widths at low zoom and records `captureQuality`; suspicious crop aspect ratios are reported as `capture-review` instead of being mixed with renderer mismatches.
 - Latest visual audit:
-  - Full sample audit output: `/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit/hancom-page-audit-report.html`
-  - `incheon-2a.hwpx` focused audit output: `/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/page-audit-incheon-latest/hancom-page-audit-report.html`
+  - Full sample audit output: `/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/page-audit/hancom-page-audit-report.html`
+  - `incheon-2a.hwpx` focused audit output: `/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/page-audit-incheon-latest/hancom-page-audit-report.html`
   - Focused `incheon-2a.hwpx` verdicts: `review 16`, `mismatch 1`, `close 1`.
   - The remaining focused mismatch is page 16. Pages 17-18 still need sequence review because page 16 consumption determines the final-page content boundary.
 
@@ -176,7 +176,7 @@
   - `cargo test vpos_anchor --lib`: passed.
   - `node scripts/verify_samples.mjs`: passed for all five representative documents.
   - Page-count result: `goyeopje.hwp 2/2`, `goyeopje-full-2024.hwp 11/11`, `gyeolseokgye.hwp 1/1`, `attachment-sale-notice.hwp 4/4`, `incheon-2a.hwpx 18/18`.
-  - Latest report: `/tmp/chromehwp-verify-hwpx-layout-fix/report.json`.
+  - Latest report: `/tmp/totaldocs-verify-hwpx-layout-fix/report.json`.
 - Remaining work:
   - HWPX layout fidelity is not finished globally; continue visual review against Hancom Viewer for object anchoring, repeat headers, long split cells, and late-page page-flow consumption.
   - `incheon-2a.hwpx` page 2 no longer shows the immediate top overlap in the verified path, but pages 12-18 still deserve a sequence-based visual audit because prior page consumption controls later page starts.

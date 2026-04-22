@@ -1,9 +1,9 @@
-/* ChromeHWP Content Script — HWP 링크 배지 + 호버 카드 스타일
+/* TotalDocs Content Script — HWP 링크 배지 + 호버 카드 스타일
  * MIT License 참조: HWP Chrome content script (Edward Kim)
  */
 
 /* ── HWP 링크 배지 ── */
-.chromehwp-badge {
+.totaldocs-badge {
   display: inline-block;
   margin-left: 4px;
   padding: 1px 5px;
@@ -21,12 +21,12 @@
   transition: background 0.15s;
 }
 
-.chromehwp-badge:hover {
+.totaldocs-badge:hover {
   background: #0d3d82;
 }
 
 /* ── 호버 카드 ── */
-.chromehwp-hover-card {
+.totaldocs-hover-card {
   position: absolute;
   z-index: 2147483647;
   width: 260px;
@@ -42,11 +42,11 @@
   overflow: hidden;
 }
 
-.chromehwp-hover-card:hover {
+.totaldocs-hover-card:hover {
   box-shadow: 0 6px 24px rgba(0,0,0,0.2);
 }
 
-.chromehwp-hover-title {
+.totaldocs-hover-title {
   font-weight: 600;
   font-size: 13px;
   line-height: 1.4;
@@ -55,14 +55,14 @@
   word-break: break-all;
 }
 
-.chromehwp-hover-meta {
+.totaldocs-hover-meta {
   font-size: 11px;
   color: #6b7280;
   margin-bottom: 8px;
 }
 
 /* ── 썸네일 ── */
-.chromehwp-hover-thumb {
+.totaldocs-hover-thumb {
   width: 100%;
   max-height: 140px;
   overflow: hidden;
@@ -74,23 +74,23 @@
   justify-content: center;
 }
 
-.chromehwp-hover-thumb img {
+.totaldocs-hover-thumb img {
   width: 100%;
   height: auto;
   object-fit: contain;
   display: block;
 }
 
-.chromehwp-thumb-loading {
+.totaldocs-thumb-loading {
   min-height: 60px;
 }
 
-.chromehwp-thumb-spinner {
+.totaldocs-thumb-spinner {
   font-size: 20px;
 }
 
 /* ── 푸터 ── */
-.chromehwp-hover-action {
+.totaldocs-hover-action {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #e5e7eb;

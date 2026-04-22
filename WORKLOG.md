@@ -154,7 +154,7 @@
   - 큰 표를 행 단위로 분할하는 페이지네이션 로직 추가
 - 검증:
   - Playwright로 `http://127.0.0.1:4173/pages/viewer.html` 직접 열어 샘플 문서 업로드
-  - 샘플 `/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-hwp/test-input.hwp` 기준 표가 실제 칸 형태로 렌더링되는 것 확인
+  - 샘플 `/Users/shinehandmac/Github/TotalDocs/output/playwright/verify-hwp/test-input.hwp` 기준 표가 실제 칸 형태로 렌더링되는 것 확인
   - 페이지 수가 `3페이지`로 정리되고 첫 페이지에 머리 문단과 표가 함께 배치되는 것 확인
   - 검증 아티팩트: `.playwright-cli/page-2026-03-27T14-43-00-311Z.yml`, `.playwright-cli/page-2026-03-27T14-43-23-350Z.png`
 
@@ -259,11 +259,11 @@
 - 결론:
   - 원본 그대로 보이게 하려면 수식은 “명령 해석 + 수학 레이아웃 엔진” 수준이 필요하고, 차트는 “객체 그래프 직렬화/역직렬화 + SVG/Canvas 렌더러”에 가까운 접근이 필요하다.
   - 초기 viewer fidelity 목표에서는 수식/차트의 구조와 대표 형태를 먼저 맞추고, 아주 세부적인 인쇄/장식 상수는 후순위로 둬야 한다.
-    - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/inputs/goyeopje.hwp`
+    - `/Users/shinehandmac/Github/TotalDocs/output/playwright/inputs/goyeopje.hwp`
       - `3페이지` 유지
       - 첫 페이지 신청서 양식이 표/칸 구조로 유지되는 것 확인
       - 검증 아티팩트: `.playwright-cli/page-2026-03-29T03-19-47-101Z.png`
-    - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/inputs/incheon-2a.hwpx`
+    - `/Users/shinehandmac/Github/TotalDocs/output/playwright/inputs/incheon-2a.hwpx`
       - 이전 `28페이지` 수준으로 과분할되던 상태에서 `5페이지`로 안정화
       - 첫 페이지에 제목과 공급위치/공급대상/안내 블록이 함께 배치되는 것 확인
       - 3페이지에서 `공급규모/공급대상` 구간의 실제 다열 표가 다시 표 형태로 렌더링되는 것 확인
@@ -433,7 +433,7 @@
     - 이후 검증은 고정 세션 재사용 또는 종료를 기본 원칙으로 진행
 - 개발 적용:
   - `scripts/playwright_smoke.sh`
-    - `chromehwp` 단일 세션으로 뷰어를 열고 HWP/HWPX 샘플을 순차 검증한 뒤 세션을 자동 종료하는 스모크 스크립트 추가
+    - `totaldocs` 단일 세션으로 뷰어를 열고 HWP/HWPX 샘플을 순차 검증한 뒤 세션을 자동 종료하는 스모크 스크립트 추가
     - 검증 창이 누적되지 않도록 `close -> open -> verify -> close` 흐름으로 정리
 - 재검증:
   - `bash scripts/playwright_smoke.sh`
@@ -459,7 +459,7 @@
     - HWPX `cellSz.height`, `subList.textHeight`, `subList.vertAlign` 를 실제 셀 메타에 반영
     - HWPX 표에 대해 행별 실제 높이(`hwpxRowHeights`)를 따로 계산하고, 렌더 시 추정 weight 대신 실측 높이를 우선 사용하도록 보정
     - HWPX 셀 margin 은 HWP와 분리된 스케일로 변환해 과도한 패딩을 줄이고 원본 칸 여백에 더 가깝게 조정
-    - 문서 로드 후 브라우저 탭 제목을 `파일명 - ChromeHWP Viewer` 로 갱신해 탭 식별성을 높임
+    - 문서 로드 후 브라우저 탭 제목을 `파일명 - TotalDocs Viewer` 로 갱신해 탭 식별성을 높임
   - `pages/viewer.html`
     - favicon / apple-touch-icon 링크를 추가해 로컬 검증 시 `favicon.ico` 404 를 제거하고 탭 아이콘을 고정
   - `scripts/playwright_smoke.sh`
@@ -472,8 +472,8 @@
   - `node scripts/verify_samples.mjs`
     - HWP `3페이지`, HWPX `5페이지`, 핵심 키워드/파일 배지 기준 회귀검증 통과
   - `bash scripts/playwright_smoke.sh`
-    - `goyeopje.hwp` 업로드 시 탭 제목이 `goyeopje.hwp - ChromeHWP Viewer` 로 바뀌고 스크린샷이 생성되는 것 확인
-    - `incheon-2a.hwpx` 업로드 시 탭 제목이 `incheon-2a.hwpx - ChromeHWP Viewer` 로 바뀌고 스크린샷이 생성되는 것 확인
+    - `goyeopje.hwp` 업로드 시 탭 제목이 `goyeopje.hwp - TotalDocs Viewer` 로 바뀌고 스크린샷이 생성되는 것 확인
+    - `incheon-2a.hwpx` 업로드 시 탭 제목이 `incheon-2a.hwpx - TotalDocs Viewer` 로 바뀌고 스크린샷이 생성되는 것 확인
     - 콘솔 에러 카운트가 사라지고, 실행 후 `playwright_cli.sh list` 기준 열린 브라우저가 남지 않는 것 확인
     - 검증 아티팩트: `.playwright-cli/page-2026-03-29T11-48-50-301Z.png`, `.playwright-cli/page-2026-03-29T11-48-53-533Z.png`, `.playwright-cli/page-2026-03-29T11-48-49-705Z.yml`, `.playwright-cli/page-2026-03-29T11-48-52-988Z.yml`
 
@@ -735,7 +735,7 @@
     - `node --check background.js`
     - `node --check content_script.js`
     - Playwright로 `output/playwright/inputs/incheon-2a.hwpx`를 `incheon-2a.owpml`로 복제해 업로드
-      - 탭 제목이 `incheon-2a.owpml - ChromeHWP Viewer`로 표시되는 것 확인
+      - 탭 제목이 `incheon-2a.owpml - TotalDocs Viewer`로 표시되는 것 확인
       - 기존과 동일하게 `10페이지` 문서가 렌더되는 것 확인
 
 - 추가 반영: HWP 문단/표 단위 변환 재보정
@@ -814,7 +814,7 @@
     - Worker VM으로 `/Users/shinehandmac/Downloads/결석계.hwp` 파싱
       - 표 내부 문단에서 자간 `-19~-3`, 일부 문장 `장평 97` 값이 실제로 복원되는 것 확인
     - Playwright로 `http://127.0.0.1:4174/pages/viewer.html`에서 `output/playwright/inputs/gyeolseokgye.hwp` 업로드
-      - 제목이 `gyeolseokgye.hwp - ChromeHWP Viewer`로 표시되는 것 확인
+      - 제목이 `gyeolseokgye.hwp - TotalDocs Viewer`로 표시되는 것 확인
       - `.hwp-page` 1장 렌더와 스타일 적용 span 23개 확인
       - 검증 스크린샷: `.playwright-cli/page-2026-04-05T14-12-12-640Z.png`
 
@@ -1110,10 +1110,10 @@
 
 #### 15. WASM 번들 이름 정합성
 
-- 문제: `wasm-bindgen` 기본 산출물 이름으로 생성하면 `lib/hwp.js`가 `<crate>_bg.wasm`을 찾게 되어 ChromeHWP의 `hwp_bg.wasm` 배치와 어긋날 수 있음.
+- 문제: `wasm-bindgen` 기본 산출물 이름으로 생성하면 `lib/hwp.js`가 `<crate>_bg.wasm`을 찾게 되어 TotalDocs의 `hwp_bg.wasm` 배치와 어긋날 수 있음.
 - 수정:
   - `wasm-bindgen --target web --out-dir pkg --out-name hwp ...`로 생성해 `hwp.js` / `hwp_bg.wasm` 이름을 맞춤.
-  - ChromeHWP `lib/hwp.js`, `lib/hwp_bg.wasm`에 반영.
+  - TotalDocs `lib/hwp.js`, `lib/hwp_bg.wasm`에 반영.
 
 #### 16. 검증 스크립트 실패 보고 경로 보정
 
@@ -1140,7 +1140,7 @@
 #### 17. 옛 엔진 표기 잔재 정리 및 한컴 감사 안정화
 
 - 표기 정리:
-  - ChromeHWP 문서와 주석에서 불필요한 옛 엔진 소문자 표기를 제거.
+  - TotalDocs 문서와 주석에서 불필요한 옛 엔진 소문자 표기를 제거.
   - 외부 노출 번들명은 `hwp.js` / `hwp_bg.wasm` 기준으로 유지.
 - 감사 도구 보강:
   - `scripts/capture_hancom_page_audit.mjs`의 한컴 Viewer 기본 줌을 35%로 조정해 뒤쪽 페이지가 화면에서 잘리지 않도록 개선.
@@ -1161,8 +1161,8 @@
   - 물리 페이지 clipping은 유지하면서 다음 split page가 이전 window의 남은 중첩 표 꼬리를 먼저 이어 받도록 보정.
   - split row 안에서 앞 텍스트 없이 시작한 중첩 블록도 이미 보정된 `LineSeg.vertical_pos` 기반 y를 유지하도록 정리.
 - 반영:
-  - 최신 엔진 WASM을 ChromeHWP `lib/hwp.js`, `lib/hwp_bg.wasm`에 재반영.
-  - 옛 엔진 소문자 표기 잔재는 ChromeHWP의 보이는 문서/주석 기준으로 제거 상태를 유지.
+  - 최신 엔진 WASM을 TotalDocs `lib/hwp.js`, `lib/hwp_bg.wasm`에 재반영.
+  - 옛 엔진 소문자 표기 잔재는 TotalDocs의 보이는 문서/주석 기준으로 제거 상태를 유지.
 - 확인:
   - 로컬 엔진 SVG 확인 기준 `incheon-2a.hwpx` 16쪽은 5번 항목 표 continuation이 상단에서 이어지고, 17쪽은 8번 항목/분양가 표 흐름으로 이동해 한컴 순서에 더 가까워짐.
   - 18쪽 이후의 소비량 경계는 아직 확정하지 않았고, focused audit 재실행으로 확인해야 함.

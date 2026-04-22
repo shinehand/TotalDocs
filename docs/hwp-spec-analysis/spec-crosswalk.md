@@ -1,7 +1,7 @@
 # HWP Spec Crosswalk
 
 Date: 2026-04-18
-Scope: `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec/*.pdf`
+Scope: `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec/*.pdf`
 
 ## 목적
 
@@ -109,8 +109,8 @@ Scope: `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec/*.pdf`
 
 ## 개별 분석 문서
 
-- [README](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/README.md)
-- [implementation-requirements.md](/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/implementation-requirements.md)
+- [README](/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/README.md)
+- [implementation-requirements.md](/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/implementation-requirements.md)
 - `hwp-5.0-revision1.3.md`
 - `hwpml-3.0-revision1.2.md`
 - `hwp-equation-revision1.3.md`

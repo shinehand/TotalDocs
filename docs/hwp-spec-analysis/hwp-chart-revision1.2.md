@@ -1,7 +1,7 @@
 # HWP 차트 스펙 분석 - `hwp-chart-revision1.2.pdf`
 
 - 원문 PDF: `/Users/shinehandmac/Downloads/한글문서파일형식_차트_revision1.2.pdf`
-- 저장소 사본: `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec/hwp-chart-revision1.2.pdf`
+- 저장소 사본: `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec/hwp-chart-revision1.2.pdf`
 - 판본: revision 1.2:20141120
 - 페이지 수: PDF 47쪽, 본문 인쇄 페이지 1-40
 - 범위: HWP 2002 이후 제품에서 사용하는 차트 바이너리 구조

@@ -1,32 +1,32 @@
 {
   "generatedAt": "2026-04-19T00:12:09+09:00",
   "source": "Hancom Office HWP Viewer screenshots in output/hancom-oracle",
-  "notes": "한컴 Viewer 상태바를 정답으로 삼은 페이지 수 기준선이다. ChromeHWP QA는 이 값과 다르면 조판 불일치로 보고해야 한다.",
+  "notes": "한컴 Viewer 상태바를 정답으로 삼은 페이지 수 기준선이다. TotalDocs QA는 이 값과 다르면 조판 불일치로 보고해야 한다.",
   "documents": {
     "goyeopje": {
       "filename": "goyeopje.hwp",
       "hancomPageCount": 2,
-      "evidence": "/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/goyeopje-hancom.png"
+      "evidence": "/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/goyeopje-hancom.png"
     },
     "goyeopje-full-2024": {
       "filename": "goyeopje-full-2024.hwp",
       "hancomPageCount": 11,
-      "evidence": "/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/goyeopje-full-2024-hancom.png"
+      "evidence": "/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/goyeopje-full-2024-hancom.png"
     },
     "gyeolseokgye": {
       "filename": "gyeolseokgye.hwp",
       "hancomPageCount": 1,
-      "evidence": "/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/gyeolseokgye-hancom.png"
+      "evidence": "/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/gyeolseokgye-hancom.png"
     },
     "attachment-sale-notice": {
       "filename": "attachment-sale-notice.hwp",
       "hancomPageCount": 4,
-      "evidence": "/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/attachment-sale-notice-hancom.png"
+      "evidence": "/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/attachment-sale-notice-hancom.png"
     },
     "incheon-2a": {
       "filename": "incheon-2a.hwpx",
       "hancomPageCount": 18,
-      "evidence": "/Users/shinehandmac/Github/ChromeHWP/output/hancom-oracle/incheon-2a-hancom.png"
+      "evidence": "/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/incheon-2a-hancom.png"
     }
   }
 }
