@@ -1,8 +1,8 @@
-# ChromeHWP
+# TotalDocs
 
 > **⚡ 설치 없이 브라우저에서 바로 사용하기**
 >
-> 👉 **[https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)**
+> 👉 **[https://shinehand.github.io/TotalDocs/viewer.html](https://shinehand.github.io/TotalDocs/viewer.html)**
 >
 > 링크를 클릭하면 **아무것도 설치하지 않아도** HWP 뷰어가 바로 열립니다.
 > `.hwp` / `.hwpx` / `.owpml` 파일을 화면에 끌어다 놓거나 "파일 선택" 버튼으로 올리면 즉시 렌더링됩니다.
