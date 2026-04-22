@@ -634,7 +634,7 @@ function readSampleState(keywords = []) {
       const statusSectionInfo = document.getElementById('statusSectionInfo')?.textContent?.trim() || '';
       const statusMode = document.getElementById('statusMode')?.textContent?.trim() || '';
       const statusMessage = document.getElementById('statusMessage')?.textContent?.trim() || '';
-      const diagnostics = globalThis.__ChromeHwpDiagnostics?.getCurrent?.()
+      const diagnostics = globalThis.__TotalDocsDiagnostics?.getCurrent?.()
         || renderer?.collectDocumentDiagnostics?.({ includePageInfo: true, includeSectionDetails: true, includeControlDetails: false })
         || null;
       const fontModule = globalThis.FontSubstitution || null;
@@ -860,7 +860,7 @@ async function verifySample(sample, hancomOracleBaseline) {
     issues.push(`미해소 글꼴: ${unresolvedFonts.join(', ')}`);
   }
   if (hancomPageMatch === false) {
-    issues.push(`한컴 Viewer 페이지 수 불일치: 한컴 ${hancomExpectedPages}, ChromeHWP ${totalPages}`);
+    issues.push(`한컴 Viewer 페이지 수 불일치: 한컴 ${hancomExpectedPages}, TotalDocs ${totalPages}`);
   }
 
   return report;

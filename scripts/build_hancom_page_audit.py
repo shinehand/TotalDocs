@@ -323,7 +323,7 @@ def make_compare_image(hancom_page, chrome_page, output_path, title, target_widt
     draw = ImageDraw.Draw(canvas)
     draw.text((pad, 12), f"Hancom Viewer - {title}", fill=(72, 44, 28))
     chrome_x = pad + target_width + gap
-    draw.text((chrome_x, 12), "ChromeHWP", fill=(30, 58, 90))
+    draw.text((chrome_x, 12), "TotalDocs", fill=(30, 58, 90))
     top = label_h + pad
     canvas.paste(hancom_norm.convert("RGB"), (pad, top))
     canvas.paste(chrome_norm.convert("RGB"), (chrome_x, top))
@@ -468,7 +468,7 @@ def write_html(results, html_path):
 <body>
 <main>
   <h1>Hancom Page Audit</h1>
-  <p>모든 테스트 문서를 한컴 Viewer와 ChromeHWP 페이지 단위로 대조한 산출물입니다.</p>
+  <p>모든 테스트 문서를 한컴 Viewer와 TotalDocs 페이지 단위로 대조한 산출물입니다.</p>
   {''.join(cards)}
 </main>
 </body>
@@ -477,7 +477,7 @@ def write_html(results, html_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build per-page Hancom-vs-ChromeHWP audit report.")
+    parser = argparse.ArgumentParser(description="Build per-page Hancom-vs-TotalDocs audit report.")
     parser.add_argument(
         "--manifest",
         default="output/hancom-oracle/page-audit/hancom-page-audit-manifest.json",

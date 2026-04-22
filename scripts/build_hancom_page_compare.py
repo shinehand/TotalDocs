@@ -119,7 +119,7 @@ def make_compare_image(hancom_page, chrome_page, output_path, title, target_widt
 
     draw.text((pad, 12), f"Hancom Viewer - {title}", fill=(80, 44, 31))
     chrome_x = pad + target_width + gap
-    draw.text((chrome_x, 12), "ChromeHWP", fill=(31, 58, 92))
+    draw.text((chrome_x, 12), "TotalDocs", fill=(31, 58, 92))
 
     top = pad + label_h
     canvas.paste(hancom.convert("RGB"), (pad, top))
@@ -134,7 +134,7 @@ def make_compare_image(hancom_page, chrome_page, output_path, title, target_widt
 def build_for_entry(entry, output_dir, target_width):
     entry_id = entry["id"]
     hancom_path = Path(entry["hancomScreenshot"])
-    chrome_path = Path(entry["chromeHwpScreenshot"])
+    chrome_path = Path(entry["totalDocsScreenshot"])
     title = entry.get("filename") or entry_id
 
     hancom_page = crop_visible_page(Image.open(hancom_path).convert("RGB"), "hancom")
@@ -164,7 +164,7 @@ def build_for_entry(entry, output_dir, target_width):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build normalized Hancom-vs-ChromeHWP page comparison images.")
+    parser = argparse.ArgumentParser(description="Build normalized Hancom-vs-TotalDocs page comparison images.")
     parser.add_argument(
         "--manifest",
         default="output/hancom-oracle/hancom-oracle-manifest.json",

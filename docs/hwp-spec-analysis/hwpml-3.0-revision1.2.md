@@ -113,7 +113,7 @@ HWPML
 
 ### 3.3 HWP/HWPX 공통 내부 모델 축
 
-아래 표의 `현재 코드베이스 내부 모델`은 `/Users/shinehandmac/Github/ChromeHWP/js/hwp-parser.js` 기준 구현 대응을 정리한 것이다. 즉, `HWP 5.0 대응`은 원문 스펙 기반이고 `HWPX/현재 코드베이스 대응`은 현 코드 구조에서 추론한 구현 연결이다.
+아래 표의 `현재 코드베이스 내부 모델`은 `/Users/shinehandmac/Github/TotalDocs/js/hwp-parser.js` 기준 구현 대응을 정리한 것이다. 즉, `HWP 5.0 대응`은 원문 스펙 기반이고 `HWPX/현재 코드베이스 대응`은 현 코드 구조에서 추론한 구현 연결이다.
 
 | 내부 버킷 | HWPML 소스 | HWP 5.0 대응 | HWPX/현재 코드베이스 대응 |
 |---|---|---|---|

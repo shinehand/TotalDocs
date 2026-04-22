@@ -27,11 +27,11 @@
 아직 남은 큰 과제는 `페이지 내부 레이아웃 충실도`이옵니다.
 
 - 한컴 Viewer 기준 페이지 수는 현재 다운로드 대표 5종 모두 일치하옵니다.
-- `goyeopje.hwp`: 한컴 `2쪽`, ChromeHWP `2쪽`
-- `goyeopje-full-2024.hwp`: 한컴 `11쪽`, ChromeHWP `11쪽`
-- `gyeolseokgye.hwp`: 한컴 `1쪽`, ChromeHWP `1쪽`
-- `attachment-sale-notice.hwp`: 한컴 `4쪽`, ChromeHWP `4쪽`
-- `incheon-2a.hwpx`: 한컴 `18쪽`, ChromeHWP `18쪽`
+- `goyeopje.hwp`: 한컴 `2쪽`, TotalDocs `2쪽`
+- `goyeopje-full-2024.hwp`: 한컴 `11쪽`, TotalDocs `11쪽`
+- `gyeolseokgye.hwp`: 한컴 `1쪽`, TotalDocs `1쪽`
+- `attachment-sale-notice.hwp`: 한컴 `4쪽`, TotalDocs `4쪽`
+- `incheon-2a.hwpx`: 한컴 `18쪽`, TotalDocs `18쪽`
 
 최근 한컴 Viewer 화면 비교 기준 주요 수치입니다.
 
@@ -66,7 +66,7 @@
 - 모든 보정은 문서 형식에서 읽은 값에 대한 일반 규칙이어야 한다.
 - 예: `LineSeg.vertical_pos`, `line_height`, `line_spacing`, `Table.caption`, 셀 padding, 행 높이, 개체 anchor, `charPr/shadow`, border/fill, section/page definition.
 - 다운로드 폴더의 실제 문서는 회귀검증 기준선이지만, 구현은 해당 문서에 종속되면 안 된다.
-- 화면 정답은 한컴 Viewer이며, 최종 판단은 반드시 한컴 캡처와 ChromeHWP 캡처의 페이지 단위 비교로 한다.
+- 화면 정답은 한컴 Viewer이며, 최종 판단은 반드시 한컴 캡처와 TotalDocs 캡처의 페이지 단위 비교로 한다.
 
 ### 지금까지 완료한 일
 
@@ -74,7 +74,7 @@
 2. 외부 표기는 `hwp`로 통일했다.
 3. 실제 한글 프로그램과 유사한 메뉴/툴바/눈금자/페이지/상태바 레이아웃을 구성했다.
 4. 다운로드 폴더 원본 문서 기준 QA 체계를 만들었다.
-5. 대표 5개 문서의 한컴 Viewer 페이지 수와 ChromeHWP 페이지 수를 일치시켰다.
+5. 대표 5개 문서의 한컴 Viewer 페이지 수와 TotalDocs 페이지 수를 일치시켰다.
 6. 한컴 Viewer 기준 전 페이지 감사 리포트를 만들었다.
 7. HWPX 제목 그림자, 폰트 대체, 그림 앵커, TAC 표 높이, 대형 셀 continuation, 중첩 표 캡션 누락 문제를 일반 규칙으로 수정했다.
 8. README와 렌더링 상태 문서에 하드코딩 금지 원칙을 명문화했다.
@@ -110,7 +110,7 @@
 
 ### 1. 웹 뷰어 (GitHub Pages)
 
-- **라이브 URL**: [https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)
+- **라이브 URL**: [https://shinehand.github.io/TotalDocs/viewer.html](https://shinehand.github.io/TotalDocs/viewer.html)
 - 뷰어 (루트): [viewer.html](viewer.html)
 - 뷰어 (크롬 확장용): [pages/viewer.html](pages/viewer.html)
 - 스타일: [css/viewer.css](css/viewer.css)
@@ -158,7 +158,7 @@
 - 모든 보정은 HWP/HWPX 원본 레코드의 서식값, 위치값, 캡션 방향, 줄/행/셀 속성처럼 문서 형식에서 읽은 값에 대한 일반 규칙이어야 한다.
 
 자동화는 브라우저 적재를 위해 `output/playwright/served-inputs/` 에 임시 복제본을 만들 수 있으나, 바이트 원천은 늘 다운로드 원본이어야 하옵니다.
-또한 화면 충실도 판정은 한컴 Viewer 캡처와 ChromeHWP 캡처를 짝지어 보며 내려야 하옵니다.
+또한 화면 충실도 판정은 한컴 Viewer 캡처와 TotalDocs 캡처를 짝지어 보며 내려야 하옵니다.
 
 상세 기준은 아래 문서에 정리되어 있사옵니다.
 
@@ -171,16 +171,16 @@
 
 아래 링크를 클릭하면 바로 HWP 뷰어가 열립니다. 아무것도 설치할 필요가 없사옵니다.
 
-**[https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)**
+**[https://shinehand.github.io/TotalDocs/viewer.html](https://shinehand.github.io/TotalDocs/viewer.html)**
 
 - `.hwp` / `.hwpx` / `.owpml` 파일을 화면에 끌어다 놓거나 "파일 선택" 버튼으로 올리면 즉시 렌더링됩니다.
 - Chrome · Firefox · Safari · Edge 모두 지원합니다.
-- 홈 화면: [https://shinehand.github.io/ChromeHWP/](https://shinehand.github.io/ChromeHWP/)
+- 홈 화면: [https://shinehand.github.io/TotalDocs/](https://shinehand.github.io/TotalDocs/)
 
 ### 로컬 정적 서버
 
 ```bash
-cd /path/to/ChromeHWP
+cd /path/to/TotalDocs
 python3 -m http.server 4173
 # 브라우저에서 http://localhost:4173/viewer.html 접속
 ```
@@ -188,13 +188,13 @@ python3 -m http.server 4173
 ### 최소 회귀검증
 
 ```bash
-cd /path/to/ChromeHWP
+cd /path/to/TotalDocs
 node scripts/verify_samples.mjs
 ```
 
 ### 한컴 기준선 캡처
 
-한컴 Viewer를 열 수 있는 macOS 환경이라면, 같은 문서를 한컴 Viewer와 ChromeHWP 양쪽에서 캡처한 비교판을 생성할 수 있사옵니다.
+한컴 Viewer를 열 수 있는 macOS 환경이라면, 같은 문서를 한컴 Viewer와 TotalDocs 양쪽에서 캡처한 비교판을 생성할 수 있사옵니다.
 
 ```bash
 node scripts/capture_hancom_oracle.mjs
@@ -202,7 +202,7 @@ node scripts/capture_hancom_oracle.mjs
 
 ### 전 페이지 한컴 감사
 
-대표 화면 1장이 아니라 테스트 문서의 모든 페이지를 한컴 Viewer와 ChromeHWP로 짝지어 확인하려면 아래를 실행하옵니다.
+대표 화면 1장이 아니라 테스트 문서의 모든 페이지를 한컴 Viewer와 TotalDocs로 짝지어 확인하려면 아래를 실행하옵니다.
 
 ```bash
 node scripts/capture_hancom_page_audit.mjs
@@ -239,7 +239,7 @@ python3 scripts/build_hancom_page_audit.py
 - 엔진 참조 저장소의 HWPX 대형 셀 continuation 처리를 보강하고, 최신 엔진을 `lib/hwp.js`, `lib/hwp_bg.wasm`, `lib/hwp.d.ts`로 다시 반영했사옵니다.
 - `LineSeg.vertical_pos`가 큰 셀 안에서 여러 번 되감기는 구간을 continuation window로 분리하고, 분할 렌더링 시 문단 y를 저장된 vpos 기준으로 앵커링하는 규칙을 추가했사옵니다.
 - 중첩 표가 split window 안에서 렌더링될 때 `split_start`와 `split_end`를 절대 좌표처럼 오해하지 않도록 보정했사옵니다.
-- `incheon-2a.hwpx`는 한컴 기준 `18쪽`과 ChromeHWP `18쪽`이 계속 일치하오나, 15~16쪽의 내부 시각 흐름은 아직 원본과 완전히 같지 않사옵니다.
+- `incheon-2a.hwpx`는 한컴 기준 `18쪽`과 TotalDocs `18쪽`이 계속 일치하오나, 15~16쪽의 내부 시각 흐름은 아직 원본과 완전히 같지 않사옵니다.
 - 남은 핵심 원인은 큰 셀 안의 page-like vpos window와 중첩 표 분할이 결합될 때 일부 페이지가 한컴보다 늦게 흘러가거나 겹쳐 보이는 문제이옵니다.
 - 이 문제는 문서명/페이지번호 하드코딩 없이 `LineSeg.vertical_pos`, 중첩 표 실제 높이, 셀 continuation window, partial table clipping 규칙으로 계속 해결해야 하옵니다.
 
@@ -254,7 +254,7 @@ python3 scripts/build_hancom_page_audit.py
 ## 2026-04-20 진행 메모
 
 - split row 안의 중첩 표가 앞 텍스트 없이 시작하더라도 `LineSeg.vertical_pos`로 이미 보정된 문단 y를 유지하도록 엔진을 보강했사옵니다.
-- `wasm-bindgen --out-name hwp`로 ChromeHWP의 `hwp_bg.wasm` 배치명과 생성 JS의 기대 파일명을 맞췄사옵니다.
+- `wasm-bindgen --out-name hwp`로 TotalDocs의 `hwp_bg.wasm` 배치명과 생성 JS의 기대 파일명을 맞췄사옵니다.
 - 다운로드 폴더 샘플 로드 실패 보고 시 served-inputs URL을 사용하도록 `scripts/verify_samples.mjs`를 보강했사옵니다.
 - `node scripts/verify_samples.mjs` 재검증 결과, 대표 5개 다운로드 문서는 한컴 기준 쪽수와 모두 일치했사옵니다: `2/2`, `11/11`, `1/1`, `4/4`, `18/18`.
 - 한컴 Viewer 전 페이지 감사 도구는 35% 줌 기본값과 crop 품질 판정을 추가해 부분 페이지를 별도 `capture-review`로 표시하도록 보강했사옵니다.
