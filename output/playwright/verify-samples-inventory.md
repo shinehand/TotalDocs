@@ -1,6 +1,6 @@
 # Downloads HWP Inventory
 
-Generated: 2026-04-24T09:00:11.091Z
+Generated: 2026-04-24T09:19:03.383Z
 Downloads Directory: /Users/shinehandmac/Downloads
 Discovered Documents: 5
 Verified Documents: 5
@@ -82,18 +82,18 @@ Verified Documents: 5
 - path: /Users/shinehandmac/Downloads/(공고문)인천가정2A-.hwpx
 - kind: 기준 샘플
 - status: 완료
-- page: 1 / 13 쪽
+- page: 1 / 20 쪽
 - section: 구역: 1 / 1
 - source: /Users/shinehandmac/Downloads/(공고문)인천가정2A-.hwpx
-- layout-signals: 부동표 23 · 부동그림 1 · 반복머리행 71 · 셀나눔 71 · 겹침허용 4 · 단기준 6 · 문단기준 76 · 병합셀 178 · 큰셀 20 · 본문배치 1
-- hancom-pages: expected 18, actual 13, match=false
+- layout-signals: 부동표 31 · 부동그림 1 · 반복머리행 79 · 셀나눔 79 · 겹침허용 4 · 단기준 6 · 문단기준 84 · 병합셀 181 · 큰셀 21 · 본문배치 1
+- hancom-pages: expected 18, actual 20, match=false
 - screenshot: /Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/incheon-2a.png
 - hotspots:
-  - 12쪽 · 제어 20 · 표 20 · 텍스트 806 · 신호: 부동표 5 · 반복머리행 20 · 셀나눔 20 · 단기준 3 · 문단기준 20 · 병합셀 37 · 큰셀 6
-  - 11쪽 · 제어 14 · 표 10 · 그림 4 · 텍스트 230 · 신호: 부동표 3 · 반복머리행 10 · 셀나눔 10 · 겹침허용 4 · 단기준 2 · 문단기준 14 · 병합셀 24 · 큰셀 3
-  - 5쪽 · 제어 10 · 표 10 · 텍스트 477 · 신호: 부동표 4 · 반복머리행 10 · 셀나눔 10 · 문단기준 10 · 병합셀 57 · 큰셀 2
-  - 3쪽 · 제어 6 · 표 6 · 텍스트 287 · 신호: 부동표 2 · 반복머리행 6 · 셀나눔 6 · 문단기준 6 · 병합셀 11 · 큰셀 2
-  - 7쪽 · 제어 5 · 표 5 · 텍스트 105 · 신호: 부동표 1 · 반복머리행 5 · 셀나눔 5 · 문단기준 5 · 병합셀 5 · 큰셀 1
+  - 19쪽 · 제어 15 · 표 15 · 텍스트 449 · 신호: 부동표 4 · 반복머리행 15 · 셀나눔 15 · 단기준 3 · 문단기준 15 · 병합셀 34 · 큰셀 6
+  - 16쪽 · 제어 14 · 표 10 · 그림 4 · 텍스트 230 · 신호: 부동표 3 · 반복머리행 10 · 셀나눔 10 · 겹침허용 4 · 단기준 2 · 문단기준 14 · 병합셀 23 · 큰셀 3
+  - 7쪽 · 제어 10 · 표 10 · 텍스트 475 · 신호: 부동표 4 · 반복머리행 10 · 셀나눔 10 · 문단기준 10 · 병합셀 53 · 큰셀 2
+  - 4쪽 · 제어 6 · 표 6 · 텍스트 274 · 신호: 부동표 2 · 반복머리행 6 · 셀나눔 6 · 문단기준 6 · 병합셀 7 · 큰셀 2
+  - 18쪽 · 제어 6 · 표 6 · 텍스트 359 · 신호: 부동표 2 · 반복머리행 6 · 셀나눔 6 · 문단기준 6 · 병합셀 2 · 큰셀 1
 - issues:
-  - 한컴 Viewer 페이지 수 불일치: 한컴 18, TotalDocs 13
+  - 한컴 Viewer 페이지 수 불일치: 한컴 18, TotalDocs 20
 

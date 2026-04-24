@@ -3,7 +3,7 @@
   "viewerFontOverrides": "",
   "sessionName": "verify-current",
   "strictPageExpectations": false,
-  "generatedAt": "2026-04-24T09:00:11.088Z",
+  "generatedAt": "2026-04-24T09:19:03.379Z",
   "downloadsDirectory": "/Users/shinehandmac/Downloads",
   "hancomOracleBaselinePath": "/Users/shinehandmac/Github/ChromeHWP/docs/hancom-oracle-page-baseline.json",
   "downloadsInventory": [
@@ -2269,43 +2269,50 @@
       "servedUrl": "http://127.0.0.1:4173/output/playwright/served-inputs/incheon-2a.hwpx",
       "sourceKind": "downloads",
       "copiedFromSource": true,
-      "pageInfo": "1 / 13 쪽",
+      "pageInfo": "1 / 20 쪽",
       "sectionInfo": "구역: 1 / 1",
       "modeInfo": "읽기",
-      "message": "incheon-2a.hwpx · 469.2 KB | 13쪽",
+      "message": "incheon-2a.hwpx · 469.2 KB | 20쪽",
       "canvasCount": 0,
-      "pageElementCount": 13,
-      "thumbnailCount": 13,
-      "pageCount": 13,
+      "pageElementCount": 20,
+      "thumbnailCount": 20,
+      "pageCount": 20,
       "pageWalk": [
-        "1 / 13 쪽",
-        "2 / 13 쪽",
-        "3 / 13 쪽",
-        "4 / 13 쪽",
-        "5 / 13 쪽",
-        "6 / 13 쪽",
-        "7 / 13 쪽",
-        "8 / 13 쪽",
-        "9 / 13 쪽",
-        "10 / 13 쪽",
-        "11 / 13 쪽",
-        "12 / 13 쪽",
-        "13 / 13 쪽"
+        "1 / 20 쪽",
+        "2 / 20 쪽",
+        "3 / 20 쪽",
+        "4 / 20 쪽",
+        "5 / 20 쪽",
+        "6 / 20 쪽",
+        "7 / 20 쪽",
+        "8 / 20 쪽",
+        "9 / 20 쪽",
+        "10 / 20 쪽",
+        "11 / 20 쪽",
+        "12 / 20 쪽",
+        "13 / 20 쪽",
+        "14 / 20 쪽",
+        "15 / 20 쪽",
+        "16 / 20 쪽",
+        "17 / 20 쪽",
+        "18 / 20 쪽",
+        "19 / 20 쪽",
+        "20 / 20 쪽"
       ],
       "pageWalkOk": true,
       "keywordHits": {
-        "신혼희망타운": 26,
+        "신혼희망타운": 28,
         "추가 입주자모집공고": 3,
-        "공급위치": 1,
-        "공급대상": 3
+        "공급위치": 3,
+        "공급대상": 5
       },
       "missingKeywords": [],
       "diagnostics": {
-        "pageCount": 13,
+        "pageCount": 20,
         "sectionCount": 1,
         "documentInfo": {
           "sectionCount": 1,
-          "pageCount": 13,
+          "pageCount": 20,
           "version": ""
         },
         "fontCoverage": {
@@ -2314,8 +2321,8 @@
           "unresolvedFonts": []
         },
         "counts": {
-          "controls": 76,
-          "tables": 71,
+          "controls": 84,
+          "tables": 79,
           "pictures": 5,
           "equations": 0,
           "charts": 0,
@@ -2323,28 +2330,28 @@
           "shapes": 0,
           "oles": 0,
           "videos": 0,
-          "textRuns": 2378
+          "textRuns": 2382
         },
         "layoutSignals": {
-          "floatingTables": 23,
+          "floatingTables": 31,
           "floatingPictures": 1,
           "wrappedControls": 1,
           "overlapAllowed": 4,
           "keepWithAnchor": 0,
-          "repeatHeaderTables": 71,
-          "pageBreakTables": 71,
+          "repeatHeaderTables": 79,
+          "pageBreakTables": 79,
           "pageAnchoredControls": 0,
           "columnAnchoredControls": 6,
-          "paragraphAnchoredControls": 76,
-          "mergedCells": 178,
-          "tallCells": 20,
+          "paragraphAnchoredControls": 84,
+          "mergedCells": 181,
+          "tallCells": 21,
           "captionedPictures": 0,
           "croppedPictures": 0,
           "rotatedPictures": 0,
           "flippedPictures": 0
         },
         "controlTypes": {
-          "table": 71,
+          "table": 79,
           "picture": 5
         },
         "pages": [
@@ -2354,10 +2361,10 @@
             "height": 119052,
             "sectionIndex": 0,
             "columns": 0,
-            "controlCount": 2,
+            "controlCount": 3,
             "counts": {
-              "controls": 2,
-              "tables": 1,
+              "controls": 3,
+              "tables": 2,
               "pictures": 1,
               "equations": 0,
               "charts": 0,
@@ -2365,20 +2372,20 @@
               "shapes": 0,
               "oles": 0,
               "videos": 0,
-              "textRuns": 2
+              "textRuns": 8
             },
             "layoutSignals": {
-              "floatingTables": 0,
+              "floatingTables": 1,
               "floatingPictures": 1,
               "wrappedControls": 1,
               "overlapAllowed": 0,
               "keepWithAnchor": 0,
-              "repeatHeaderTables": 1,
-              "pageBreakTables": 1,
+              "repeatHeaderTables": 2,
+              "pageBreakTables": 2,
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 1,
-              "paragraphAnchoredControls": 2,
-              "mergedCells": 0,
+              "paragraphAnchoredControls": 3,
+              "mergedCells": 4,
               "tallCells": 0,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2386,10 +2393,10 @@
               "flippedPictures": 0
             },
             "controlTypes": {
-              "table": 1,
+              "table": 2,
               "picture": 1
             },
-            "textRunCount": 2
+            "textRunCount": 8
           },
           {
             "pageIndex": 1,
@@ -2408,7 +2415,175 @@
               "shapes": 0,
               "oles": 0,
               "videos": 0,
-              "textRuns": 11
+              "textRuns": 17
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 1,
+              "pageBreakTables": 1,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 1,
+              "mergedCells": 3,
+              "tallCells": 0,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 1
+            },
+            "textRunCount": 17
+          },
+          {
+            "pageIndex": 2,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 2,
+            "columns": 0,
+            "controlCount": 1,
+            "counts": {
+              "controls": 1,
+              "tables": 1,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 1
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 1,
+              "pageBreakTables": 1,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 1,
+              "mergedCells": 2,
+              "tallCells": 0,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 1
+            },
+            "textRunCount": 1
+          },
+          {
+            "pageIndex": 3,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 3,
+            "columns": 0,
+            "controlCount": 6,
+            "counts": {
+              "controls": 6,
+              "tables": 6,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 274
+            },
+            "layoutSignals": {
+              "floatingTables": 2,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 6,
+              "pageBreakTables": 6,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 6,
+              "mergedCells": 7,
+              "tallCells": 2,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 6
+            },
+            "textRunCount": 274
+          },
+          {
+            "pageIndex": 4,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 4,
+            "columns": 0,
+            "controlCount": 2,
+            "counts": {
+              "controls": 2,
+              "tables": 2,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 146
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 2,
+              "pageBreakTables": 2,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 2,
+              "mergedCells": 10,
+              "tallCells": 1,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 2
+            },
+            "textRunCount": 146
+          },
+          {
+            "pageIndex": 5,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 5,
+            "columns": 0,
+            "controlCount": 1,
+            "counts": {
+              "controls": 1,
+              "tables": 1,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 6
             },
             "layoutSignals": {
               "floatingTables": 1,
@@ -2422,7 +2597,7 @@
               "columnAnchoredControls": 0,
               "paragraphAnchoredControls": 1,
               "mergedCells": 5,
-              "tallCells": 0,
+              "tallCells": 1,
               "captionedPictures": 0,
               "croppedPictures": 0,
               "rotatedPictures": 0,
@@ -2431,97 +2606,13 @@
             "controlTypes": {
               "table": 1
             },
-            "textRunCount": 11
+            "textRunCount": 6
           },
           {
-            "pageIndex": 2,
+            "pageIndex": 6,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 2,
-            "columns": 0,
-            "controlCount": 6,
-            "counts": {
-              "controls": 6,
-              "tables": 6,
-              "pictures": 0,
-              "equations": 0,
-              "charts": 0,
-              "forms": 0,
-              "shapes": 0,
-              "oles": 0,
-              "videos": 0,
-              "textRuns": 287
-            },
-            "layoutSignals": {
-              "floatingTables": 2,
-              "floatingPictures": 0,
-              "wrappedControls": 0,
-              "overlapAllowed": 0,
-              "keepWithAnchor": 0,
-              "repeatHeaderTables": 6,
-              "pageBreakTables": 6,
-              "pageAnchoredControls": 0,
-              "columnAnchoredControls": 0,
-              "paragraphAnchoredControls": 6,
-              "mergedCells": 11,
-              "tallCells": 2,
-              "captionedPictures": 0,
-              "croppedPictures": 0,
-              "rotatedPictures": 0,
-              "flippedPictures": 0
-            },
-            "controlTypes": {
-              "table": 6
-            },
-            "textRunCount": 287
-          },
-          {
-            "pageIndex": 3,
-            "width": 84188,
-            "height": 119052,
-            "sectionIndex": 3,
-            "columns": 0,
-            "controlCount": 2,
-            "counts": {
-              "controls": 2,
-              "tables": 2,
-              "pictures": 0,
-              "equations": 0,
-              "charts": 0,
-              "forms": 0,
-              "shapes": 0,
-              "oles": 0,
-              "videos": 0,
-              "textRuns": 150
-            },
-            "layoutSignals": {
-              "floatingTables": 1,
-              "floatingPictures": 0,
-              "wrappedControls": 0,
-              "overlapAllowed": 0,
-              "keepWithAnchor": 0,
-              "repeatHeaderTables": 2,
-              "pageBreakTables": 2,
-              "pageAnchoredControls": 0,
-              "columnAnchoredControls": 0,
-              "paragraphAnchoredControls": 2,
-              "mergedCells": 11,
-              "tallCells": 2,
-              "captionedPictures": 0,
-              "croppedPictures": 0,
-              "rotatedPictures": 0,
-              "flippedPictures": 0
-            },
-            "controlTypes": {
-              "table": 2
-            },
-            "textRunCount": 150
-          },
-          {
-            "pageIndex": 4,
-            "width": 84188,
-            "height": 119052,
-            "sectionIndex": 4,
+            "sectionIndex": 6,
             "columns": 0,
             "controlCount": 10,
             "counts": {
@@ -2534,7 +2625,7 @@
               "shapes": 0,
               "oles": 0,
               "videos": 0,
-              "textRuns": 477
+              "textRuns": 475
             },
             "layoutSignals": {
               "floatingTables": 4,
@@ -2547,7 +2638,7 @@
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 0,
               "paragraphAnchoredControls": 10,
-              "mergedCells": 57,
+              "mergedCells": 53,
               "tallCells": 2,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2557,13 +2648,55 @@
             "controlTypes": {
               "table": 10
             },
-            "textRunCount": 477
+            "textRunCount": 475
           },
           {
-            "pageIndex": 5,
+            "pageIndex": 7,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 5,
+            "sectionIndex": 7,
+            "columns": 0,
+            "controlCount": 1,
+            "counts": {
+              "controls": 1,
+              "tables": 1,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 2
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 1,
+              "pageBreakTables": 1,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 1,
+              "mergedCells": 4,
+              "tallCells": 0,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 1
+            },
+            "textRunCount": 2
+          },
+          {
+            "pageIndex": 8,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 8,
             "columns": 0,
             "controlCount": 4,
             "counts": {
@@ -2576,7 +2709,7 @@
               "shapes": 0,
               "oles": 0,
               "videos": 0,
-              "textRuns": 186
+              "textRuns": 184
             },
             "layoutSignals": {
               "floatingTables": 2,
@@ -2589,7 +2722,7 @@
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 0,
               "paragraphAnchoredControls": 4,
-              "mergedCells": 5,
+              "mergedCells": 1,
               "tallCells": 1,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2599,13 +2732,55 @@
             "controlTypes": {
               "table": 4
             },
-            "textRunCount": 186
+            "textRunCount": 184
           },
           {
-            "pageIndex": 6,
+            "pageIndex": 9,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 6,
+            "sectionIndex": 9,
+            "columns": 0,
+            "controlCount": 1,
+            "counts": {
+              "controls": 1,
+              "tables": 1,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 2
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 1,
+              "pageBreakTables": 1,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 1,
+              "mergedCells": 4,
+              "tallCells": 0,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 1
+            },
+            "textRunCount": 2
+          },
+          {
+            "pageIndex": 10,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 10,
             "columns": 0,
             "controlCount": 5,
             "counts": {
@@ -2618,7 +2793,7 @@
               "shapes": 0,
               "oles": 0,
               "videos": 0,
-              "textRuns": 105
+              "textRuns": 103
             },
             "layoutSignals": {
               "floatingTables": 1,
@@ -2631,7 +2806,7 @@
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 0,
               "paragraphAnchoredControls": 5,
-              "mergedCells": 5,
+              "mergedCells": 2,
               "tallCells": 1,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2641,13 +2816,13 @@
             "controlTypes": {
               "table": 5
             },
-            "textRunCount": 105
+            "textRunCount": 103
           },
           {
-            "pageIndex": 7,
+            "pageIndex": 11,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 7,
+            "sectionIndex": 11,
             "columns": 0,
             "controlCount": 4,
             "counts": {
@@ -2673,7 +2848,7 @@
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 0,
               "paragraphAnchoredControls": 4,
-              "mergedCells": 6,
+              "mergedCells": 5,
               "tallCells": 1,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2686,15 +2861,99 @@
             "textRunCount": 57
           },
           {
-            "pageIndex": 8,
+            "pageIndex": 12,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 8,
+            "sectionIndex": 12,
             "columns": 0,
             "controlCount": 4,
             "counts": {
               "controls": 4,
               "tables": 4,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 30
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 4,
+              "pageBreakTables": 4,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 4,
+              "mergedCells": 7,
+              "tallCells": 1,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 4
+            },
+            "textRunCount": 30
+          },
+          {
+            "pageIndex": 13,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 13,
+            "columns": 0,
+            "controlCount": 1,
+            "counts": {
+              "controls": 1,
+              "tables": 1,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 3
+            },
+            "layoutSignals": {
+              "floatingTables": 1,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 1,
+              "pageBreakTables": 1,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 1,
+              "mergedCells": 5,
+              "tallCells": 0,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 1
+            },
+            "textRunCount": 3
+          },
+          {
+            "pageIndex": 14,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 14,
+            "columns": 0,
+            "controlCount": 3,
+            "counts": {
+              "controls": 3,
+              "tables": 3,
               "pictures": 0,
               "equations": 0,
               "charts": 0,
@@ -2710,54 +2969,12 @@
               "wrappedControls": 0,
               "overlapAllowed": 0,
               "keepWithAnchor": 0,
-              "repeatHeaderTables": 4,
-              "pageBreakTables": 4,
-              "pageAnchoredControls": 0,
-              "columnAnchoredControls": 0,
-              "paragraphAnchoredControls": 4,
-              "mergedCells": 9,
-              "tallCells": 1,
-              "captionedPictures": 0,
-              "croppedPictures": 0,
-              "rotatedPictures": 0,
-              "flippedPictures": 0
-            },
-            "controlTypes": {
-              "table": 4
-            },
-            "textRunCount": 32
-          },
-          {
-            "pageIndex": 9,
-            "width": 84188,
-            "height": 119052,
-            "sectionIndex": 9,
-            "columns": 0,
-            "controlCount": 3,
-            "counts": {
-              "controls": 3,
-              "tables": 3,
-              "pictures": 0,
-              "equations": 0,
-              "charts": 0,
-              "forms": 0,
-              "shapes": 0,
-              "oles": 0,
-              "videos": 0,
-              "textRuns": 33
-            },
-            "layoutSignals": {
-              "floatingTables": 1,
-              "floatingPictures": 0,
-              "wrappedControls": 0,
-              "overlapAllowed": 0,
-              "keepWithAnchor": 0,
               "repeatHeaderTables": 3,
               "pageBreakTables": 3,
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 0,
               "paragraphAnchoredControls": 3,
-              "mergedCells": 7,
+              "mergedCells": 5,
               "tallCells": 1,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2767,13 +2984,13 @@
             "controlTypes": {
               "table": 3
             },
-            "textRunCount": 33
+            "textRunCount": 32
           },
           {
-            "pageIndex": 10,
+            "pageIndex": 15,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 10,
+            "sectionIndex": 15,
             "columns": 0,
             "controlCount": 14,
             "counts": {
@@ -2799,7 +3016,7 @@
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 2,
               "paragraphAnchoredControls": 14,
-              "mergedCells": 24,
+              "mergedCells": 23,
               "tallCells": 3,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2813,15 +3030,15 @@
             "textRunCount": 230
           },
           {
-            "pageIndex": 11,
+            "pageIndex": 16,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 11,
+            "sectionIndex": 16,
             "columns": 0,
-            "controlCount": 20,
+            "controlCount": 1,
             "counts": {
-              "controls": 20,
-              "tables": 20,
+              "controls": 1,
+              "tables": 1,
               "pictures": 0,
               "equations": 0,
               "charts": 0,
@@ -2829,20 +3046,104 @@
               "shapes": 0,
               "oles": 0,
               "videos": 0,
-              "textRuns": 806
+              "textRuns": 2
             },
             "layoutSignals": {
-              "floatingTables": 5,
+              "floatingTables": 1,
               "floatingPictures": 0,
               "wrappedControls": 0,
               "overlapAllowed": 0,
               "keepWithAnchor": 0,
-              "repeatHeaderTables": 20,
-              "pageBreakTables": 20,
+              "repeatHeaderTables": 1,
+              "pageBreakTables": 1,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 1,
+              "mergedCells": 4,
+              "tallCells": 0,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 1
+            },
+            "textRunCount": 2
+          },
+          {
+            "pageIndex": 17,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 17,
+            "columns": 0,
+            "controlCount": 6,
+            "counts": {
+              "controls": 6,
+              "tables": 6,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 359
+            },
+            "layoutSignals": {
+              "floatingTables": 2,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 6,
+              "pageBreakTables": 6,
+              "pageAnchoredControls": 0,
+              "columnAnchoredControls": 0,
+              "paragraphAnchoredControls": 6,
+              "mergedCells": 2,
+              "tallCells": 1,
+              "captionedPictures": 0,
+              "croppedPictures": 0,
+              "rotatedPictures": 0,
+              "flippedPictures": 0
+            },
+            "controlTypes": {
+              "table": 6
+            },
+            "textRunCount": 359
+          },
+          {
+            "pageIndex": 18,
+            "width": 84188,
+            "height": 119052,
+            "sectionIndex": 18,
+            "columns": 0,
+            "controlCount": 15,
+            "counts": {
+              "controls": 15,
+              "tables": 15,
+              "pictures": 0,
+              "equations": 0,
+              "charts": 0,
+              "forms": 0,
+              "shapes": 0,
+              "oles": 0,
+              "videos": 0,
+              "textRuns": 449
+            },
+            "layoutSignals": {
+              "floatingTables": 4,
+              "floatingPictures": 0,
+              "wrappedControls": 0,
+              "overlapAllowed": 0,
+              "keepWithAnchor": 0,
+              "repeatHeaderTables": 15,
+              "pageBreakTables": 15,
               "pageAnchoredControls": 0,
               "columnAnchoredControls": 3,
-              "paragraphAnchoredControls": 20,
-              "mergedCells": 37,
+              "paragraphAnchoredControls": 15,
+              "mergedCells": 34,
               "tallCells": 6,
               "captionedPictures": 0,
               "croppedPictures": 0,
@@ -2850,15 +3151,15 @@
               "flippedPictures": 0
             },
             "controlTypes": {
-              "table": 20
+              "table": 15
             },
-            "textRunCount": 806
+            "textRunCount": 449
           },
           {
-            "pageIndex": 12,
+            "pageIndex": 19,
             "width": 84188,
             "height": 119052,
-            "sectionIndex": 12,
+            "sectionIndex": 19,
             "columns": 0,
             "controlCount": 1,
             "counts": {
@@ -2898,14 +3199,14 @@
           }
         ]
       },
-      "diagnosticPageCount": 13,
+      "diagnosticPageCount": 20,
       "diagnosticSectionCount": 1,
       "diagnosticPageMatch": true,
-      "diagnosticControlCount": 76,
-      "diagnosticControlCountSum": 76,
+      "diagnosticControlCount": 84,
+      "diagnosticControlCountSum": 84,
       "documentInfo": {
         "sectionCount": 1,
-        "pageCount": 13,
+        "pageCount": 20,
         "version": ""
       },
       "fontsUsed": [],
@@ -2915,42 +3216,42 @@
       "hancomPageMatch": false,
       "hancomEvidence": "/Users/shinehandmac/Github/TotalDocs/output/hancom-oracle/incheon-2a-hancom.png",
       "layoutSignals": {
-        "floatingTables": 23,
+        "floatingTables": 31,
         "floatingPictures": 1,
         "wrappedControls": 1,
         "overlapAllowed": 4,
         "keepWithAnchor": 0,
-        "repeatHeaderTables": 71,
-        "pageBreakTables": 71,
+        "repeatHeaderTables": 79,
+        "pageBreakTables": 79,
         "pageAnchoredControls": 0,
         "columnAnchoredControls": 6,
-        "paragraphAnchoredControls": 76,
-        "mergedCells": 178,
-        "tallCells": 20,
+        "paragraphAnchoredControls": 84,
+        "mergedCells": 181,
+        "tallCells": 21,
         "captionedPictures": 0,
         "croppedPictures": 0,
         "rotatedPictures": 0,
         "flippedPictures": 0
       },
       "layoutSignalLabels": [
-        "부동표 23",
+        "부동표 31",
         "부동그림 1",
-        "반복머리행 71",
-        "셀나눔 71",
+        "반복머리행 79",
+        "셀나눔 79",
         "겹침허용 4",
         "단기준 6",
-        "문단기준 76",
-        "병합셀 178",
-        "큰셀 20",
+        "문단기준 84",
+        "병합셀 181",
+        "큰셀 21",
         "본문배치 1"
       ],
       "hotspots": [
         {
-          "pageIndex": 11,
-          "score": 29659,
+          "pageIndex": 18,
+          "score": 22430,
           "counts": {
-            "controls": 20,
-            "tables": 20,
+            "controls": 15,
+            "tables": 15,
             "pictures": 0,
             "equations": 0,
             "charts": 0,
@@ -2958,20 +3259,20 @@
             "shapes": 0,
             "oles": 0,
             "videos": 0,
-            "textRuns": 806
+            "textRuns": 449
           },
           "layoutSignals": {
-            "floatingTables": 5,
+            "floatingTables": 4,
             "floatingPictures": 0,
             "wrappedControls": 0,
             "overlapAllowed": 0,
             "keepWithAnchor": 0,
-            "repeatHeaderTables": 20,
-            "pageBreakTables": 20,
+            "repeatHeaderTables": 15,
+            "pageBreakTables": 15,
             "pageAnchoredControls": 0,
             "columnAnchoredControls": 3,
-            "paragraphAnchoredControls": 20,
-            "mergedCells": 37,
+            "paragraphAnchoredControls": 15,
+            "mergedCells": 34,
             "tallCells": 6,
             "captionedPictures": 0,
             "croppedPictures": 0,
@@ -2979,18 +3280,18 @@
             "flippedPictures": 0
           },
           "signalLabels": [
-            "부동표 5",
-            "반복머리행 20",
-            "셀나눔 20",
+            "부동표 4",
+            "반복머리행 15",
+            "셀나눔 15",
             "단기준 3",
-            "문단기준 20",
-            "병합셀 37",
+            "문단기준 15",
+            "병합셀 34",
             "큰셀 6"
           ]
         },
         {
-          "pageIndex": 10,
-          "score": 20123.5,
+          "pageIndex": 15,
+          "score": 20120.5,
           "counts": {
             "controls": 14,
             "tables": 10,
@@ -3014,7 +3315,7 @@
             "pageAnchoredControls": 0,
             "columnAnchoredControls": 2,
             "paragraphAnchoredControls": 14,
-            "mergedCells": 24,
+            "mergedCells": 23,
             "tallCells": 3,
             "captionedPictures": 0,
             "croppedPictures": 0,
@@ -3028,13 +3329,13 @@
             "겹침허용 4",
             "단기준 2",
             "문단기준 14",
-            "병합셀 24",
+            "병합셀 23",
             "큰셀 3"
           ]
         },
         {
-          "pageIndex": 4,
-          "score": 15187,
+          "pageIndex": 6,
+          "score": 15175,
           "counts": {
             "controls": 10,
             "tables": 10,
@@ -3045,7 +3346,7 @@
             "shapes": 0,
             "oles": 0,
             "videos": 0,
-            "textRuns": 477
+            "textRuns": 475
           },
           "layoutSignals": {
             "floatingTables": 4,
@@ -3058,7 +3359,7 @@
             "pageAnchoredControls": 0,
             "columnAnchoredControls": 0,
             "paragraphAnchoredControls": 10,
-            "mergedCells": 57,
+            "mergedCells": 53,
             "tallCells": 2,
             "captionedPictures": 0,
             "croppedPictures": 0,
@@ -3070,13 +3371,13 @@
             "반복머리행 10",
             "셀나눔 10",
             "문단기준 10",
-            "병합셀 57",
+            "병합셀 53",
             "큰셀 2"
           ]
         },
         {
-          "pageIndex": 2,
-          "score": 8980.75,
+          "pageIndex": 3,
+          "score": 8965.5,
           "counts": {
             "controls": 6,
             "tables": 6,
@@ -3087,7 +3388,7 @@
             "shapes": 0,
             "oles": 0,
             "videos": 0,
-            "textRuns": 287
+            "textRuns": 274
           },
           "layoutSignals": {
             "floatingTables": 2,
@@ -3100,7 +3401,7 @@
             "pageAnchoredControls": 0,
             "columnAnchoredControls": 0,
             "paragraphAnchoredControls": 6,
-            "mergedCells": 11,
+            "mergedCells": 7,
             "tallCells": 2,
             "captionedPictures": 0,
             "croppedPictures": 0,
@@ -3112,16 +3413,16 @@
             "반복머리행 6",
             "셀나눔 6",
             "문단기준 6",
-            "병합셀 11",
+            "병합셀 7",
             "큰셀 2"
           ]
         },
         {
-          "pageIndex": 6,
-          "score": 7279.25,
+          "pageIndex": 17,
+          "score": 8953.75,
           "counts": {
-            "controls": 5,
-            "tables": 5,
+            "controls": 6,
+            "tables": 6,
             "pictures": 0,
             "equations": 0,
             "charts": 0,
@@ -3129,20 +3430,20 @@
             "shapes": 0,
             "oles": 0,
             "videos": 0,
-            "textRuns": 105
+            "textRuns": 359
           },
           "layoutSignals": {
-            "floatingTables": 1,
+            "floatingTables": 2,
             "floatingPictures": 0,
             "wrappedControls": 0,
             "overlapAllowed": 0,
             "keepWithAnchor": 0,
-            "repeatHeaderTables": 5,
-            "pageBreakTables": 5,
+            "repeatHeaderTables": 6,
+            "pageBreakTables": 6,
             "pageAnchoredControls": 0,
             "columnAnchoredControls": 0,
-            "paragraphAnchoredControls": 5,
-            "mergedCells": 5,
+            "paragraphAnchoredControls": 6,
+            "mergedCells": 2,
             "tallCells": 1,
             "captionedPictures": 0,
             "croppedPictures": 0,
@@ -3150,11 +3451,11 @@
             "flippedPictures": 0
           },
           "signalLabels": [
-            "부동표 1",
-            "반복머리행 5",
-            "셀나눔 5",
-            "문단기준 5",
-            "병합셀 5",
+            "부동표 2",
+            "반복머리행 6",
+            "셀나눔 6",
+            "문단기준 6",
+            "병합셀 2",
             "큰셀 1"
           ]
         }
@@ -3164,7 +3465,7 @@
       "consoleErrors": 0,
       "consoleWarnings": 0,
       "issues": [
-        "한컴 Viewer 페이지 수 불일치: 한컴 18, TotalDocs 13"
+        "한컴 Viewer 페이지 수 불일치: 한컴 18, TotalDocs 20"
       ]
     }
   ]

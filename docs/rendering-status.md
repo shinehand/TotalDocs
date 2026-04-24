@@ -109,11 +109,13 @@
   - `node scripts/test_totaldocs_engine.mjs`
 - Latest verification:
   - `node scripts/verify_samples.mjs` loads all five baseline documents through the JS parser/DOM renderer.
-  - `incheon-2a.hwpx` now renders 13 pages versus Hancom Viewer's 18-page oracle; before this pass it rendered 11 pages.
-  - Remaining mismatch confirms that long HWPX cell continuation still needs true intra-cell/page-window splitting, not only row-level table splitting.
+  - `incheon-2a.hwpx` first improved from 11 pages to 13 pages after raw row-height preservation.
+  - The first long-cell continuation pass now renders 20 pages versus Hancom Viewer's 18-page oracle.
+  - Remaining mismatch confirms the direction is right, but continuation windows and repeated-header height still need tighter calibration.
 - Remaining work:
-  - Build page-2 focused fixtures from `incheon-2a.hwpx` and compare the parsed source layout data against Hancom Viewer captures.
-  - Replace the current table split heuristic with rules that use preserved `pageBreak`, repeat header rows, raw row/cell heights, and long-cell continuation windows.
+  - Compare `output/playwright/incheon-2a-layout-fixture.json` against the parsed TotalDocs continuation chunks and Hancom Viewer page captures.
+  - Tune continuation windows so `incheon-2a.hwpx` lands on the 18-page oracle without reintroducing page-2 overlap.
+  - Replace the remaining table split heuristic with rules that use preserved `pageBreak`, repeat header rows, raw row/cell heights, and long-cell continuation windows.
   - Add a side-by-side diagnostic mode that compares JS layout, WASM layout, and Hancom Viewer screenshots.
   - Keep the WASM path disabled as a renderer replacement until it improves overlap cases without regressing normal document loading.
 

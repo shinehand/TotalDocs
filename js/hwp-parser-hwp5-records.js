@@ -1880,7 +1880,7 @@ Object.assign(HwpParser, {
     if (tableBlock?.sourceFormat === 'hwpx') {
       const explicitHwpxHeight = Number(tableBlock?.hwpxRowHeights?.[rowIndex]) || 0;
       const explicitWeight = explicitHwpxHeight > 0
-        ? Math.max(1, Math.min(40, Math.round(explicitHwpxHeight / 2500)))
+        ? Math.max(1, Math.min(40, Math.round(explicitHwpxHeight / 3000)))
         : 0;
       return Math.max(1, explicitWeight, rowHeight || 1);
     }
@@ -1893,15 +1893,34 @@ Object.assign(HwpParser, {
     )));
   },
 
-  _sliceTableBlock(tableBlock, startRow, endRow) {
-    const rows = Array.from({ length: endRow - startRow }, (_, index) => ({ index, cells: [] }));
-    const sourceRows = (tableBlock.rows || []).slice(startRow, endRow);
+  _sliceTableBlock(tableBlock, startRow, endRow, options = {}) {
+    const numHeaderRows = Math.max(0, Number(tableBlock?.numHeaderRows) || 0);
+    const shouldRepeatHeader = options.repeatHeader === true
+      && tableBlock?.sourceFormat === 'hwpx'
+      && numHeaderRows > 0
+      && startRow >= numHeaderRows;
+    const rowEntries = [];
 
-    sourceRows.forEach((sourceRow, offset) => {
+    if (shouldRepeatHeader) {
+      (tableBlock.rows || []).slice(0, numHeaderRows).forEach((row, sourceIndex) => {
+        rowEntries.push({ row, sourceIndex, repeatedHeader: true });
+      });
+    }
+
+    (tableBlock.rows || []).slice(startRow, endRow).forEach((row, offset) => {
+      rowEntries.push({ row, sourceIndex: startRow + offset, repeatedHeader: false });
+    });
+
+    const rows = Array.from({ length: rowEntries.length }, (_, index) => ({ index, cells: [] }));
+
+    rowEntries.forEach((entry, offset) => {
+      const sourceRow = entry.row;
       (sourceRow.cells || []).forEach(cell => {
         const nextCell = {
           ...cell,
-          row: cell.row - startRow,
+          row: offset,
+          originalRow: entry.sourceIndex,
+          repeatedHeader: entry.repeatedHeader,
           paragraphs: (cell.paragraphs || []).map(cloneParagraphBlock),
         };
         rows[offset].cells.push(nextCell);
@@ -1912,10 +1931,16 @@ Object.assign(HwpParser, {
       ...tableBlock,
       rowCount: rows.length,
       rows,
-      rowHeights: (tableBlock.rowHeights || []).slice(startRow, endRow),
+      rowHeights: rowEntries.map(entry => (
+        entry.repeatedHeader ? 1 : ((tableBlock.rowHeights || [])[entry.sourceIndex] || 0)
+      )),
       hwpxRowHeights: Array.isArray(tableBlock.hwpxRowHeights)
-        ? tableBlock.hwpxRowHeights.slice(startRow, endRow)
+        ? rowEntries.map(entry => {
+          const height = tableBlock.hwpxRowHeights[entry.sourceIndex] || 0;
+          return entry.repeatedHeader ? Math.min(height || 1200, 1200) : height;
+        })
         : tableBlock.hwpxRowHeights,
+      repeatedHeaderCount: shouldRepeatHeader ? numHeaderRows : 0,
       // startRowOffset lets the renderer know which rows in the original table these rows correspond to
       // (used to determine if header rows should be rendered as <thead>)
       startRowOffset: startRow,
@@ -1928,6 +1953,132 @@ Object.assign(HwpParser, {
       ),
       texts: [HwpParser._run('')],
     };
+  },
+
+  _hwpxContinuationBlockWeight(block) {
+    if (!block) return 1;
+    if (block.type === 'table') {
+      return Math.max(4, Math.min(40, HwpParser._estimateBlockWeight(block)));
+    }
+
+    const text = HwpParser._blockText(block).trim();
+    const lineCount = text ? text.split(/\n+/).filter(Boolean).length : 1;
+    const textWeight = text ? Math.ceil(text.length / 120) : 1;
+    const layoutWeight = Number(block.layoutHeightPx) > 0
+      ? Math.ceil(Number(block.layoutHeightPx) / 20)
+      : 0;
+    return Math.max(1, Math.min(30, Math.max(lineCount, textWeight, layoutWeight || 1)));
+  },
+
+  _splitHwpxParagraphsForContinuation(paragraphs = [], fragmentCount = 1) {
+    if (fragmentCount <= 1 || paragraphs.length <= 1) {
+      return [paragraphs.map(cloneParagraphBlock)];
+    }
+
+    const weighted = paragraphs.map(block => ({
+      block,
+      weight: HwpParser._hwpxContinuationBlockWeight(block),
+    }));
+    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0) || weighted.length;
+    const targetWeight = Math.max(1, Math.ceil(totalWeight / fragmentCount));
+    const fragments = [];
+    let current = [];
+    let currentWeight = 0;
+
+    weighted.forEach((item, index) => {
+      const remainingBlocks = weighted.length - index;
+      const remainingFragments = fragmentCount - fragments.length;
+      if (
+        current.length
+        && fragments.length < fragmentCount - 1
+        && currentWeight + item.weight > targetWeight
+        && remainingBlocks >= remainingFragments
+      ) {
+        fragments.push(current.map(cloneParagraphBlock));
+        current = [];
+        currentWeight = 0;
+      }
+      current.push(item.block);
+      currentWeight += item.weight;
+    });
+
+    if (current.length) fragments.push(current.map(cloneParagraphBlock));
+    return fragments.filter(fragment => fragment.length);
+  },
+
+  _hwpxLongRowContinuationCell(tableBlock, rowIndex, maxWeight) {
+    if (tableBlock?.sourceFormat !== 'hwpx') return null;
+    if (String(tableBlock.pageBreak || tableBlock.rawLayout?.pageBreak || '').toUpperCase() !== 'CELL') return null;
+
+    const row = tableBlock.rows?.[rowIndex];
+    const cells = (row?.cells || []).filter(cell => HwpParser._cellHasVisualContent(cell));
+    if (cells.length !== 1) return null;
+
+    const cell = cells[0];
+    if ((Number(cell.rowSpan) || 1) > 1) return null;
+    const colCount = Math.max(1, Number(tableBlock.colCount) || 1);
+    const spanRatio = (Number(cell.colSpan) || 1) / colCount;
+    if (spanRatio < 0.7) return null;
+
+    const paragraphs = cell.paragraphs || [];
+    if (paragraphs.length < 12) return null;
+
+    const rawHeight = Number(tableBlock.hwpxRowHeights?.[rowIndex]) || Number(cell.height) || 0;
+    const rawPageBudget = Math.max(1, maxWeight) * 10000;
+    const fragmentCount = Math.ceil(rawHeight / rawPageBudget);
+    if (fragmentCount < 2) return null;
+
+    return {
+      cell,
+      paragraphs,
+      rawHeight,
+      fragmentCount: Math.min(12, fragmentCount),
+    };
+  },
+
+  _splitHwpxLongRowBlock(tableBlock, rowIndex, maxWeight) {
+    const candidate = HwpParser._hwpxLongRowContinuationCell(tableBlock, rowIndex, maxWeight);
+    if (!candidate) return [];
+
+    const paragraphFragments = HwpParser._splitHwpxParagraphsForContinuation(
+      candidate.paragraphs,
+      candidate.fragmentCount,
+    );
+    if (paragraphFragments.length <= 1) return [];
+
+    return paragraphFragments.map((paragraphs, fragmentIndex) => {
+      const chunk = HwpParser._sliceTableBlock(tableBlock, rowIndex, rowIndex + 1, { repeatHeader: true });
+      const repeatedHeaderCount = Math.max(0, Number(chunk.repeatedHeaderCount) || 0);
+      const bodyRow = chunk.rows?.[repeatedHeaderCount] || chunk.rows?.[chunk.rows.length - 1];
+      const bodyCell = (bodyRow?.cells || []).find(cell => (
+        Number(cell.originalRow ?? rowIndex) === rowIndex
+        && (Number(cell.colSpan) || 1) === (Number(candidate.cell.colSpan) || 1)
+      )) || bodyRow?.cells?.[0];
+
+      if (bodyCell) {
+        bodyCell.paragraphs = paragraphs.map(cloneParagraphBlock);
+        bodyCell.height = Math.max(1, Math.ceil(candidate.rawHeight / paragraphFragments.length));
+        bodyCell.contentHeight = bodyCell.height;
+        bodyCell.continuation = {
+          sourceRow: rowIndex,
+          fragmentIndex,
+          fragmentCount: paragraphFragments.length,
+        };
+      }
+
+      if (Array.isArray(chunk.hwpxRowHeights) && bodyRow) {
+        chunk.hwpxRowHeights[bodyRow.index] = Math.max(1, Math.ceil(candidate.rawHeight / paragraphFragments.length));
+      }
+      if (Array.isArray(chunk.rowHeights) && bodyRow) {
+        chunk.rowHeights[bodyRow.index] = Math.max(1, Math.ceil(HwpParser._tableRowWeight(tableBlock, rowIndex) / paragraphFragments.length));
+      }
+      chunk.continuation = {
+        sourceRow: rowIndex,
+        fragmentIndex,
+        fragmentCount: paragraphFragments.length,
+      };
+      return chunk;
+    });
   },
 
   _splitTableBlock(tableBlock, maxWeight) {
@@ -1944,7 +2095,18 @@ Object.assign(HwpParser, {
       let lastSafeBreak = -1;
 
       while (endRow < tableBlock.rowCount) {
-        weight += HwpParser._tableRowWeight(tableBlock, endRow);
+        const nextWeight = HwpParser._tableRowWeight(tableBlock, endRow);
+        if (
+          tableBlock.sourceFormat === 'hwpx'
+          && weight > 0
+          && weight + nextWeight > maxWeight
+          && lastSafeBreak > startRow
+        ) {
+          endRow = lastSafeBreak;
+          break;
+        }
+
+        weight += nextWeight;
         if (HwpParser._isSafeTableBreak(tableBlock, endRow)) {
           lastSafeBreak = endRow + 1;
         }
@@ -1958,6 +2120,15 @@ Object.assign(HwpParser, {
 
       if (endRow <= startRow) {
         endRow = startRow + 1;
+      }
+
+      if (tableBlock.sourceFormat === 'hwpx' && endRow === startRow + 1) {
+        const rowContinuationChunks = HwpParser._splitHwpxLongRowBlock(tableBlock, startRow, maxWeight);
+        if (rowContinuationChunks.length > 1) {
+          chunks.push(...rowContinuationChunks);
+          startRow = endRow;
+          continue;
+        }
       }
 
       chunks.push(HwpParser._sliceTableBlock(tableBlock, startRow, endRow));

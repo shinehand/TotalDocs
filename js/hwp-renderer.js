@@ -1473,10 +1473,13 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   // are rendered into <thead>; all other rows go into <tbody>.
   // For split/slice chunks, startRowOffset tells us which original row index each chunk row maps to.
   const originalHeaderEnd = numHeaderRows; // original row indices 0 .. numHeaderRows-1 are header rows
-  const chunkHeaderCount = Math.max(0, Math.min(
-    numHeaderRows - startRowOffset,
-    (tableBlock.rowCount || 0),
-  )); // how many rows in this chunk are header rows
+  const repeatedHeaderCount = Math.max(0, Number(tableBlock.repeatedHeaderCount) || 0);
+  const chunkHeaderCount = repeatedHeaderCount > 0
+    ? Math.min(repeatedHeaderCount, tableBlock.rowCount || 0)
+    : Math.max(0, Math.min(
+      numHeaderRows - startRowOffset,
+      (tableBlock.rowCount || 0),
+    )); // how many rows in this chunk are header rows
 
   let thead = null;
   const tbody = document.createElement('tbody');
