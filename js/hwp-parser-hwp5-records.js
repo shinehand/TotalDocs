@@ -1878,7 +1878,11 @@ Object.assign(HwpParser, {
   _tableRowWeight(tableBlock, rowIndex) {
     const rowHeight = tableBlock?.rowHeights?.[rowIndex];
     if (tableBlock?.sourceFormat === 'hwpx') {
-      return Math.max(1, rowHeight || 1);
+      const explicitHwpxHeight = Number(tableBlock?.hwpxRowHeights?.[rowIndex]) || 0;
+      const explicitWeight = explicitHwpxHeight > 0
+        ? Math.max(1, Math.min(40, Math.round(explicitHwpxHeight / 2500)))
+        : 0;
+      return Math.max(1, explicitWeight, rowHeight || 1);
     }
     return Math.max(1, rowHeight || 4);
   },
@@ -1909,6 +1913,9 @@ Object.assign(HwpParser, {
       rowCount: rows.length,
       rows,
       rowHeights: (tableBlock.rowHeights || []).slice(startRow, endRow),
+      hwpxRowHeights: Array.isArray(tableBlock.hwpxRowHeights)
+        ? tableBlock.hwpxRowHeights.slice(startRow, endRow)
+        : tableBlock.hwpxRowHeights,
       // startRowOffset lets the renderer know which rows in the original table these rows correspond to
       // (used to determine if header rows should be rendered as <thead>)
       startRowOffset: startRow,
@@ -2057,6 +2064,8 @@ Object.assign(HwpParser, {
       defaultCellPadding: tableInfo?.defaultCellPadding || null,
       rowHeights: tableInfo?.rowHeights || [],
       numHeaderRows: Math.max(0, Number(tableInfo?.numHeaderRows) || 0),
+      pageBreak: tableInfo?.pageBreak || '',
+      rawLayout: tableInfo?.rawLayout || null,
       estimatedParagraphs,
       sourceFormat: tableInfo?.sourceFormat || '',
       texts: [HwpParser._run('')],

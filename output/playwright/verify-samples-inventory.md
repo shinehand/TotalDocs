@@ -1,94 +1,99 @@
 # Downloads HWP Inventory
 
-Generated: 2026-04-19T14:19:49.721Z
-Downloads Directory: /tmp/totaldocs-no-downloads
-Discovered Documents: 0
+Generated: 2026-04-24T09:00:11.091Z
+Downloads Directory: /Users/shinehandmac/Downloads
+Discovered Documents: 5
 Verified Documents: 5
 
 ## goyeopje.hwp
 
-- path: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/goyeopje.hwp
+- path: /Users/shinehandmac/Downloads/고엽제등록신청서.hwp
 - kind: 기준 샘플
 - status: 완료
-- page: 1 / 2 쪽
+- page: 1 / 3 쪽
 - section: 구역: 1 / 1
-- source: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/goyeopje.hwp
-- fonts: 궁서, 돋움, HY견고딕, HY견명조, HY신명조, HY중고딕
-- layout-signals: 반복머리행 2 · anchor고정 2 · 단기준 2 · 문단기준 2 · 병합셀 126 · 큰셀 10
-- hancom-pages: expected 2, actual 2, match=true
-- screenshot: /Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/goyeopje.png
+- source: /Users/shinehandmac/Downloads/고엽제등록신청서.hwp
+- layout-signals: 반복머리행 3 · 병합셀 126 · 큰셀 9
+- hancom-pages: expected 2, actual 3, match=false
+- screenshot: /Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/goyeopje.png
 - hotspots:
-  - 1쪽 · 제어 1 · 표 1 · 텍스트 179 · 신호: 반복머리행 1 · anchor고정 1 · 단기준 1 · 문단기준 1 · 병합셀 84 · 큰셀 2
-  - 2쪽 · 제어 1 · 표 1 · 텍스트 93 · 신호: 반복머리행 1 · anchor고정 1 · 단기준 1 · 문단기준 1 · 병합셀 42 · 큰셀 8
+  - 3쪽 · 제어 1 · 표 1 · 텍스트 49 · 신호: 반복머리행 1 · 병합셀 42 · 큰셀 7
+  - 2쪽 · 제어 1 · 표 1 · 텍스트 46 · 신호: 반복머리행 1 · 병합셀 42 · 큰셀 2
+  - 1쪽 · 제어 1 · 표 1 · 텍스트 44 · 신호: 반복머리행 1 · 병합셀 42
+- issues:
+  - 한컴 Viewer 페이지 수 불일치: 한컴 2, TotalDocs 3
 
 ## goyeopje-full-2024.hwp
 
-- path: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/goyeopje-full-2024.hwp
+- path: /Users/shinehandmac/Downloads/231229 고엽제후유(의)증환자 등 등록신청서 일체(2024.1.1. 기준).hwp
 - kind: 기준 샘플
 - status: 완료
-- page: 1 / 11 쪽
+- page: 1 / 12 쪽
 - section: 구역: 1 / 2
-- source: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/goyeopje-full-2024.hwp
-- fonts: 굴림체, 돋움, 돋움체, 맑은 고딕, 바탕, 바탕체, 한컴 윤체 B, 함초롬돋움, 함초롬바탕, 휴먼명조, Calibri, HY견고딕, HY견명조, HY신명조, HY중고딕, HY헤드라인M, Palatino Linotype
-- layout-signals: 부동표 3 · 반복머리행 10 · anchor고정 12 · 단기준 4 · 문단기준 12 · 병합셀 318 · 큰셀 43 · 본문배치 3
-- hancom-pages: expected 11, actual 11, match=true
-- screenshot: /Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/goyeopje-full-2024.png
+- source: /Users/shinehandmac/Downloads/231229 고엽제후유(의)증환자 등 등록신청서 일체(2024.1.1. 기준).hwp
+- layout-signals: 반복머리행 20 · 병합셀 318 · 큰셀 26
+- hancom-pages: expected 11, actual 12, match=false
+- screenshot: /Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/goyeopje-full-2024.png
 - hotspots:
-  - 6쪽 · 제어 2 · 표 2 · 텍스트 206 · 신호: 부동표 1 · 반복머리행 1 · anchor고정 1 · 문단기준 1 · 병합셀 13 · 큰셀 4 · 본문배치 1
-  - 9쪽 · 제어 2 · 표 2 · 텍스트 187 · 신호: 반복머리행 2 · anchor고정 2 · 문단기준 2 · 병합셀 4 · 큰셀 2
-  - 3쪽 · 제어 1 · 표 1 · 텍스트 187 · 신호: 반복머리행 1 · anchor고정 1 · 문단기준 1 · 병합셀 117 · 큰셀 10
-  - 11쪽 · 제어 1 · 표 1 · 텍스트 224 · 신호: 부동표 1 · anchor고정 1 · 문단기준 1 · 병합셀 25 · 큰셀 5 · 본문배치 1
-  - 4쪽 · 제어 1 · 표 1 · 텍스트 65 · 신호: 부동표 1 · 반복머리행 1 · anchor고정 1 · 문단기준 1 · 큰셀 1 · 본문배치 1
+  - 6쪽 · 제어 6 · 표 6 · 텍스트 239 · 신호: 반복머리행 6 · 병합셀 15 · 큰셀 11
+  - 3쪽 · 제어 2 · 표 2 · 텍스트 66 · 신호: 반복머리행 2 · 병합셀 38 · 큰셀 4
+  - 12쪽 · 제어 2 · 표 2 · 텍스트 83 · 신호: 반복머리행 2 · 병합셀 25 · 큰셀 1
+  - 9쪽 · 제어 2 · 표 2 · 텍스트 103 · 신호: 반복머리행 2 · 병합셀 2 · 큰셀 1
+  - 5쪽 · 제어 1 · 표 1 · 텍스트 17 · 신호: 반복머리행 1 · 병합셀 61 · 큰셀 1
+- issues:
+  - 한컴 Viewer 페이지 수 불일치: 한컴 11, TotalDocs 12
 
 ## gyeolseokgye.hwp
 
-- path: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/gyeolseokgye.hwp
+- path: /Users/shinehandmac/Downloads/결석계.hwp
 - kind: 기준 샘플
 - status: 완료
 - page: 1 / 1 쪽
 - section: 구역: 1 / 1
-- source: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/gyeolseokgye.hwp
-- fonts: 굴림, 맑은 고딕, 바탕, 산돌고딕 M, 함초롬바탕, 휴먼명조, HY견명조, HY신명조, Palatino Linotype
-- layout-signals: 반복머리행 1 · anchor고정 1 · 문단기준 1 · 병합셀 16 · 큰셀 7
+- source: /Users/shinehandmac/Downloads/결석계.hwp
+- layout-signals: 반복머리행 3 · 병합셀 16 · 큰셀 3
 - hancom-pages: expected 1, actual 1, match=true
-- screenshot: /Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/gyeolseokgye.png
+- screenshot: /Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/gyeolseokgye.png
 - hotspots:
-  - 1쪽 · 제어 3 · 표 3 · 텍스트 100 · 신호: 반복머리행 1 · anchor고정 1 · 문단기준 1 · 병합셀 16 · 큰셀 7
+  - 1쪽 · 제어 3 · 표 3 · 텍스트 62 · 신호: 반복머리행 3 · 병합셀 16 · 큰셀 3
 
 ## attachment-sale-notice.hwp
 
-- path: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/attachment-sale-notice.hwp
+- path: /Users/shinehandmac/Downloads/(첨부)정정_공고문_신축다세대잔여세대선착순일반매각.hwp
 - kind: 기준 샘플
 - status: 완료
-- page: 1 / 4 쪽
+- page: 1 / 12 쪽
 - section: 구역: 1 / 1
-- source: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/attachment-sale-notice.hwp
-- fonts: 굴림, 돋움, 돋움체, 맑은 고딕, 바탕, 함초롬바탕, 휴먼명조, HY견명조, HY신명조, HY헤드라인M, Palatino Linotype
-- layout-signals: 반복머리행 13 · anchor고정 13 · 단기준 1 · 문단기준 14 · 병합셀 49 · 큰셀 15 · 자르기 1
-- hancom-pages: expected 4, actual 4, match=true
-- screenshot: /Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/attachment-sale-notice.png
+- source: /Users/shinehandmac/Downloads/(첨부)정정_공고문_신축다세대잔여세대선착순일반매각.hwp
+- layout-signals: 반복머리행 23 · 병합셀 49 · 큰셀 8
+- hancom-pages: expected 4, actual 12, match=false
+- screenshot: /Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/attachment-sale-notice.png
 - hotspots:
-  - 3쪽 · 제어 8 · 표 7 · 그림 1 · 텍스트 157 · 신호: 반복머리행 5 · anchor고정 5 · 문단기준 5
-  - 1쪽 · 제어 8 · 표 6 · 그림 2 · 텍스트 330 · 신호: 반복머리행 3 · anchor고정 3 · 문단기준 3 · 병합셀 6 · 큰셀 2
-  - 4쪽 · 제어 7 · 표 5 · 그림 2 · 텍스트 240 · 신호: 반복머리행 3 · anchor고정 3 · 단기준 1 · 문단기준 4 · 병합셀 13 · 큰셀 5 · 자르기 1
-  - 2쪽 · 제어 5 · 표 4 · 그림 1 · 텍스트 648 · 신호: 반복머리행 2 · anchor고정 2 · 문단기준 2 · 병합셀 30 · 큰셀 8
+  - 11쪽 · 제어 5 · 표 5 · 텍스트 112 · 신호: 반복머리행 5 · 병합셀 13 · 큰셀 2
+  - 1쪽 · 제어 5 · 표 4 · 그림 1 · 텍스트 132 · 신호: 반복머리행 4 · 병합셀 4 · 큰셀 2
+  - 2쪽 · 제어 3 · 표 3 · 텍스트 46 · 신호: 반복머리행 3 · 병합셀 12
+  - 10쪽 · 제어 3 · 표 3 · 텍스트 102 · 신호: 반복머리행 3 · 병합셀 2
+  - 12쪽 · 제어 2 · 표 1 · 그림 1 · 텍스트 33 · 신호: 반복머리행 1
+- issues:
+  - 한컴 Viewer 페이지 수 불일치: 한컴 4, TotalDocs 12
 
 ## incheon-2a.hwpx
 
-- path: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/incheon-2a.hwpx
+- path: /Users/shinehandmac/Downloads/(공고문)인천가정2A-.hwpx
 - kind: 기준 샘플
 - status: 완료
-- page: 1 / 18 쪽
+- page: 1 / 13 쪽
 - section: 구역: 1 / 1
-- source: /Users/shinehandmac/Github/TotalDocs/output/playwright/served-inputs/incheon-2a.hwpx
-- fonts: #중고딕, 굴림, 돋움, 돋움체, 맑은 고딕, 명조, 바탕, 한양신명조, 한양중고딕, 함초롬돋움, 함초롬바탕, 휴먼명조, HCI Poppy, HY헤드라인M
-- layout-signals: 부동표 36 · 반복머리행 37 · 셀나눔 37 · 문단기준 37 · 병합셀 191 · 큰셀 45 · 본문배치 36
-- hancom-pages: expected 18, actual 18, match=true
-- screenshot: /Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/incheon-2a.png
+- source: /Users/shinehandmac/Downloads/(공고문)인천가정2A-.hwpx
+- layout-signals: 부동표 23 · 부동그림 1 · 반복머리행 71 · 셀나눔 71 · 겹침허용 4 · 단기준 6 · 문단기준 76 · 병합셀 178 · 큰셀 20 · 본문배치 1
+- hancom-pages: expected 18, actual 13, match=false
+- screenshot: /Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/incheon-2a.png
 - hotspots:
-  - 11쪽 · 제어 12 · 표 7 · 그림 5 · 텍스트 230 · 신호: 부동표 2 · 반복머리행 2 · 셀나눔 2 · 문단기준 2 · 병합셀 15 · 큰셀 6 · 본문배치 2
-  - 17쪽 · 제어 12 · 표 11 · 그림 1 · 신호: 부동표 2 · 반복머리행 2 · 셀나눔 2 · 문단기준 2 · 병합셀 23 · 큰셀 2 · 본문배치 2
-  - 8쪽 · 제어 10 · 표 9 · 그림 1 · 텍스트 208 · 신호: 부동표 2 · 반복머리행 2 · 셀나눔 2 · 문단기준 2 · 병합셀 13 · 큰셀 2 · 본문배치 2
-  - 9쪽 · 제어 9 · 표 8 · 그림 1 · 신호: 부동표 2 · 반복머리행 2 · 셀나눔 2 · 문단기준 2 · 병합셀 21 · 큰셀 3 · 본문배치 2
-  - 3쪽 · 제어 8 · 표 7 · 그림 1 · 텍스트 426 · 신호: 부동표 2 · 반복머리행 2 · 셀나눔 2 · 문단기준 2 · 병합셀 43 · 큰셀 3 · 본문배치 2
+  - 12쪽 · 제어 20 · 표 20 · 텍스트 806 · 신호: 부동표 5 · 반복머리행 20 · 셀나눔 20 · 단기준 3 · 문단기준 20 · 병합셀 37 · 큰셀 6
+  - 11쪽 · 제어 14 · 표 10 · 그림 4 · 텍스트 230 · 신호: 부동표 3 · 반복머리행 10 · 셀나눔 10 · 겹침허용 4 · 단기준 2 · 문단기준 14 · 병합셀 24 · 큰셀 3
+  - 5쪽 · 제어 10 · 표 10 · 텍스트 477 · 신호: 부동표 4 · 반복머리행 10 · 셀나눔 10 · 문단기준 10 · 병합셀 57 · 큰셀 2
+  - 3쪽 · 제어 6 · 표 6 · 텍스트 287 · 신호: 부동표 2 · 반복머리행 6 · 셀나눔 6 · 문단기준 6 · 병합셀 11 · 큰셀 2
+  - 7쪽 · 제어 5 · 표 5 · 텍스트 105 · 신호: 부동표 1 · 반복머리행 5 · 셀나눔 5 · 문단기준 5 · 병합셀 5 · 큰셀 1
+- issues:
+  - 한컴 Viewer 페이지 수 불일치: 한컴 18, TotalDocs 13
 

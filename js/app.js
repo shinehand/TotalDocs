@@ -622,27 +622,204 @@ function setStatusMessage(message = '') {
   updateStatusBar();
 }
 
-function refreshWasmDiagnostics(options = {}) {
-  const renderer = getHwpWasmRenderer();
-  if (!renderer?.collectDocumentDiagnostics) {
-    state.wasmDiagnostics = null;
-    return null;
+function createDiagnosticCounts() {
+  return {
+    controls: 0,
+    tables: 0,
+    pictures: 0,
+    equations: 0,
+    charts: 0,
+    forms: 0,
+    shapes: 0,
+    oles: 0,
+    videos: 0,
+    textRuns: 0,
+  };
+}
+
+function createLayoutSignals() {
+  return {
+    floatingTables: 0,
+    floatingPictures: 0,
+    wrappedControls: 0,
+    overlapAllowed: 0,
+    keepWithAnchor: 0,
+    repeatHeaderTables: 0,
+    pageBreakTables: 0,
+    pageAnchoredControls: 0,
+    columnAnchoredControls: 0,
+    paragraphAnchoredControls: 0,
+    mergedCells: 0,
+    tallCells: 0,
+    captionedPictures: 0,
+    croppedPictures: 0,
+    rotatedPictures: 0,
+    flippedPictures: 0,
+  };
+}
+
+function addDiagnosticMaps(target, source = {}) {
+  Object.keys(target).forEach(key => {
+    target[key] += toFiniteCount(source[key]);
+  });
+  return target;
+}
+
+function incrementControlType(controlTypes, key) {
+  if (!key) return;
+  controlTypes[key] = (controlTypes[key] || 0) + 1;
+}
+
+function hasExplicitObjectLayout(block = {}) {
+  const raw = block.rawObjectLayout || block.rawLayout?.object || null;
+  return Boolean(raw && (
+    Object.keys(raw.pos || {}).length
+    || Object.keys(raw.offset || {}).length
+    || Object.keys(raw.object || {}).length
+  ));
+}
+
+function collectObjectLayoutSignals(block = {}, signals) {
+  if (!hasExplicitObjectLayout(block)) return;
+  if (block.allowOverlap) signals.overlapAllowed += 1;
+  if (block.holdAnchorAndSO) signals.keepWithAnchor += 1;
+  if (String(block.textWrap || '').trim() && block.textWrap !== 'top-and-bottom') {
+    signals.wrappedControls += 1;
   }
 
-  try {
-    const diagnostics = renderer.collectDocumentDiagnostics({
-      includePageInfo: true,
-      includeSectionDetails: true,
-      includeControlDetails: false,
-      ...options,
+  const rels = [block.horzRelTo, block.vertRelTo].map(value => String(value || '').toLowerCase());
+  if (rels.includes('page') || rels.includes('paper')) signals.pageAnchoredControls += 1;
+  if (rels.includes('column')) signals.columnAnchoredControls += 1;
+  if (rels.includes('para') || rels.includes('paragraph')) signals.paragraphAnchoredControls += 1;
+}
+
+function collectParsedBlockDiagnostics(block = {}, pageDiag) {
+  if (!block) return;
+  const { counts, layoutSignals, controlTypes } = pageDiag;
+  const type = String(block.type || 'paragraph');
+
+  if (type === 'table') {
+    counts.controls += 1;
+    counts.tables += 1;
+    incrementControlType(controlTypes, 'table');
+    if ((Number(block.numHeaderRows) || 0) > 0) layoutSignals.repeatHeaderTables += 1;
+    if (String(block.pageBreak || block.rawLayout?.pageBreak || '').trim()) {
+      layoutSignals.pageBreakTables += 1;
+    }
+    if (hasExplicitObjectLayout(block) && !block.inline) layoutSignals.floatingTables += 1;
+    collectObjectLayoutSignals(block, layoutSignals);
+
+    (block.rows || []).forEach(row => {
+      (row.cells || []).forEach(cell => {
+        if ((Number(cell.colSpan) || 1) > 1 || (Number(cell.rowSpan) || 1) > 1) {
+          layoutSignals.mergedCells += 1;
+        }
+        const rawCellHeight = Math.max(Number(cell.height) || 0, Number(cell.contentHeight) || 0);
+        if (rawCellHeight >= 12000) layoutSignals.tallCells += 1;
+        (cell.paragraphs || []).forEach(child => collectParsedBlockDiagnostics(child, pageDiag));
+      });
     });
-    state.wasmDiagnostics = diagnostics;
-    return diagnostics;
-  } catch (err) {
-    console.warn('[HWP 진단] 수집 실패:', err);
-    state.wasmDiagnostics = null;
-    return null;
+    return;
   }
+
+  if (type === 'image') {
+    counts.controls += 1;
+    counts.pictures += 1;
+    incrementControlType(controlTypes, 'picture');
+    if (hasExplicitObjectLayout(block) && !block.inline) layoutSignals.floatingPictures += 1;
+    collectObjectLayoutSignals(block, layoutSignals);
+    return;
+  }
+
+  if (type === 'shape' || type === 'textbox') {
+    counts.controls += 1;
+    counts.shapes += 1;
+    incrementControlType(controlTypes, type);
+    collectObjectLayoutSignals(block, layoutSignals);
+    if (Array.isArray(block.paragraphs)) {
+      block.paragraphs.forEach(child => collectParsedBlockDiagnostics(child, pageDiag));
+    }
+    return;
+  }
+
+  if (type === 'equation') {
+    counts.controls += 1;
+    counts.equations += 1;
+    incrementControlType(controlTypes, 'equation');
+  } else if (type === 'ole') {
+    counts.controls += 1;
+    counts.oles += 1;
+    incrementControlType(controlTypes, 'ole');
+  }
+
+  counts.textRuns += (block.texts || []).filter(run => String(run?.text || '').length > 0).length;
+}
+
+function collectParsedDocumentDiagnostics(doc = state.doc) {
+  if (!doc) return null;
+
+  const pages = (doc.pages || []).map((page, pageIndex) => {
+    const pageDiag = {
+      pageIndex,
+      width: Number(page?.pageStyle?.width) || null,
+      height: Number(page?.pageStyle?.height) || null,
+      sectionIndex: Number(page?.sectionIndex ?? page?.sectionPageIndex) || 0,
+      columns: Number(page?.columns) || 0,
+      controlCount: 0,
+      counts: createDiagnosticCounts(),
+      layoutSignals: createLayoutSignals(),
+      controlTypes: {},
+      textRunCount: 0,
+    };
+    (page?.paragraphs || []).forEach(block => collectParsedBlockDiagnostics(block, pageDiag));
+    pageDiag.controlCount = pageDiag.counts.controls;
+    pageDiag.textRunCount = pageDiag.counts.textRuns;
+    return pageDiag;
+  });
+
+  const counts = createDiagnosticCounts();
+  const layoutSignals = createLayoutSignals();
+  const controlTypes = {};
+  pages.forEach(page => {
+    addDiagnosticMaps(counts, page.counts);
+    addDiagnosticMaps(layoutSignals, page.layoutSignals);
+    Object.entries(page.controlTypes || {}).forEach(([key, value]) => {
+      controlTypes[key] = (controlTypes[key] || 0) + value;
+    });
+  });
+
+  return {
+    engine: 'totaldocs-js',
+    pageCount: pages.length,
+    sectionCount: doc.meta?.sectionCount || state.documentInfo?.sectionCount || 1,
+    documentInfo: state.documentInfo || doc.meta || null,
+    counts,
+    layoutSignals,
+    controlTypes,
+    pages,
+  };
+}
+
+function refreshWasmDiagnostics(options = {}) {
+  const renderer = getHwpWasmRenderer();
+  if (renderer?.collectDocumentDiagnostics) {
+    try {
+      const diagnostics = renderer.collectDocumentDiagnostics({
+        includePageInfo: true,
+        includeSectionDetails: true,
+        includeControlDetails: false,
+        ...options,
+      });
+      state.wasmDiagnostics = diagnostics;
+      return diagnostics;
+    } catch (err) {
+      console.warn('[HWP 진단] 수집 실패:', err);
+    }
+  }
+
+  const diagnostics = collectParsedDocumentDiagnostics(state.doc);
+  state.wasmDiagnostics = diagnostics;
+  return diagnostics;
 }
 
 function getWasmDiagnosticsSummaryText() {
@@ -1847,6 +2024,7 @@ async function processBuffer(buffer, filename, sizeBytes, options = {}) {
 
   hideLoading();
   renderHWP(doc);
+  refreshWasmDiagnostics();
   setWasmEditVisualState(false);
   updateUiAfterLoad(filename, sizeBytes);
 }
@@ -2494,11 +2672,11 @@ window.addEventListener('resize', () => {
 });
 
 window.__TotalDocsDiagnostics = {
-  getCurrent: () => state.wasmDiagnostics,
+  getCurrent: () => state.wasmDiagnostics || collectParsedDocumentDiagnostics(state.doc),
   collect: (options = {}) => {
     const renderer = getHwpWasmRenderer();
-    if (!renderer?.collectDocumentDiagnostics) return null;
-    return renderer.collectDocumentDiagnostics(options);
+    if (renderer?.collectDocumentDiagnostics) return renderer.collectDocumentDiagnostics(options);
+    return collectParsedDocumentDiagnostics(state.doc);
   },
 };
 

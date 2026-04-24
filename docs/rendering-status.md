@@ -97,6 +97,26 @@
   - Add focused diagnostics for the page/table overlap class.
   - Draft `CanonicalDocument` and `LayoutTree` schemas before adding many new formats.
 
+## 2026-04-24 Owned WASM Progress
+- Completed:
+  - Added `engine/` as a TotalDocs-owned Rust/WASM layout prototype.
+  - Added `js/hwp-layout-adapter.js` so the browser can load `lib/generated/totaldocs_engine.wasm` and request a layout tree without replacing the JS renderer.
+  - Preserved HWPX `lineseg` raw attributes (`textpos`, `vertpos`, `vertsize`, `textheight`, `baseline`, `spacing`, `horzpos`, `horzsize`, `flags`) on parsed paragraph blocks.
+  - Preserved HWPX table pagination/layout source fields including `pageBreak`, `repeatHeader`, object position metadata, cell sizes, cell spans, margins, and `subList` text dimensions.
+  - Added JS-path diagnostics from the parsed document model so verification no longer depends on a removed external WASM diagnostic API.
+- Build and smoke commands:
+  - `scripts/build_totaldocs_engine.sh`
+  - `node scripts/test_totaldocs_engine.mjs`
+- Latest verification:
+  - `node scripts/verify_samples.mjs` loads all five baseline documents through the JS parser/DOM renderer.
+  - `incheon-2a.hwpx` now renders 13 pages versus Hancom Viewer's 18-page oracle; before this pass it rendered 11 pages.
+  - Remaining mismatch confirms that long HWPX cell continuation still needs true intra-cell/page-window splitting, not only row-level table splitting.
+- Remaining work:
+  - Build page-2 focused fixtures from `incheon-2a.hwpx` and compare the parsed source layout data against Hancom Viewer captures.
+  - Replace the current table split heuristic with rules that use preserved `pageBreak`, repeat header rows, raw row/cell heights, and long-cell continuation windows.
+  - Add a side-by-side diagnostic mode that compares JS layout, WASM layout, and Hancom Viewer screenshots.
+  - Keep the WASM path disabled as a renderer replacement until it improves overlap cases without regressing normal document loading.
+
 ## Playwright Session Rule
 - Always run `close-all` before verification.
 - Always use one fixed session name: `verify-current`.

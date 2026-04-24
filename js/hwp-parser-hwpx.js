@@ -437,6 +437,19 @@ Object.assign(HwpParser, {
     return Number.isFinite(value) ? value : fallback;
   },
 
+  _hwpxAttrMap(node, numericAttrs = []) {
+    const out = {};
+    Array.from(node?.attributes || []).forEach(attr => {
+      const name = String(attr.localName || attr.name || '').replace(/^.*:/, '');
+      if (!name) return;
+      const value = attr.value ?? '';
+      out[name] = numericAttrs.includes(name) && value !== '' && Number.isFinite(Number(value))
+        ? Number(value)
+        : value;
+    });
+    return out;
+  },
+
   /**
    * HWPX 셀 여백(cellMargin/inMargin) 속성값을 읽는다.
    * 0xFFFFFFFF(-1, signed int32 표현)는 "테이블 기본값 상속"을 의미하므로 0으로 변환한다.
@@ -624,6 +637,7 @@ Object.assign(HwpParser, {
       outMargin: Array.isArray(objectInfo?.margin)
         ? [...objectInfo.margin]
         : (Array.isArray(block.outMargin) ? [...block.outMargin] : []),
+      rawObjectLayout: objectInfo?.rawObjectLayout || block.rawObjectLayout || null,
     };
   },
 
@@ -668,6 +682,21 @@ Object.assign(HwpParser, {
         HwpParser._hwpxAttrNum(outMarginEl, 'top', 0),
         HwpParser._hwpxAttrNum(outMarginEl, 'bottom', 0),
       ],
+      rawObjectLayout: {
+        object: HwpParser._hwpxAttrMap(node, ['id', 'zOrder', 'numberingType', 'lock']),
+        pos: HwpParser._hwpxAttrMap(posEl, [
+          'treatAsChar',
+          'affectLSpacing',
+          'flowWithText',
+          'allowOverlap',
+          'holdAnchorAndSO',
+          'vertOffset',
+          'horzOffset',
+        ]),
+        size: HwpParser._hwpxAttrMap(sizeEl, ['width', 'height', 'protect']),
+        outMargin: HwpParser._hwpxAttrMap(outMarginEl, ['left', 'right', 'top', 'bottom']),
+        offset: HwpParser._hwpxAttrMap(offsetEl, ['x', 'y']),
+      },
     };
   },
 
@@ -724,23 +753,51 @@ Object.assign(HwpParser, {
   _hwpxParagraphLineMetrics(pEl) {
     const lineSegArray = HwpParser._hwpxFirstChild(pEl, 'linesegarray');
     const lineSegs = HwpParser._hwpxChildren(lineSegArray, 'lineseg')
-      .map(lineEl => {
+      .map((lineEl, index) => {
+        const raw = HwpParser._hwpxAttrMap(lineEl, [
+          'textpos',
+          'vertpos',
+          'vertsize',
+          'textheight',
+          'baseline',
+          'spacing',
+          'horzpos',
+          'horzsize',
+          'flags',
+        ]);
         const height = Math.max(
-          HwpParser._hwpxAttrNum(lineEl, 'vertsize', 0),
-          HwpParser._hwpxAttrNum(lineEl, 'textheight', 0),
-          HwpParser._hwpxAttrNum(lineEl, 'spacing', 0),
+          Number(raw.vertsize) || 0,
+          Number(raw.textheight) || 0,
+          Number(raw.spacing) || 0,
         );
-        return Number.isFinite(height) ? height : 0;
+        return {
+          index,
+          textpos: Number(raw.textpos) || 0,
+          vertpos: Number(raw.vertpos) || 0,
+          vertsize: Number(raw.vertsize) || 0,
+          textheight: Number(raw.textheight) || 0,
+          baseline: Number(raw.baseline) || 0,
+          spacing: Number(raw.spacing) || 0,
+          horzpos: Number(raw.horzpos) || 0,
+          horzsize: Number(raw.horzsize) || 0,
+          flags: Number(raw.flags) || 0,
+          height: Number.isFinite(height) ? height : 0,
+          raw,
+        };
       })
-      .filter(height => height > 0 && height <= 14400);
+      .filter(seg => seg.height > 0 && seg.height <= 14400);
 
     if (!lineSegs.length) return {};
 
-    const totalHeight = lineSegs.reduce((sum, height) => sum + height, 0);
+    const totalHeight = lineSegs.reduce((sum, seg) => sum + seg.height, 0);
     const avgHeight = totalHeight / lineSegs.length;
     return {
       lineHeightPx: Math.max(11, Math.min(96, Math.round(avgHeight / 75))),
       layoutHeightPx: Math.max(0, Math.min(480, Math.round(totalHeight / 75))),
+      lineSegs,
+      rawLayout: {
+        lineSegs,
+      },
     };
   },
 
@@ -1024,6 +1081,24 @@ Object.assign(HwpParser, {
     const rowEls = HwpParser._hwpxChildren(tblEl, 'tr');
     const cells = [];
     const objectInfo = HwpParser._hwpxParseObjectLayout(tblEl);
+    const pageBreak = tblEl.getAttribute?.('pageBreak') || '';
+    const tableRawLayout = {
+      ...HwpParser._hwpxAttrMap(tblEl, [
+        'id',
+        'zOrder',
+        'numberingType',
+        'textFlow',
+        'lock',
+        'dropcapstyle',
+        'pageBreak',
+        'repeatHeader',
+        'rowCnt',
+        'colCnt',
+        'cellSpacing',
+        'borderFillIDRef',
+      ]),
+      object: objectInfo?.rawObjectLayout || null,
+    };
     // Table-level default inner margin (used when a cell has hasMargin="0")
     const tblInMarginEl = HwpParser._hwpxFirstChild(tblEl, 'inMargin');
 
@@ -1066,6 +1141,14 @@ Object.assign(HwpParser, {
           borderStyle: header?.borderFills?.[HwpParser._hwpxAttrNum(tcEl, 'borderFillIDRef', 0)] || null,
           paragraphs: blocks.length ? blocks : [HwpParser._createParagraphBlock('')],
           sourceFormat: 'hwpx',
+          rawLayout: {
+            cell: HwpParser._hwpxAttrMap(tcEl, ['borderFillIDRef', 'hasMargin', 'dirty', 'editable']),
+            address: HwpParser._hwpxAttrMap(addrEl, ['colAddr', 'rowAddr']),
+            span: HwpParser._hwpxAttrMap(spanEl, ['colSpan', 'rowSpan']),
+            size: HwpParser._hwpxAttrMap(sizeEl, ['width', 'height']),
+            subList: HwpParser._hwpxAttrMap(subListEl, ['id', 'textWidth', 'textHeight']),
+            margin: HwpParser._hwpxAttrMap(marginEl, ['left', 'right', 'top', 'bottom']),
+          },
         };
 
         cells.push(cell);
@@ -1078,6 +1161,8 @@ Object.assign(HwpParser, {
       colCount: HwpParser._hwpxAttrNum(tblEl, 'colCnt', 0),
       cellSpacing: HwpParser._hwpxAttrNum(tblEl, 'cellSpacing', 0),
       numHeaderRows: repeatHeader > 0 ? repeatHeader : 0,
+      pageBreak,
+      rawLayout: tableRawLayout,
       sourceFormat: 'hwpx',
     }, cells), objectInfo));
 

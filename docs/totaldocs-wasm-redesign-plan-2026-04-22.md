@@ -191,18 +191,26 @@ Exit criteria:
 Tasks:
 
 1. Create `engine/` with a minimal Rust/WASM package owned by TotalDocs.
+   Status 2026-04-24: initial Rust crate added.
 2. Implement only:
    - units conversion
    - page area calculation
    - paragraph block placement
    - table row/cell box placement
    - long cell continuation diagnostics
+   Status 2026-04-24: prototype page-area, block placement, and tall-block split diagnostics added.
 3. Build a tiny JS adapter that calls the WASM layout function.
+   Status 2026-04-24: `js/hwp-layout-adapter.js` added; it loads `lib/generated/totaldocs_engine.wasm` and returns an inspectable layout tree.
 
 Exit criteria:
 
 - WASM can accept one canonical model fixture and return a layout tree.
 - Layout output can be inspected without replacing the viewer.
+
+Current guardrail:
+
+- The WASM output is diagnostic/prototype layout only.
+- It must not replace the active renderer until JS, WASM, and Hancom Viewer comparison shows better fidelity on known overlap cases.
 
 ### Phase 3: Table Pagination
 

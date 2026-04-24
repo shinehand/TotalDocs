@@ -1,0 +1,15 @@
+[package]
+name = "totaldocs_engine"
+version = "0.1.0"
+edition = "2021"
+description = "TotalDocs-owned document layout engine prototype"
+license = "UNLICENSED"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+strip = true
