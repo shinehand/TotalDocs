@@ -588,7 +588,7 @@ function setCurrentFilename(name) {
   state.filename = name;
   HwpExporter.setFilename(name);
   UI.fileName.textContent = name;
-  document.title = `${name} - ChromeHWP Viewer`;
+  document.title = `${name} - TotalDocs Viewer`;
 }
 
 function updateFileInfoFromSize(sizeBytes) {
@@ -2493,7 +2493,7 @@ window.addEventListener('resize', () => {
   requestAnimationFrame(drawGuidelineRulers);
 });
 
-window.__ChromeHwpDiagnostics = {
+window.__TotalDocsDiagnostics = {
   getCurrent: () => state.wasmDiagnostics,
   collect: (options = {}) => {
     const renderer = getHwpWasmRenderer();

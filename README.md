@@ -1,8 +1,8 @@
-# ChromeHWP
+# TotalDocs
 
 > **⚡ 설치 없이 브라우저에서 바로 사용하기**
 >
-> 👉 **[https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)**
+> 👉 **[https://shinehand.github.io/TotalDocs/viewer.html](https://shinehand.github.io/TotalDocs/viewer.html)**
 >
 > 링크를 클릭하면 **아무것도 설치하지 않아도** HWP 뷰어가 바로 열립니다.
 > `.hwp` / `.hwpx` / `.owpml` 파일을 화면에 끌어다 놓거나 "파일 선택" 버튼으로 올리면 즉시 렌더링됩니다.
@@ -12,13 +12,13 @@
 
 `HWP`, `HWPX`, `OWPML` 문서를 어떤 브라우저에서든 설치 없이 열고, 가능한 한 실제 한글 프로그램과 비슷한 화면과 동선으로 확인·편집·저장하려는 프로젝트이옵니다.
 
-현재 프로젝트는 `웹 뷰어(GitHub Pages) + 크롬 확장 프로그램 셸 + ChromeHWP 자체 JS 파서/DOM 렌더러 + 다운로드 원본 기준 QA` 구조로 움직이고 있사옵니다.
+현재 프로젝트는 `웹 뷰어(GitHub Pages) + 크롬 확장 프로그램 셸 + TotalDocs 자체 JS 파서/DOM 렌더러 + 다운로드 원본 기준 QA` 구조로 움직이고 있사옵니다.
 
 ## 현재 상태
 
 - `HWP` / `HWPX` 는 분리된 `HwpParser` 모듈과 `js/hwp-renderer.js` DOM 렌더러를 공식 경로로 사용하옵니다.
 - 외부 WASM 엔진 실험 경로는 2026-04-22 기준으로 비활성화하고 번들에서 제거했사옵니다.
-- 검색, 줌, 상태바, 썸네일 탐색이 ChromeHWP 자체 렌더링 경로에 연결되어 있사옵니다.
+- 검색, 줌, 상태바, 썸네일 탐색이 TotalDocs 자체 렌더링 경로에 연결되어 있사옵니다.
 - 사이드바에는 현재 쪽 집계와 집중 확인 쪽을 보여 주는 `레이아웃 감사 패널` 이 붙어 있사옵니다.
 - QA는 저장소 fixture보다 `/Users/shinehandmac/Downloads` 의 실제 원본 `HWP/HWPX` 파일을 기준으로 돌고 있사옵니다.
 - 검증 스크립트는 다운로드 폴더의 지원 문서를 자동 발견하므로, 새 파일이 들어와도 QA 범위에 바로 편입되옵니다.
@@ -28,11 +28,11 @@
 아직 남은 큰 과제는 `페이지 내부 레이아웃 충실도`이옵니다.
 
 - 한컴 Viewer 기준 페이지 수는 현재 다운로드 대표 5종 모두 일치하옵니다.
-- `goyeopje.hwp`: 한컴 `2쪽`, ChromeHWP `2쪽`
-- `goyeopje-full-2024.hwp`: 한컴 `11쪽`, ChromeHWP `11쪽`
-- `gyeolseokgye.hwp`: 한컴 `1쪽`, ChromeHWP `1쪽`
-- `attachment-sale-notice.hwp`: 한컴 `4쪽`, ChromeHWP `4쪽`
-- `incheon-2a.hwpx`: 한컴 `18쪽`, ChromeHWP `18쪽`
+- `goyeopje.hwp`: 한컴 `2쪽`, TotalDocs `2쪽`
+- `goyeopje-full-2024.hwp`: 한컴 `11쪽`, TotalDocs `11쪽`
+- `gyeolseokgye.hwp`: 한컴 `1쪽`, TotalDocs `1쪽`
+- `attachment-sale-notice.hwp`: 한컴 `4쪽`, TotalDocs `4쪽`
+- `incheon-2a.hwpx`: 한컴 `18쪽`, TotalDocs `18쪽`
 
 최근 한컴 Viewer 화면 비교 기준 주요 수치입니다.
 
@@ -52,7 +52,7 @@
 - HWPX 문단의 제어개체 오프셋은 스트림 순서대로 8 UTF-16 단위로 누적하여, 로고 뒤 제목처럼 `charPrIDRef` 경계가 한 글자 밀리는 문제를 바로잡았사옵니다.
 - TAC 표처럼 저장된 object 높이가 셀 내용보다 작을 때도 내용 우선 높이를 유지해야 한다는 검증 기준을 세웠사옵니다.
 - `incheon-2a.hwpx` 2페이지 겹침은 큰 표 셀, `LineSeg.vertical_pos`, continuation window 해석 문제로 분류했사옵니다.
-- 같은 행이 여러 페이지로 쪼개질 때는 `split_start`, `visible_length`, 중첩 표 continuation을 ChromeHWP 자체 레이아웃 규칙으로 다시 구현해야 하옵니다.
+- 같은 행이 여러 페이지로 쪼개질 때는 `split_start`, `visible_length`, 중첩 표 continuation을 TotalDocs 자체 레이아웃 규칙으로 다시 구현해야 하옵니다.
 - 셀 안의 중첩 표 `Table.caption` 방향과 간격도 자체 렌더러에서 일반 규칙으로 다루어야 하옵니다.
 - 최신 2페이지 직접 비교 캡처는 [incheon-p2-side-by-side-vpos3.png](output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png)에 남겨 두었사옵니다.
 
@@ -67,7 +67,7 @@
 - 모든 보정은 문서 형식에서 읽은 값에 대한 일반 규칙이어야 한다.
 - 예: `LineSeg.vertical_pos`, `line_height`, `line_spacing`, `Table.caption`, 셀 padding, 행 높이, 개체 anchor, `charPr/shadow`, border/fill, section/page definition.
 - 다운로드 폴더의 실제 문서는 회귀검증 기준선이지만, 구현은 해당 문서에 종속되면 안 된다.
-- 화면 정답은 한컴 Viewer이며, 최종 판단은 반드시 한컴 캡처와 ChromeHWP 캡처의 페이지 단위 비교로 한다.
+- 화면 정답은 한컴 Viewer이며, 최종 판단은 반드시 한컴 캡처와 TotalDocs 캡처의 페이지 단위 비교로 한다.
 
 ### 지금까지 완료한 일
 
@@ -77,7 +77,7 @@
 4. 한컴 Viewer 기준 전 페이지 감사 리포트를 만들었다.
 5. HWPX 제목 그림자, 폰트 대체, 그림 앵커, TAC 표 높이, 대형 셀 continuation, 중첩 표 캡션 누락 문제를 자체 렌더러의 과제로 정리했다.
 6. README와 렌더링 상태 문서에 하드코딩 금지 원칙을 명문화했다.
-7. 외부 WASM 실험 경로가 ChromeHWP의 기준 엔진이 되지 않도록 실행 경로와 문서에서 제거했다.
+7. 외부 WASM 실험 경로가 TotalDocs의 기준 엔진이 되지 않도록 실행 경로와 문서에서 제거했다.
 
 ### 현재 진행 중인 일
 
@@ -110,7 +110,7 @@
 
 ### 1. 웹 뷰어 (GitHub Pages)
 
-- **라이브 URL**: [https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)
+- **라이브 URL**: [https://shinehand.github.io/TotalDocs/viewer.html](https://shinehand.github.io/TotalDocs/viewer.html)
 - 뷰어 (루트): [viewer.html](viewer.html)
 - 뷰어 (크롬 확장용): [pages/viewer.html](pages/viewer.html)
 - 스타일: [css/viewer.css](css/viewer.css)
@@ -128,7 +128,7 @@
 - DOM 렌더러: [js/hwp-renderer.js](js/hwp-renderer.js)
 - Worker 진입점: [js/parser.worker.js](js/parser.worker.js)
 
-이 경로가 ChromeHWP의 공식 파서/레이아웃 구현체이옵니다. 외부 WASM 번들은 기준 엔진으로 삼지 않사옵니다.
+이 경로가 TotalDocs의 공식 파서/레이아웃 구현체이옵니다. 외부 WASM 번들은 기준 엔진으로 삼지 않사옵니다.
 
 ### 3. QA / 회귀검증
 
@@ -155,7 +155,7 @@
 - 모든 보정은 HWP/HWPX 원본 레코드의 서식값, 위치값, 캡션 방향, 줄/행/셀 속성처럼 문서 형식에서 읽은 값에 대한 일반 규칙이어야 한다.
 
 자동화는 브라우저 적재를 위해 `output/playwright/served-inputs/` 에 임시 복제본을 만들 수 있으나, 바이트 원천은 늘 다운로드 원본이어야 하옵니다.
-또한 화면 충실도 판정은 한컴 Viewer 캡처와 ChromeHWP 캡처를 짝지어 보며 내려야 하옵니다.
+또한 화면 충실도 판정은 한컴 Viewer 캡처와 TotalDocs 캡처를 짝지어 보며 내려야 하옵니다.
 
 상세 기준은 아래 문서에 정리되어 있사옵니다.
 
@@ -168,16 +168,16 @@
 
 아래 링크를 클릭하면 바로 HWP 뷰어가 열립니다. 아무것도 설치할 필요가 없사옵니다.
 
-**[https://shinehand.github.io/ChromeHWP/viewer.html](https://shinehand.github.io/ChromeHWP/viewer.html)**
+**[https://shinehand.github.io/TotalDocs/viewer.html](https://shinehand.github.io/TotalDocs/viewer.html)**
 
 - `.hwp` / `.hwpx` / `.owpml` 파일을 화면에 끌어다 놓거나 "파일 선택" 버튼으로 올리면 즉시 렌더링됩니다.
 - Chrome · Firefox · Safari · Edge 모두 지원합니다.
-- 홈 화면: [https://shinehand.github.io/ChromeHWP/](https://shinehand.github.io/ChromeHWP/)
+- 홈 화면: [https://shinehand.github.io/TotalDocs/](https://shinehand.github.io/TotalDocs/)
 
 ### 로컬 정적 서버
 
 ```bash
-cd /path/to/ChromeHWP
+cd /path/to/TotalDocs
 python3 -m http.server 4173
 # 브라우저에서 http://localhost:4173/viewer.html 접속
 ```
@@ -185,13 +185,13 @@ python3 -m http.server 4173
 ### 최소 회귀검증
 
 ```bash
-cd /path/to/ChromeHWP
+cd /path/to/TotalDocs
 node scripts/verify_samples.mjs
 ```
 
 ### 한컴 기준선 캡처
 
-한컴 Viewer를 열 수 있는 macOS 환경이라면, 같은 문서를 한컴 Viewer와 ChromeHWP 양쪽에서 캡처한 비교판을 생성할 수 있사옵니다.
+한컴 Viewer를 열 수 있는 macOS 환경이라면, 같은 문서를 한컴 Viewer와 TotalDocs 양쪽에서 캡처한 비교판을 생성할 수 있사옵니다.
 
 ```bash
 node scripts/capture_hancom_oracle.mjs
@@ -199,7 +199,7 @@ node scripts/capture_hancom_oracle.mjs
 
 ### 전 페이지 한컴 감사
 
-대표 화면 1장이 아니라 테스트 문서의 모든 페이지를 한컴 Viewer와 ChromeHWP로 짝지어 확인하려면 아래를 실행하옵니다.
+대표 화면 1장이 아니라 테스트 문서의 모든 페이지를 한컴 Viewer와 TotalDocs로 짝지어 확인하려면 아래를 실행하옵니다.
 
 ```bash
 node scripts/capture_hancom_page_audit.mjs
@@ -231,11 +231,11 @@ python3 scripts/build_hancom_page_audit.py
 
 ## 2026-04-22 방향 전환 메모
 
-외부 WASM 실험 경로는 ChromeHWP의 기준 엔진이 아니옵니다.
+외부 WASM 실험 경로는 TotalDocs의 기준 엔진이 아니옵니다.
 
-- ChromeHWP의 공식 구현은 저장소 안의 JS 파서와 DOM 렌더러이옵니다.
+- TotalDocs의 공식 구현은 저장소 안의 JS 파서와 DOM 렌더러이옵니다.
 - 외부 WASM 브리지와 번들은 실행 경로에서 제거했사옵니다.
-- 과거 WASM 실험에서 얻은 관찰은 참고 기록일 뿐, 이후 구현은 HWP/HWPX 형식 문서와 ChromeHWP 자체 코드 기준으로 진행하옵니다.
+- 과거 WASM 실험에서 얻은 관찰은 참고 기록일 뿐, 이후 구현은 HWP/HWPX 형식 문서와 TotalDocs 자체 코드 기준으로 진행하옵니다.
 - HWPX 레이아웃 고도화는 `docs/hwp-spec/` 원문, `docs/hwp-spec-analysis/` 분석 문서, 한컴 Viewer 캡처 비교를 기준으로 삼사옵니다.
 
 ## 다음 우선순위

@@ -1,6 +1,6 @@
 # Font Strategy
 
-2026-04-18 기준 `ChromeHWP` 의 글꼴 전략이옵니다.
+2026-04-18 기준 `TotalDocs` 의 글꼴 전략이옵니다.
 
 ## 목적
 

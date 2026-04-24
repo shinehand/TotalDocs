@@ -1,6 +1,6 @@
 # HWP 수식 분석 - revision 1.3
 
-이 문서는 `/Users/shinehandmac/Downloads/한글문서파일형식_수식_revision1.3.pdf` 전문을 다시 읽고, `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/README.md`, `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/spec-crosswalk.md`, `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/implementation-requirements.md`와 맞물리게 수식 구현 입력용으로 재정리한 분석서다.
+이 문서는 `/Users/shinehandmac/Downloads/한글문서파일형식_수식_revision1.3.pdf` 전문을 다시 읽고, `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/README.md`, `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/spec-crosswalk.md`, `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/implementation-requirements.md`와 맞물리게 수식 구현 입력용으로 재정리한 분석서다.
 
 목표는 세 가지다.
 
@@ -482,11 +482,11 @@ PDF의 본문 설명과 예제에는 메인 명령 테이블에 없지만 구현
 
 ## 11. 연결 확인 문서
 
-- `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/README.md`
+- `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/README.md`
   - 분석 문서는 파서/레이아웃/보존 기준이 되어야 한다는 작성 규칙을 다시 확인할 것.
-- `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/spec-crosswalk.md`
+- `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/spec-crosswalk.md`
   - equation PDF는 파서, 템플릿 조판, 저장기의 직접 입력이며, 단순 치환기보다 구조 파서가 먼저여야 한다.
-- `/Users/shinehandmac/Github/ChromeHWP/docs/hwp-spec-analysis/implementation-requirements.md`
+- `/Users/shinehandmac/Github/TotalDocs/docs/hwp-spec-analysis/implementation-requirements.md`
   - 수식은 `HWPTAG_EQEDIT` 저장 구조, script string, `len`, size, color, baseline, version, font name, 문서 수준 `수식 시작 번호`를 함께 보존해야 한다.
 
 실제 바이너리 필드 배치와 object 공통 속성은 현재 리포지터리의 HWP 5.0 분석 흐름과 맞물려 검토해야 하지만, 이 수식 문서만 놓고도 다음 원칙은 고정할 수 있다.

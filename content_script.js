@@ -3,9 +3,9 @@
 
   const MAX_LINK_TEXT_LENGTH = 120;
   const HWP_EXTENSIONS = /\.(hwp|hwpx|owpml)(?:$|[?#])/i;
-  const BADGE_CLASS = 'chromehwp-badge';
-  const HOVER_CLASS = 'chromehwp-hover-card';
-  const PROCESSED_ATTR = 'data-chromehwp-processed';
+  const BADGE_CLASS = 'totaldocs-badge';
+  const HOVER_CLASS = 'totaldocs-hover-card';
+  const PROCESSED_ATTR = 'data-totaldocs-processed';
   const HOVER_SHOW_DELAY = 350;  // 호버 카드 표시 지연 (ms)
   const HOVER_HIDE_DELAY = 200;  // 호버 카드 숨김 지연 (ms)
 
@@ -61,7 +61,7 @@
 
   function createBadge(anchor) {
     const badge = createEl('span', BADGE_CLASS, 'HWP');
-    badge.title = 'ChromeHWP로 열기';
+    badge.title = 'TotalDocs로 열기';
     badge.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -83,19 +83,19 @@
     card.className = HOVER_CLASS;
 
     const titleText = anchor.textContent?.trim() || anchor.href.split('/').pop().split('?')[0];
-    card.appendChild(createEl('div', 'chromehwp-hover-title', truncate(titleText, 120)));
+    card.appendChild(createEl('div', 'totaldocs-hover-title', truncate(titleText, 120)));
 
     const ext = (anchor.href.match(/\.(hwp|hwpx|owpml)/i) || [])[1]?.toUpperCase() || 'HWP';
-    card.appendChild(createEl('div', 'chromehwp-hover-meta', ext));
+    card.appendChild(createEl('div', 'totaldocs-hover-meta', ext));
 
     // 썸네일 영역
-    const thumbContainer = createEl('div', 'chromehwp-hover-thumb chromehwp-thumb-loading', '');
-    const spinner = createEl('span', 'chromehwp-thumb-spinner', '⏳');
+    const thumbContainer = createEl('div', 'totaldocs-hover-thumb totaldocs-thumb-loading', '');
+    const spinner = createEl('span', 'totaldocs-thumb-spinner', '⏳');
     thumbContainer.appendChild(spinner);
     card.appendChild(thumbContainer);
 
     // 푸터
-    const footer = createEl('div', 'chromehwp-hover-action', '▶  ChromeHWP로 열기');
+    const footer = createEl('div', 'totaldocs-hover-action', '▶  TotalDocs로 열기');
     card.appendChild(footer);
 
     card.addEventListener('click', () => {
@@ -147,7 +147,7 @@
   }
 
   function insertThumbnailImg(container, dataUri) {
-    container.className = 'chromehwp-hover-thumb';
+    container.className = 'totaldocs-hover-thumb';
     container.innerHTML = '';
     const img = document.createElement('img');
     img.src = dataUri;

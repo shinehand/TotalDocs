@@ -284,7 +284,7 @@ function captureHancomWindow(windowInfo, destinationPath) {
   return savedPath;
 }
 
-function captureChromeHwp(report, destinationPath, viewport = {}) {
+function captureTotalDocs(report, destinationPath, viewport = {}) {
   mkdirSync(path.dirname(destinationPath), { recursive: true });
   const sessionName = `or-${shortHash(report.id || report.filename)}`;
   const width = Number.isFinite(viewport.width) ? viewport.width : 1400;
@@ -304,12 +304,12 @@ function captureChromeHwp(report, destinationPath, viewport = {}) {
 
   const match = screenshotOutput.match(/\[Screenshot of [^\]]+\]\(([^)]+\.png)\)/);
   if (!match) {
-    fail(`ChromeHWP 스크린샷 경로를 파싱하지 못했사옵니다.\n${screenshotOutput}`);
+    fail(`TotalDocs 스크린샷 경로를 파싱하지 못했사옵니다.\n${screenshotOutput}`);
   }
 
   const sourcePath = path.resolve(ROOT_DIR, match[1]);
   if (!existsSync(sourcePath)) {
-    fail(`ChromeHWP 스크린샷 파일이 존재하지 않사옵니다: ${sourcePath}`);
+    fail(`TotalDocs 스크린샷 파일이 존재하지 않사옵니다: ${sourcePath}`);
   }
 
   copyFileSync(sourcePath, destinationPath);
@@ -323,7 +323,7 @@ function buildMarkdown(entries) {
     `Generated: ${new Date().toISOString()}`,
     `QA Report: ${VERIFY_REPORT_PATH}`,
     '',
-    '한컴 Viewer를 정답 기준으로 삼아, 같은 문서의 한컴 화면과 ChromeHWP 화면을 짝지은 비교 산출물이옵니다.',
+    '한컴 Viewer를 정답 기준으로 삼아, 같은 문서의 한컴 화면과 TotalDocs 화면을 짝지은 비교 산출물이옵니다.',
     '',
   ];
 
@@ -334,7 +334,7 @@ function buildMarkdown(entries) {
     lines.push(`- page: ${entry.pageInfo || '알 수 없음'}`);
     lines.push(`- hancom-window: ${entry.hancomTitle} (${entry.hancomGeometry})`);
     lines.push(`- hancom-screenshot: ${entry.hancomScreenshot}`);
-    lines.push(`- chromehwp-screenshot: ${entry.chromeHwpScreenshot}`);
+    lines.push(`- totaldocs-screenshot: ${entry.totalDocsScreenshot}`);
     if (Array.isArray(entry.layoutSignalLabels) && entry.layoutSignalLabels.length) {
       lines.push(`- layout-signals: ${entry.layoutSignalLabels.join(' · ')}`);
     }
@@ -372,8 +372,8 @@ function buildHtml(entries) {
             <img src="${escapeHtml(relativeFromOutput(entry.hancomScreenshot))}" alt="${escapeHtml(entry.filename)} Hancom Viewer">
           </figure>
           <figure>
-            <figcaption>ChromeHWP</figcaption>
-            <img src="${escapeHtml(relativeFromOutput(entry.chromeHwpScreenshot))}" alt="${escapeHtml(entry.filename)} ChromeHWP">
+            <figcaption>TotalDocs</figcaption>
+            <img src="${escapeHtml(relativeFromOutput(entry.totalDocsScreenshot))}" alt="${escapeHtml(entry.filename)} TotalDocs">
           </figure>
         </div>
       </section>
@@ -505,9 +505,9 @@ function buildEntries(reports) {
       windowInfo,
       path.join(OUTPUT_DIR, `${report.id}-hancom.png`),
     );
-    const chromeHwpScreenshot = captureChromeHwp(
+    const totalDocsScreenshot = captureTotalDocs(
       report,
-      path.join(OUTPUT_DIR, `${report.id}-chromehwp.png`),
+      path.join(OUTPUT_DIR, `${report.id}-totaldocs.png`),
       geometry || {},
     );
 
@@ -521,7 +521,7 @@ function buildEntries(reports) {
       hancomTitle: windowInfo.title,
       hancomGeometry: windowInfo.geometry,
       hancomScreenshot,
-      chromeHwpScreenshot,
+      totalDocsScreenshot,
       layoutSignalLabels: Array.isArray(report.layoutSignalLabels) ? report.layoutSignalLabels : [],
       hotspotSummary: Array.isArray(report.hotspots)
         ? report.hotspots.map((hotspot) => {

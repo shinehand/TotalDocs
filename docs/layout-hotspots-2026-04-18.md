@@ -1,8 +1,8 @@
 # Layout Hotspots
 
 Date: 2026-04-19
-Source Report: `/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-report.json`
-Screenshots: `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/`
+Source Report: `/Users/shinehandmac/Github/TotalDocs/output/playwright/verify-samples-report.json`
+Screenshots: `/Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/`
 
 ## 목적
 
@@ -13,7 +13,7 @@ Screenshots: `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshot
 ## 전수 확인 범위
 
 - 2026-04-19 기준 `/Users/shinehandmac/Downloads` 의 지원 문서 `5개`를 모두 검증했사옵니다.
-- 전수 목록은 `/Users/shinehandmac/Github/ChromeHWP/output/playwright/verify-samples-inventory.md` 를 기준으로 삼사옵니다.
+- 전수 목록은 `/Users/shinehandmac/Github/TotalDocs/output/playwright/verify-samples-inventory.md` 를 기준으로 삼사옵니다.
 - 아래 `1차 표적` 과 `2차 표적` 은 전수 확인 대상 중 우선 수술 순서를 뜻할 뿐, 검증 범위를 제한하는 뜻이 아니옵니다.
 
 ## 1차 표적
@@ -29,7 +29,7 @@ Screenshots: `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshot
   - `0쪽`: `표 1`, `textRuns 179`
   - `1쪽`: `표 1`, `textRuns 93`
 - 참고 스냅샷:
-  - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/goyeopje.png`
+  - `/Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/goyeopje.png`
 
 ### `incheon-2a.hwpx`
 
@@ -45,7 +45,7 @@ Screenshots: `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshot
   - `8쪽`: `제어 7 = 표 6 + 그림 1`, `textRuns 201`
   - `2쪽`: `제어 7 = 표 6 + 그림 1`, `textRuns 284`
 - 참고 스냅샷:
-  - `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/incheon-2a.png`
+  - `/Users/shinehandmac/Github/TotalDocs/output/playwright/qa-snapshots/incheon-2a.png`
 
 ## 2차 표적
 
@@ -87,4 +87,4 @@ Screenshots: `/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshot
 1. 같은 페이지 수가 나와도 PNG 스냅샷의 표 높이와 개체 위치가 다르면 불합격이다.
 2. 제어 수가 많고 `textRuns` 가 높거나 매우 낮은 페이지부터 본다.
 3. `textRuns = 0` 이면서 제어 수가 큰 페이지는 표/개체 위주 레이아웃 페이지일 가능성이 크므로 우선 본다.
-4. 수정 후에는 반드시 다시 `node /Users/shinehandmac/Github/ChromeHWP/scripts/verify_samples.mjs` 로 전체를 돌린다.
+4. 수정 후에는 반드시 다시 `node /Users/shinehandmac/Github/TotalDocs/scripts/verify_samples.mjs` 로 전체를 돌린다.

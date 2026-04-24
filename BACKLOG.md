@@ -85,7 +85,7 @@
 - 페이지: 용지 크기·여백 반영, 헤더/푸터 영역, 쪽번호
 
 ### 검증 기준선 (Hancom Oracle 기준)
-| 문서 | 형식 | Hancom 페이지 | ChromeHWP | 일치 |
+| 문서 | 형식 | Hancom 페이지 | TotalDocs | 일치 |
 |------|------|:---:|:---:|:---:|
 | goyeopje.hwp | HWP | 2 | 2 | ✓ |
 | goyeopje-full-2024.hwp | HWP | 11 | 11 | ✓ |
