@@ -82,6 +82,21 @@
   - Define the canonical layout model needed by both JS and future WASM layout.
   - Decide the owned `engine/` scaffold and build commands.
 
+## 2026-04-24 Parser Research Report
+- Report document:
+  - `docs/document-parser-research-report-2026-04-24.md`
+- Decision:
+  - HWP/HWPX remains the primary fidelity target.
+  - Multi-format parsing should be added through one canonical document model, not by wiring unrelated parsers straight into the renderer.
+  - TXT, Markdown, CSV/TSV, and HTML are the safest first non-HWP parser targets.
+  - DOCX, ODT, EPUB, XLSX, and PPTX are feasible through ZIP/XML package readers.
+  - PDF should use a PDF.js adapter first.
+  - Binary DOC is possible, but should start as CFB probing and text extraction, not full layout reproduction.
+- Next parser work:
+  - Preserve complete HWPX line segment and table pagination source fields.
+  - Add focused diagnostics for the page/table overlap class.
+  - Draft `CanonicalDocument` and `LayoutTree` schemas before adding many new formats.
+
 ## Playwright Session Rule
 - Always run `close-all` before verification.
 - Always use one fixed session name: `verify-current`.

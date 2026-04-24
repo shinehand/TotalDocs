@@ -221,6 +221,7 @@ python3 scripts/build_hancom_page_audit.py
 - [배포용 문서 분석](docs/hwp-spec-analysis/hwp-distributed-doc-revision1.2.md)
 - [통합 구현 기준서](docs/hwp-spec-analysis/implementation-requirements.md)
 - [형식 문서 교차표](docs/hwp-spec-analysis/spec-crosswalk.md)
+- [Document Parser Research Report](docs/document-parser-research-report-2026-04-24.md)
 
 ### QA / 레이아웃
 
