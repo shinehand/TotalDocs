@@ -477,25 +477,25 @@ Object.assign(HwpParser, {
 
   _hwpBorderTypeName(typeId) {
     switch (Number(typeId)) {
-      case 0: return 'SOLID';
-      case 1: return 'LONG_DASH';
-      case 2: return 'DOT';
-      case 3: return 'DASH_DOT';
-      case 4: return 'DASH_DOT_DOT';
-      case 5: return 'LONG_DASH';
-      case 6: return 'DOT';
-      case 7:
+      case 0: return 'NONE';
+      case 1: return 'SOLID';
+      case 2: return 'DASH';
+      case 3: return 'DOT';
+      case 4: return 'DASH_DOT';
+      case 5: return 'DASH_DOT_DOT';
+      case 6: return 'LONG_DASH';
+      case 7: return 'LARGE_DOT';
       case 8:
       case 9:
       case 10:
-        return 'DOUBLE';
       case 11:
-      case 12:
-      case 13:
-      case 14:
-      case 15:
-      case 16:
-        return 'SOLID';
+        return 'DOUBLE';
+      case 12: return 'SOLID';
+      case 13: return 'DOUBLE';
+      case 14: return 'INSET';
+      case 15: return 'OUTSET';
+      case 16: return 'GROOVE';
+      case 17: return 'RIDGE';
       default:
         return 'NONE';
     }
@@ -520,71 +520,101 @@ Object.assign(HwpParser, {
     return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
   },
 
+  _hwpFillColorRefToCss(value) {
+    const color = Number(value);
+    if (!Number.isFinite(color)) return '';
+    return HwpParser._hwpColorRefToCss(color);
+  },
+
   _parseHwpFillInfo(body, offset = 32) {
     if (!body || offset + 4 > body.length) {
-      return { fillColor: '', fillGradient: null };
+      return { fillColor: '', fillGradient: null, fillType: 0 };
     }
 
     const fillType = HwpParser._u32(body, offset);
     let pos = offset + 4;
     let fillColor = '';
     let fillGradient = null;
+    let patternColor = '';
+    let patternType = null;
 
     if ((fillType & 0x00000001) && pos + 12 <= body.length) {
-      fillColor = HwpParser._hwpColorRefToCss(HwpParser._u32(body, pos));
+      fillColor = HwpParser._hwpFillColorRefToCss(HwpParser._u32(body, pos));
+      patternColor = HwpParser._hwpFillColorRefToCss(HwpParser._u32(body, pos + 4));
+      patternType = HwpParser._u32(body, pos + 8) & 0xFF;
       pos += 12;
     }
 
-    if ((fillType & 0x00000004) && pos + 12 <= body.length) {
-      const angle = HwpParser._i16(body, pos + 2);
-      const colorCount = Math.max(0, HwpParser._u16(body, pos + 10));
-      pos += 12;
+    if ((fillType & 0x00000004) && pos + 21 <= body.length) {
+      const gradientType = body[pos] || 0;
+      const angle = HwpParser._u32(body, pos + 1);
+      const centerX = HwpParser._u32(body, pos + 5);
+      const centerY = HwpParser._u32(body, pos + 9);
+      const blur = HwpParser._u32(body, pos + 13);
+      const colorCount = Math.max(0, HwpParser._u32(body, pos + 17));
+      pos += 21;
 
-      if (colorCount > 2 && pos + (colorCount * 4) <= body.length) {
-        pos += colorCount * 4;
+      const positionBytes = colorCount > 2 ? colorCount * 4 : 0;
+      if (positionBytes && pos + positionBytes + (colorCount * 4) <= body.length) {
+        pos += positionBytes;
       }
-
       const colors = [];
       for (let i = 0; i < colorCount && pos + 4 <= body.length; i++, pos += 4) {
-        const color = HwpParser._hwpColorRefToCss(HwpParser._u32(body, pos));
+        const color = HwpParser._hwpFillColorRefToCss(HwpParser._u32(body, pos));
         if (color) colors.push(color);
       }
 
       if (colors.length >= 2) {
-        fillGradient = { type: 'LINEAR', angle, colors };
+        fillGradient = {
+          type: gradientType === 2 ? 'RADIAL' : 'LINEAR',
+          angle,
+          colors,
+          centerX,
+          centerY,
+          blur,
+        };
       } else if (!fillColor && colors[0]) {
         fillColor = colors[0];
       }
     }
 
-    return { fillColor, fillGradient };
+    if ((fillType & 0x00000002) && pos + 6 <= body.length) {
+      pos += 6;
+    }
+
+    return { fillColor, fillGradient, fillType, patternColor, patternType };
   },
 
   _parseHwpBorderFill(body) {
     if (!body || body.length < 32) return null;
 
-    const lineTypes = [body[2], body[3], body[4], body[5]];
-    const lineWidths = [body[6], body[7], body[8], body[9]];
-    const lineColors = [
-      HwpParser._u32(body, 10),
-      HwpParser._u32(body, 14),
-      HwpParser._u32(body, 18),
-      HwpParser._u32(body, 22),
-    ];
     const fill = HwpParser._parseHwpFillInfo(body, 32);
-    const toBorder = index => ({
-      type: HwpParser._hwpBorderTypeName(lineTypes[index]),
-      widthMm: HwpParser._hwpBorderWidthMm(lineWidths[index]),
-      color: HwpParser._hwpColorRefToCss(lineColors[index]),
-    });
+    const toBorder = index => {
+      const offset = 2 + (index * 6);
+      if (offset + 6 > body.length) {
+        return { type: 'NONE', widthMm: 0, color: '' };
+      }
+      const typeId = body[offset] & 0x1F;
+      const widthId = body[offset + 1] & 0x0F;
+      return {
+        type: HwpParser._hwpBorderTypeName(typeId),
+        widthMm: HwpParser._hwpBorderWidthMm(widthId),
+        color: HwpParser._hwpColorRefToCss(HwpParser._u32(body, offset + 2)),
+      };
+    };
 
     return {
+      borderFlags: HwpParser._u16(body, 0),
       left: toBorder(0),
       right: toBorder(1),
       top: toBorder(2),
       bottom: toBorder(3),
+      diagonal: toBorder(4),
       fillColor: fill.fillColor,
       fillGradient: fill.fillGradient,
+      fillType: fill.fillType,
+      patternColor: fill.patternColor,
+      patternType: fill.patternType,
     };
   },
 
@@ -877,14 +907,26 @@ Object.assign(HwpParser, {
     if (!body || body.length < 36) return segments;
 
     for (let offset = 0; offset + 36 <= body.length; offset += 36) {
+      const chpos = HwpParser._i32(body, offset);
+      const y = HwpParser._i32(body, offset + 4);
       const height = HwpParser._i32(body, offset + 8);
       const textHeight = HwpParser._i32(body, offset + 12);
+      const baseline = HwpParser._i32(body, offset + 16);
       const lineSpacing = HwpParser._i32(body, offset + 20);
+      const x = HwpParser._i32(body, offset + 24);
+      const width = HwpParser._i32(body, offset + 28);
+      const flags = HwpParser._u32(body, offset + 32);
       if (height <= 0 && textHeight <= 0) continue;
       segments.push({
+        chpos,
+        y,
         height,
         textHeight,
+        baseline,
         lineSpacing,
+        x,
+        width,
+        flags,
       });
     }
 
@@ -899,8 +941,19 @@ Object.assign(HwpParser, {
     }
   },
 
-  _summarizeHwpLineSegs(lineSegs = []) {
+  _summarizeHwpLineSegs(lineSegs = [], controls = []) {
+    const objectControlOffsets = new Set((controls || [])
+      .filter(control => (
+        control?.kind === 'extendedControl'
+        && ['table', 'drawing', 'equation'].includes(control.controlKind || '')
+      ))
+      .map(control => Math.max(0, Number(control.offset) || 0)));
+
     const saneSegs = lineSegs.filter(seg => {
+      // 표/그림이 문단 안에 자리잡은 줄은 자체 control block으로 렌더링한다.
+      // 이 줄의 height를 텍스트 line-height로 사용하면 한컴보다 문단이 크게 부풀어 페이지가 밀린다.
+      if (objectControlOffsets.has(Math.max(0, Number(seg?.chpos) || 0))) return false;
+
       const height = Math.max(Number(seg?.height) || 0, Number(seg?.textHeight) || 0);
       // Accept lines from tiny text (200 = ~2.7px) up to large headings (14400 = ~192px)
       return height >= 200 && height <= 14400;
@@ -960,12 +1013,15 @@ Object.assign(HwpParser, {
 
   _createHwpParagraphBlock(text, paraState = {}, docInfo = null) {
     const { style, paraStyle, baseCharStyle } = HwpParser._resolveHwpParagraphStyle(paraState, docInfo);
-    const lineMetrics = HwpParser._summarizeHwpLineSegs(paraState?.lineSegs || []);
     const tabDef = docInfo?.tabDefs?.[paraStyle?.tabDefId];
     const tabStops = (tabDef?.tabs || []).map(t => ({ position: t.position, kind: t.kind }));
     const controls = Array.isArray(paraState?.controls)
       ? paraState.controls.map(control => ({ ...control }))
       : [];
+    const lineSegs = Array.isArray(paraState?.lineSegs)
+      ? paraState.lineSegs.map(seg => ({ ...seg }))
+      : [];
+    const lineMetrics = HwpParser._summarizeHwpLineSegs(lineSegs, controls);
     return {
       type: 'paragraph',
       align: paraStyle?.align || 'left',
@@ -984,6 +1040,10 @@ Object.assign(HwpParser, {
       lineHeightPx: lineMetrics.lineHeightPx,
       layoutHeightPx: lineMetrics.layoutHeightPx,
       controls,
+      lineSegs,
+      rawLayout: {
+        lineSegs,
+      },
       hwp: {
         charCount: paraState?.charCount ?? 0,
         rawCharCount: paraState?.rawCharCount ?? 0,
@@ -1012,15 +1072,15 @@ Object.assign(HwpParser, {
     let documentProperties = null;
     let idMappings = null;
     const binDataRefs = {};
-    let faceNameId = 1;
+    let faceNameId = 0;
     let binDataRefId = 1;
     let borderFillId = 1;
-    let charShapeId = 1;
-    let tabDefId = 1;
-    let numberingId = 1;
-    let bulletId = 1;
-    let paraShapeId = 1;
-    let styleId = 1;
+    let charShapeId = 0;
+    let tabDefId = 0;
+    let numberingId = 0;
+    let bulletId = 0;
+    let paraShapeId = 0;
+    let styleId = 0;
     let pos = 0;
 
     while (pos < data.length) {
@@ -1130,14 +1190,14 @@ Object.assign(HwpParser, {
       bullets,
       paraShapes,
       styles,
-      faceNameCount: faceNameId - 1,
+      faceNameCount: faceNameId,
       borderFillCount: borderFillId - 1,
-      charShapeCount: charShapeId - 1,
-      tabDefCount: tabDefId - 1,
-      numberingCount: numberingId - 1,
-      bulletCount: bulletId - 1,
-      paraShapeCount: paraShapeId - 1,
-      styleCount: styleId - 1,
+      charShapeCount: charShapeId,
+      tabDefCount: tabDefId,
+      numberingCount: numberingId,
+      bulletCount: bulletId,
+      paraShapeCount: paraShapeId,
+      styleCount: styleId,
       binDataRefCount: binDataRefId - 1,
     };
   },
@@ -1708,45 +1768,88 @@ Object.assign(HwpParser, {
   _parseTableInfo(body) {
     if (!body || body.length < 18) return null;
 
-    // DWORD at offset 0: attribute flags
-    //   bits 0-4: numHeaderRow (0-31) — 머리 행 수 (반복 출력 행 수)
+    // HWPTAG_TABLE attr:
+    //   bits 0-1: split policy at page boundary
+    //   bit 2: repeat heading row
     const attrDword = HwpParser._u32(body, 0);
-    const numHeaderRows = attrDword & 0x1F; // bits 0-4
+    const splitPage = attrDword & 0x3;
+    const repeatHeader = Boolean(attrDword & 0x4);
 
     const rowCount = HwpParser._u16(body, 4);
     const colCount = HwpParser._u16(body, 6);
-    const cellSpacing = HwpParser._u16(body, 8);
-    // offsets 10-17: 표 전체 기본 셀 내부 여백 (HWPUNIT) — 셀이 자체 여백을 지정하지 않을 때 기준값
+    const cellSpacing = HwpParser._i16(body, 8);
+    // offsets 10-17: 표 전체 기본 셀 내부 여백 (HWPUNIT16) — 셀이 자체 여백을 지정하지 않을 때 기준값
     const defaultCellPadding = [
-      HwpParser._u16(body, 10), // left
-      HwpParser._u16(body, 12), // right
-      HwpParser._u16(body, 14), // top
-      HwpParser._u16(body, 16), // bottom
+      HwpParser._i16(body, 10), // left
+      HwpParser._i16(body, 12), // right
+      HwpParser._i16(body, 14), // top
+      HwpParser._i16(body, 16), // bottom
     ];
-    const rowHeights = [];
+    const rowCellCounts = [];
 
     let off = 18;
     for (let i = 0; i < rowCount && off + 2 <= body.length; i++, off += 2) {
-      rowHeights.push(HwpParser._u16(body, off));
+      rowCellCounts.push(HwpParser._u16(body, off));
+    }
+
+    const borderFillId = off + 2 <= body.length ? HwpParser._u16(body, off) : 0;
+    if (off + 2 <= body.length) off += 2;
+
+    let validZoneInfoSize = 0;
+    let validZoneCount = 0;
+    const validZones = [];
+    if (off + 2 <= body.length) {
+      const zoneField = HwpParser._u16(body, off);
+      off += 2;
+      const remainingZoneBytes = Math.max(0, body.length - off);
+      if (zoneField * 10 <= remainingZoneBytes) {
+        validZoneCount = zoneField;
+        validZoneInfoSize = zoneField * 10;
+      } else if (zoneField <= remainingZoneBytes && zoneField % 10 === 0) {
+        validZoneCount = zoneField / 10;
+        validZoneInfoSize = zoneField;
+      } else {
+        validZoneCount = Math.floor(remainingZoneBytes / 10);
+        validZoneInfoSize = validZoneCount * 10;
+      }
+
+      for (let i = 0; i < validZoneCount && off + 10 <= body.length; i++, off += 10) {
+        validZones.push({
+          startCol: HwpParser._u16(body, off),
+          startRow: HwpParser._u16(body, off + 2),
+          endCol: HwpParser._u16(body, off + 4),
+          endRow: HwpParser._u16(body, off + 6),
+          borderFillId: HwpParser._u16(body, off + 8),
+        });
+      }
     }
 
     return {
-      numHeaderRows,
+      attr: attrDword,
+      splitPage,
+      repeatHeader,
+      numHeaderRows: repeatHeader ? 1 : 0,
       rowCount,
       colCount,
       cellSpacing,
       defaultCellPadding,
-      rowHeights,
+      rowCellCounts,
+      borderFillId,
+      validZoneInfoSize,
+      validZoneCount,
+      validZones,
+      rawTailBytes: off < body.length ? Array.from(body.slice(off)) : [],
     };
   },
 
   _parseTableCell(body) {
     if (!body || body.length < 34) return null;
-    const listFlags = HwpParser._u32(body, 2);
+    const listFlags = HwpParser._u32(body, 4);
 
     return {
       paragraphCount: Math.max(0, HwpParser._u16(body, 0)),
-      listFlags,
+      unknown1: HwpParser._u16(body, 2),
+      listFlags: HwpParser._u32(body, 4),
       verticalAlign: HwpParser._hwpCellVerticalAlign(listFlags),
       col: HwpParser._u16(body, 8),
       row: HwpParser._u16(body, 10),
@@ -1755,12 +1858,13 @@ Object.assign(HwpParser, {
       width: HwpParser._u32(body, 16),
       height: HwpParser._u32(body, 20),
       padding: [
-        HwpParser._u16(body, 24),
-        HwpParser._u16(body, 26),
-        HwpParser._u16(body, 28),
-        HwpParser._u16(body, 30),
+        HwpParser._i16(body, 24),
+        HwpParser._i16(body, 26),
+        HwpParser._i16(body, 28),
+        HwpParser._i16(body, 30),
       ],
       borderFillId: HwpParser._u16(body, 32),
+      unknownWidth: body.length >= 38 ? HwpParser._i32(body, 34) : 0,
       paragraphs: [],
     };
   },
@@ -1884,7 +1988,11 @@ Object.assign(HwpParser, {
         : 0;
       return Math.max(1, explicitWeight, rowHeight || 1);
     }
-    return Math.max(1, rowHeight || 4);
+    const hwpRowHeight = Number(rowHeight) || 0;
+    if (hwpRowHeight > 0) {
+      return Math.max(1, Math.min(40, Math.round(hwpRowHeight / 1800) || 1));
+    }
+    return 1;
   },
 
   _isSafeTableBreak(tableBlock, rowIndex) {
@@ -2219,6 +2327,18 @@ Object.assign(HwpParser, {
       rows[cell.row].cells.push(cell);
     }
 
+    const rowHeights = Array.from({ length: rowCount }, () => 0);
+    for (const cell of sortedCells) {
+      const startRow = Math.max(0, Number(cell.row) || 0);
+      const span = Math.max(1, Number(cell.rowSpan) || 1);
+      const rawHeight = Math.max(0, Number(cell.height) || Number(cell.contentHeight) || 0);
+      if (!rawHeight) continue;
+      const perRowHeight = Math.max(1, Math.ceil(rawHeight / span));
+      for (let row = startRow; row < Math.min(rowCount, startRow + span); row++) {
+        rowHeights[row] = Math.max(rowHeights[row], perRowHeight);
+      }
+    }
+
     const estimatedParagraphs = cells.reduce(
       (sum, cell) => sum + Math.max(1, cell.paragraphs.length),
       0,
@@ -2233,12 +2353,25 @@ Object.assign(HwpParser, {
       columnWidths,
       cellSpacing: tableInfo?.cellSpacing || 0,
       defaultCellPadding: tableInfo?.defaultCellPadding || null,
-      rowHeights: tableInfo?.rowHeights || [],
+      rowHeights,
+      rowCellCounts: tableInfo?.rowCellCounts || [],
       numHeaderRows: Math.max(0, Number(tableInfo?.numHeaderRows) || 0),
-      pageBreak: tableInfo?.pageBreak || '',
-      rawLayout: tableInfo?.rawLayout || null,
+      pageBreak: tableInfo?.pageBreak || (tableInfo?.splitPage === 1 ? 'CELL' : (tableInfo?.splitPage === 2 ? 'SPLIT' : 'NONE')),
+      repeatHeader: Boolean(tableInfo?.repeatHeader),
+      borderFillId: tableInfo?.borderFillId || 0,
+      validZones: tableInfo?.validZones || [],
+      rawLayout: tableInfo?.rawLayout || {
+        attr: tableInfo?.attr || 0,
+        splitPage: tableInfo?.splitPage || 0,
+        repeatHeader: Boolean(tableInfo?.repeatHeader),
+        rowCellCounts: tableInfo?.rowCellCounts || [],
+        borderFillId: tableInfo?.borderFillId || 0,
+        validZoneInfoSize: tableInfo?.validZoneInfoSize || 0,
+        validZones: tableInfo?.validZones || [],
+        rawTailBytes: tableInfo?.rawTailBytes || [],
+      },
       estimatedParagraphs,
-      sourceFormat: tableInfo?.sourceFormat || '',
+      sourceFormat: tableInfo?.sourceFormat || 'hwp',
       texts: [HwpParser._run('')],
     };
   },

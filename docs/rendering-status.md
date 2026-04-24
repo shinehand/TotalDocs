@@ -43,10 +43,16 @@
   - `node --check js/hwp-renderer.js`
   - `node --check js/parser.worker.js`
   - `node scripts/verify_samples.mjs`
+  - `node scripts/check_fidelity_guard.mjs`
+  - `FIDELITY_REQUIRE_VISUAL_AUDIT=1 node scripts/check_fidelity_guard.mjs` before claiming Hancom visual-fidelity progress
 - Current smoke criteria:
   - each sample must load through `hwpUrl`
   - each sample must expose page/section status
   - each sample must be scrollable from first page to last page without runtime errors
+  - first rendered page geometry must match parser diagnostics (`HWPUNIT / 75px`) so page-size clamps cannot regress
+  - Hancom Viewer page-count oracle must match for known baseline documents
+  - strict visual guard must fail on stale Hancom page-audit artifacts, `mismatch`, `capture-error`, or `capture-review`
+  - `FIDELITY_VISUAL_MAX_AGE_HOURS` controls the maximum accepted Hancom page-audit age in strict mode; default is 24 hours
   - the generated report must be written to `output/playwright/verify-samples-report.json`
 
 ## 2026-04-22 Direction Reset
@@ -62,9 +68,8 @@
   - `node scripts/verify_samples.mjs` against the JS parser/DOM renderer path.
   - Focused visual review of `incheon-2a.hwpx` page 2 and pages 12-18.
 - Remaining work:
-  - Re-implement the `incheon-2a.hwpx` page 2 overlap fix in TotalDocs's own parser/renderer path if it still reproduces there.
-  - Improve HWPX layout fidelity for object anchoring, repeat headers, long split cells, and nested table continuation.
-  - Add screenshot/perceptual regression coverage for the page 2 split-cell overlap case.
+  - Improve HWP/HWPX layout fidelity for object anchoring, repeat headers, long split cells, and nested table continuation.
+  - Add automated screenshot/perceptual regression thresholds for the page 2 split-cell overlap class.
   - Keep parser-module split behavior under regression checks in both direct viewer loading and worker parsing paths.
 
 ## 2026-04-22 WASM Redesign Plan
@@ -110,14 +115,99 @@
 - Latest verification:
   - `node scripts/verify_samples.mjs` loads all five baseline documents through the JS parser/DOM renderer.
   - `incheon-2a.hwpx` first improved from 11 pages to 13 pages after raw row-height preservation.
-  - The first long-cell continuation pass now renders 20 pages versus Hancom Viewer's 18-page oracle.
-  - Remaining mismatch confirms the direction is right, but continuation windows and repeated-header height still need tighter calibration.
+  - The first long-cell continuation pass rendered 20 pages versus Hancom Viewer's 18-page oracle.
+  - HWPX page budget calibration now renders `incheon-2a.hwpx` as 18 pages, matching the Hancom Viewer oracle.
+  - Focused page 2 DOM overlap probe returned no overlap candidates and `output/playwright/qa-snapshots/incheon-2a-page2-after-budget.png` captures the verified page.
 - Remaining work:
-  - Compare `output/playwright/incheon-2a-layout-fixture.json` against the parsed TotalDocs continuation chunks and Hancom Viewer page captures.
-  - Tune continuation windows so `incheon-2a.hwpx` lands on the 18-page oracle without reintroducing page-2 overlap.
-  - Replace the remaining table split heuristic with rules that use preserved `pageBreak`, repeat header rows, raw row/cell heights, and long-cell continuation windows.
+  - Compare `output/playwright/incheon-2a-layout-fixture.json` against the parsed TotalDocs continuation chunks and Hancom Viewer page captures for pages 14-18.
+  - Keep refining table split rules using preserved `pageBreak`, repeat header rows, raw row/cell heights, and long-cell continuation windows.
   - Add a side-by-side diagnostic mode that compares JS layout, WASM layout, and Hancom Viewer screenshots.
   - Keep the WASM path disabled as a renderer replacement until it improves overlap cases without regressing normal document loading.
+
+## 2026-04-24 HWPX Page Budget Calibration
+- Completed:
+  - Changed HWPX parsing to use section page style through `_paginateSectionBlocks()` instead of the fixed 46-weight fallback.
+  - Added an HWPX-specific page budget conversion of `2250 HWPUNIT / weight`; HWP keeps the existing `1500 HWPUNIT / weight` conversion.
+  - Verified `incheon-2a.hwpx` moved from TotalDocs 20 pages to 18 pages, matching the Hancom Viewer 18-page oracle.
+  - Verified page 2 visually and with a DOM overlap probe: rendered pages `18`, status `2 / 18 쪽`, overlap candidates `0`.
+- Verification:
+  - `node --check js/hwp-parser.js`
+  - `node --check js/hwp-parser-hwp5-records.js`
+  - `node --check js/hwp-parser-hwpx.js`
+  - `node --check js/hwp-parser-hwp5-container.js`
+  - `node --check js/hwp-renderer.js`
+  - `node --check js/parser.worker.js`
+  - `cargo test --manifest-path engine/Cargo.toml`
+  - `node scripts/test_totaldocs_engine.mjs`
+  - `node scripts/dump_hwpx_layout_fixture.mjs`
+  - `node scripts/verify_samples.mjs`
+- Verification status:
+  - `node scripts/verify_samples.mjs` now exits successfully.
+  - All five baseline documents match the Hancom Viewer page-count oracle:
+    `goyeopje.hwp` 2 vs 2, `goyeopje-full-2024.hwp` 11 vs 11,
+    `gyeolseokgye.hwp` 1 vs 1, `attachment-sale-notice.hwp` 4 vs 4,
+    and `incheon-2a.hwpx` 18 vs 18.
+- Next priority:
+  - Keep page-count parity while improving visual fidelity, starting with
+    `attachment-sale-notice.hwp` page 1 header/table vertical placement and
+    `incheon-2a.hwpx` pages 14-18 long table continuation.
+
+## 2026-04-24 HWP Parser Recovery
+- Completed:
+  - Corrected HWP `DocInfo` indexing for zero-based `FACE_NAME`, `CHAR_SHAPE`, `PARA_SHAPE`, `TAB_DEF`, `NUMBERING`, `BULLET`, and `STYLE` references while keeping one-based `BinData` and `BorderFill` references.
+  - Corrected HWP `BorderFill` parsing to the official border structure: border flags, five 6-byte border records, and fill flags with color/gradation/image payload order.
+  - Corrected HWP table parsing for split policy, repeated header bit, signed cell padding, row cell counts, and valid zone count/size compatibility.
+  - Excluded inline table/drawing/equation line segments from text paragraph line-height summaries so embedded controls do not inflate paragraph height.
+  - Restored HWP page dimensions from the original page style instead of clamping wide pages to 860px.
+  - Rendered inline overlapping `gso` images in table cells as anchored images, reducing title/logo row height inflation.
+  - Added table-paragraph hanging-indent compensation so negative text indent no longer clips bullets or first characters.
+  - Skipped zero-layout, control-only HWP paragraphs during rendering so section/table placeholders do not push visible content downward.
+  - Removed generic table wrapper and inline image margins inside HWP pages, improving `attachment-sale-notice.hwp` page 1 header/title vertical placement without sample-specific coordinates.
+- Verified:
+  - `node --check js/hwp-parser.js`
+  - `node --check js/hwp-parser-hwp5-records.js`
+  - `node --check js/hwp-parser-hwpx.js`
+  - `node --check js/hwp-renderer.js`
+  - `node scripts/verify_samples.mjs`
+- Remaining:
+  - Header/title start position is closer, but first-page HWP table row heights and nested schedule table heights still need safer format-driven compression before pixel-level parity with Hancom Viewer.
+  - Need a reusable visual overlap detector for table cells, floating controls, and page header/body interactions.
+
+## 2026-04-25 HWP-First Priority Reset
+- Decision:
+  - HWP visual fidelity now takes priority over HWPX visual refinement.
+  - HWPX remains a regression guard, especially `incheon-2a.hwpx` page count and long-table stability, but HWP parser/layout work should lead the next implementation cycle.
+- Primary HWP target:
+  - `attachment-sale-notice.hwp`
+  - Current structural status: 4 TotalDocs pages vs 4 Hancom pages, first-page geometry matches diagnostics.
+  - Current visual status: not acceptable for fidelity claims; strict visual guard still blocks stale/mismatching audit evidence.
+- Immediate HWP work order:
+  - Regenerate fresh Hancom visual audit before claiming any visual improvement.
+  - Build raw-preserving HWP canonical/table diagnostics before adding more renderer heuristics.
+  - Fix HWP table geometry first: row heights, cell margins, repeated headers, split policy, nested table clipping, and rowspan distribution.
+  - Fix HWP paragraph/line/font drift after source table geometry is measurable.
+  - Move HWP object anchoring and final page assembly toward LayoutTree/absolute boxes instead of DOM flow.
+- New planning artifact:
+  - `docs/hwp-priority-workboard-2026-04-25.md`
+
+## 2026-04-25 HWP Source-Height Table Pass
+- Completed:
+  - Marked HWP table blocks with `sourceFormat: "hwp"` so HWP-only rendering rules no longer leak into HWPX tables.
+  - Added exact HWPUNIT-to-pixel helpers and row/cell source-height diagnostics to the renderer.
+  - Applied HWP source row heights to table rows instead of the older capped heuristic height path.
+  - Reduced HWP table paragraph/content minimum-height and inter-paragraph margin so CSS defaults do not inflate source-sized rows.
+  - Relaxed strict content clipping after webview review because the first notice title row was being clipped; current pass records source dimensions while preserving readable content.
+- Verified:
+  - `node --check js/hwp-parser-hwp5-records.js`
+  - `node --check js/hwp-renderer.js`
+  - `node scripts/dump_hwp_table_metrics.mjs output/playwright/served-inputs/attachment-sale-notice.hwp --compact`
+  - `node scripts/verify_samples.mjs`
+  - `node scripts/check_fidelity_guard.mjs`
+  - Webview smoke check for `attachment-sale-notice.hwp`: 4 rendered pages and 22 HWP-tagged tables.
+- Remaining:
+  - Strict visual audit still intentionally blocks fidelity claims until a fresh Hancom audit replaces stale/mismatching evidence.
+  - HWP header/footer slot layout, inline GSO anchoring, LineSeg baseline placement, nested table height distribution, and exact border-box cell fitting still need dedicated passes.
+  - The long-term fix remains a CanonicalDocument/LayoutTree assembly path; the current DOM renderer changes are guard-railed recovery steps, not the final layout engine.
 
 ## Playwright Session Rule
 - Always run `close-all` before verification.

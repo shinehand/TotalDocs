@@ -37,6 +37,25 @@ const STRICT_PAGE_EXPECTATIONS = process.env.STRICT_PAGE_EXPECTATIONS === '1';
 const CAPTURE_SCREENSHOTS = process.env.VERIFY_SCREENSHOTS !== '0';
 const SESSION_ARGS = [`-s=${SESSION_NAME}`];
 const SUPPORTED_DOCUMENT_EXTENSIONS = new Set(['.hwp', '.hwpx', '.owpml']);
+const GENERIC_FONT_FAMILY_NAMES = new Set([
+  'caption',
+  'cursive',
+  'fantasy',
+  'icon',
+  'math',
+  'menu',
+  'message-box',
+  'monospace',
+  'sans-serif',
+  'serif',
+  'small-caption',
+  'status-bar',
+  'system-ui',
+  'ui-monospace',
+  'ui-rounded',
+  'ui-sans-serif',
+  'ui-serif',
+]);
 
 function preferExistingPath(...candidates) {
   for (const candidate of candidates) {
@@ -370,8 +389,98 @@ function parsePageCount(pageInfo) {
   return match ? Number(match[2]) : 0;
 }
 
+function toRoundedNumber(value, digits = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  const factor = 10 ** digits;
+  return Math.round(number * factor) / factor;
+}
+
 function toFiniteCount(value) {
   return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function splitCssFontFamilyList(value = '') {
+  const families = [];
+  let current = '';
+  let quote = '';
+  const source = String(value || '');
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '\\' && index + 1 < source.length) {
+      current += char + source[index + 1];
+      index += 1;
+      continue;
+    }
+    if (quote) {
+      current += char;
+      if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === ',') {
+      families.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  if (current) families.push(current);
+  return families;
+}
+
+function normalizeCssFontFamilyName(value = '') {
+  return String(value || '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2')
+    .replace(/\\(['"\\])/g, '$1')
+    .trim();
+}
+
+function getRenderedFontFamilies(renderedFontDiagnostics = {}) {
+  const histogram = Array.isArray(renderedFontDiagnostics?.fontFamilyHistogram)
+    ? renderedFontDiagnostics.fontFamilyHistogram
+    : [];
+  const families = new Map();
+
+  for (const entry of histogram) {
+    const count = Number.isFinite(entry?.count) ? entry.count : 0;
+    for (const family of splitCssFontFamilyList(entry?.value || '')) {
+      const normalized = normalizeCssFontFamilyName(family);
+      if (!normalized || GENERIC_FONT_FAMILY_NAMES.has(normalized.toLowerCase())) continue;
+      families.set(normalized, (families.get(normalized) || 0) + count);
+    }
+  }
+
+  return [...families.entries()]
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'ko'))
+    .map(([family]) => family);
+}
+
+function formatHistogramEntries(entries = [], limit = 5) {
+  if (!Array.isArray(entries) || !entries.length) return '';
+  return entries
+    .slice(0, limit)
+    .map(entry => `${entry.value}(${entry.count})`)
+    .join(', ');
+}
+
+function buildRenderedFontDiagnosticLabel(diagnostics = null) {
+  if (!diagnostics) return '';
+  const fontFamilies = formatHistogramEntries(diagnostics.fontFamilyHistogram);
+  const fontSizes = formatHistogramEntries(diagnostics.fontSizeHistogram, 3);
+  const lineHeights = formatHistogramEntries(diagnostics.lineHeightHistogram, 3);
+  const parts = [];
+  if (fontFamilies) parts.push(`family ${fontFamilies}`);
+  if (fontSizes) parts.push(`size ${fontSizes}`);
+  if (lineHeights) parts.push(`line-height ${lineHeights}`);
+  return parts.join(' · ');
 }
 
 function getPageCounts(page = {}) {
@@ -507,6 +616,13 @@ function buildHotspotMarkdown(reports) {
     if (Array.isArray(report.fontsUsed) && report.fontsUsed.length) {
       lines.push(`- fonts: ${report.fontsUsed.join(', ')}`);
     }
+    if (report.fontsUsedSource) {
+      lines.push(`- fonts-source: ${report.fontsUsedSource}`);
+    }
+    const renderedFontDiagnosticLabel = buildRenderedFontDiagnosticLabel(report.renderedFontDiagnostics);
+    if (renderedFontDiagnosticLabel) {
+      lines.push(`- rendered-font-diagnostics: ${renderedFontDiagnosticLabel}`);
+    }
     if (Array.isArray(report.unresolvedFonts) && report.unresolvedFonts.length) {
       lines.push(`- unresolved-fonts: ${report.unresolvedFonts.join(', ')}`);
     }
@@ -576,6 +692,13 @@ function buildInventoryMarkdown(samples, reports, downloadsFiles) {
     if (Array.isArray(report.fontsUsed) && report.fontsUsed.length) {
       lines.push(`- fonts: ${report.fontsUsed.join(', ')}`);
     }
+    if (report.fontsUsedSource) {
+      lines.push(`- fonts-source: ${report.fontsUsedSource}`);
+    }
+    const renderedFontDiagnosticLabel = buildRenderedFontDiagnosticLabel(report.renderedFontDiagnostics);
+    if (renderedFontDiagnosticLabel) {
+      lines.push(`- rendered-font-diagnostics: ${renderedFontDiagnosticLabel}`);
+    }
     if (Array.isArray(report.unresolvedFonts) && report.unresolvedFonts.length) {
       lines.push(`- unresolved-fonts: ${report.unresolvedFonts.join(', ')}`);
     }
@@ -622,6 +745,7 @@ function baseSampleState() {
     hasRenderer: false,
     keywordHits: {},
     diagnostics: null,
+    renderedFontDiagnostics: null,
   };
 }
 
@@ -635,6 +759,10 @@ function readSampleState(keywords = []) {
       const statusSectionInfo = document.getElementById('statusSectionInfo')?.textContent?.trim() || '';
       const statusMode = document.getElementById('statusMode')?.textContent?.trim() || '';
       const statusMessage = document.getElementById('statusMessage')?.textContent?.trim() || '';
+      const pages = Array.from(document.querySelectorAll('.hwp-page'));
+      const firstPage = pages[0] || null;
+      const firstPageRect = firstPage?.getBoundingClientRect?.() || null;
+      const firstPageStyle = firstPage ? getComputedStyle(firstPage) : null;
       const documentText = document.getElementById('documentCanvas')?.innerText || '';
       const diagnostics = globalThis.__TotalDocsDiagnostics?.getCurrent?.()
         || renderer?.collectDocumentDiagnostics?.({ includePageInfo: true, includeSectionDetails: true, includeControlDetails: false })
@@ -646,6 +774,78 @@ function readSampleState(keywords = []) {
         const registered = fontModule?.REGISTERED_FONTS?.has?.(resolved) || false;
         return { raw: fontName, resolved, registered };
       });
+      const collectRenderedFontDiagnostics = () => {
+        const histogramLimit = 24;
+        const sampleLimit = 60;
+        const maxElements = 2400;
+        const maxStyledElements = 800;
+        const addHistogramValue = (histogram, value) => {
+          const normalized = String(value || '').replace(/\\s+/g, ' ').trim();
+          if (!normalized) return;
+          histogram[normalized] = (histogram[normalized] || 0) + 1;
+        };
+        const toHistogramEntries = histogram => Object.entries(histogram)
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'ko'))
+          .slice(0, histogramLimit);
+        const allElements = Array.from(document.querySelectorAll('.hwp-page, .hwp-page *'));
+        const candidates = allElements.slice(0, maxElements);
+        const fontFamilyHistogram = {};
+        const fontSizeHistogram = {};
+        const lineHeightHistogram = {};
+        const samples = [];
+        let textElementCount = 0;
+        let styledElementCount = 0;
+
+        for (const element of candidates) {
+          const directText = Array.from(element.childNodes || [])
+            .filter(node => node.nodeType === 3)
+            .map(node => node.textContent || '')
+            .join(' ')
+            .replace(/\\s+/g, ' ')
+            .trim();
+          if (!directText) continue;
+          textElementCount += 1;
+          if (styledElementCount >= maxStyledElements) continue;
+
+          const style = getComputedStyle(element);
+          const fontFamily = style.fontFamily || '';
+          const fontSize = style.fontSize || '';
+          const lineHeight = style.lineHeight || '';
+          if (!fontFamily && !fontSize && !lineHeight) continue;
+
+          styledElementCount += 1;
+          addHistogramValue(fontFamilyHistogram, fontFamily);
+          addHistogramValue(fontSizeHistogram, fontSize);
+          addHistogramValue(lineHeightHistogram, lineHeight);
+
+          if (samples.length < sampleLimit) {
+            const className = typeof element.className === 'string'
+              ? element.className
+              : element.getAttribute('class') || '';
+            samples.push({
+              tagName: element.tagName.toLowerCase(),
+              className: String(className).replace(/\\s+/g, ' ').trim(),
+              text: directText.slice(0, 120),
+              fontFamily,
+              fontSize,
+              lineHeight,
+            });
+          }
+        }
+
+        return {
+          inspectedElementCount: candidates.length,
+          totalElementCount: allElements.length,
+          textElementCount,
+          styledElementCount,
+          truncated: allElements.length > candidates.length || textElementCount > styledElementCount,
+          fontFamilyHistogram: toHistogramEntries(fontFamilyHistogram),
+          fontSizeHistogram: toHistogramEntries(fontSizeHistogram),
+          lineHeightHistogram: toHistogramEntries(lineHeightHistogram),
+          samples,
+        };
+      };
       const diagnosticsSummary = diagnostics ? {
         pageCount: Number.isFinite(diagnostics.pageCount) ? diagnostics.pageCount : 0,
         sectionCount: Number.isFinite(diagnostics.sectionCount) ? diagnostics.sectionCount : 0,
@@ -700,9 +900,25 @@ function readSampleState(keywords = []) {
         canvasCount: document.querySelectorAll('.hwp-page canvas').length,
         pageElementCount,
         thumbnailCount: document.querySelectorAll('.page-thumb, .thumbnail-item, .thumb-item').length,
+        renderedPageMetrics: {
+          pageCount: pageElementCount,
+          firstPage: firstPage ? {
+            sourceFormat: firstPage.dataset?.sourceFormat || '',
+            rectWidth: Number(firstPageRect?.width) || 0,
+            rectHeight: Number(firstPageRect?.height) || 0,
+            computedWidth: firstPageStyle?.width || '',
+            computedHeight: firstPageStyle?.height || '',
+            paddingTop: firstPageStyle?.paddingTop || '',
+            paddingRight: firstPageStyle?.paddingRight || '',
+            paddingBottom: firstPageStyle?.paddingBottom || '',
+            paddingLeft: firstPageStyle?.paddingLeft || '',
+            inlineStyle: firstPage.getAttribute('style') || '',
+          } : null,
+        },
         hasRenderer: Boolean(renderer) || pageElementCount > 0,
         keywordHits,
         diagnostics: diagnosticsSummary,
+        renderedFontDiagnostics: collectRenderedFontDiagnostics(),
       };
     })())`,
   );
@@ -784,11 +1000,52 @@ async function verifySample(sample, hancomOracleBaseline) {
     ? diagnostics.pages.reduce((sum, page) => sum + (Number.isFinite(page.controlCount) ? page.controlCount : 0), 0)
     : null;
   const diagnosticControlCount = Number.isFinite(diagnosticCounts?.controls) ? diagnosticCounts.controls : null;
+  const renderedPageMetrics = state.renderedPageMetrics || null;
+  const firstDiagnosticPage = Array.isArray(diagnostics?.pages) ? diagnostics.pages[0] : null;
+  const expectedRenderedFirstPage = firstDiagnosticPage && Number(firstDiagnosticPage.width) > 0 && Number(firstDiagnosticPage.height) > 0
+    ? {
+      width: Math.round(Number(firstDiagnosticPage.width) / 75),
+      height: Math.round(Number(firstDiagnosticPage.height) / 75),
+      sourceWidth: Number(firstDiagnosticPage.width),
+      sourceHeight: Number(firstDiagnosticPage.height),
+      unit: 'HWPUNIT',
+      scale: '1/75px',
+    }
+    : null;
+  const actualRenderedFirstPage = renderedPageMetrics?.firstPage
+    ? {
+      sourceFormat: renderedPageMetrics.firstPage.sourceFormat,
+      width: toRoundedNumber(renderedPageMetrics.firstPage.rectWidth),
+      height: toRoundedNumber(renderedPageMetrics.firstPage.rectHeight),
+      computedWidth: renderedPageMetrics.firstPage.computedWidth,
+      computedHeight: renderedPageMetrics.firstPage.computedHeight,
+      paddingTop: renderedPageMetrics.firstPage.paddingTop,
+      paddingRight: renderedPageMetrics.firstPage.paddingRight,
+      paddingBottom: renderedPageMetrics.firstPage.paddingBottom,
+      paddingLeft: renderedPageMetrics.firstPage.paddingLeft,
+      inlineStyle: renderedPageMetrics.firstPage.inlineStyle,
+    }
+    : null;
+  const renderedGeometry = {
+    pageCount: renderedPageMetrics?.pageCount ?? null,
+    expectedFirstPage: expectedRenderedFirstPage,
+    actualFirstPage: actualRenderedFirstPage,
+  };
+  const renderedGeometryMatch = expectedRenderedFirstPage && actualRenderedFirstPage
+    ? Math.abs(actualRenderedFirstPage.width - expectedRenderedFirstPage.width) <= 2
+      && Math.abs(actualRenderedFirstPage.height - expectedRenderedFirstPage.height) <= 2
+    : null;
   const hotspots = buildReportHotspots(diagnostics);
   const layoutSignalLabels = buildSignalLabels(diagnostics?.layoutSignals || {});
-  const fontsUsed = Array.isArray(diagnostics?.documentInfo?.fontsUsed)
+  const diagnosticFontsUsed = Array.isArray(diagnostics?.documentInfo?.fontsUsed)
     ? diagnostics.documentInfo.fontsUsed.slice().sort((a, b) => String(a).localeCompare(String(b), 'ko'))
     : [];
+  const renderedFontDiagnostics = state.renderedFontDiagnostics || null;
+  const renderedFontsUsed = getRenderedFontFamilies(renderedFontDiagnostics);
+  const fontsUsed = diagnosticFontsUsed.length ? diagnosticFontsUsed : renderedFontsUsed;
+  const fontsUsedSource = diagnosticFontsUsed.length
+    ? 'document-diagnostics'
+    : (renderedFontsUsed.length ? 'rendered-dom' : 'none');
   const resolvedFonts = Array.isArray(diagnostics?.fontCoverage?.resolvedFonts)
     ? diagnostics.fontCoverage.resolvedFonts
     : [];
@@ -831,8 +1088,14 @@ async function verifySample(sample, hancomOracleBaseline) {
     diagnosticPageMatch,
     diagnosticControlCount,
     diagnosticControlCountSum,
+    renderedGeometry,
+    renderedGeometryMatch,
     documentInfo: diagnostics?.documentInfo || null,
+    diagnosticFontsUsed,
+    renderedFontsUsed,
+    renderedFontDiagnostics,
     fontsUsed,
+    fontsUsedSource,
     resolvedFonts,
     unresolvedFonts,
     hancomExpectedPages,
@@ -871,6 +1134,11 @@ async function verifySample(sample, hancomOracleBaseline) {
     }
     if (diagnosticControlCount != null && diagnosticControlCountSum != null && diagnosticControlCount !== diagnosticControlCountSum) {
       issues.push(`진단 제어 수 합계 불일치: 총 ${diagnosticControlCount}, 페이지 합 ${diagnosticControlCountSum}`);
+    }
+    if (renderedGeometryMatch === false) {
+      issues.push(
+        `렌더 용지 치수 불일치: 진단 ${expectedRenderedFirstPage.width}x${expectedRenderedFirstPage.height}px, DOM ${actualRenderedFirstPage.width}x${actualRenderedFirstPage.height}px`,
+      );
     }
   }
   if (unresolvedFonts.length) {
@@ -940,6 +1208,13 @@ async function main() {
         }
         if (Array.isArray(report.fontsUsed) && report.fontsUsed.length) {
           console.log(`  - fonts: ${report.fontsUsed.join(', ')}`);
+        }
+        if (report.fontsUsedSource) {
+          console.log(`  - fonts-source: ${report.fontsUsedSource}`);
+        }
+        const renderedFontDiagnosticLabel = buildRenderedFontDiagnosticLabel(report.renderedFontDiagnostics);
+        if (renderedFontDiagnosticLabel) {
+          console.log(`  - rendered-font-diagnostics: ${renderedFontDiagnosticLabel}`);
         }
         if (Array.isArray(report.unresolvedFonts) && report.unresolvedFonts.length) {
           console.log(`  - unresolved-fonts: ${report.unresolvedFonts.join(', ')}`);

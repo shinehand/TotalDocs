@@ -154,6 +154,19 @@ function calculateListMarkerWidth(markerLength) {
   );
 }
 
+function shouldSkipZeroLayoutParagraph(para) {
+  if (!para || para.type !== 'paragraph') return false;
+  const hasZeroLayoutMetric = Number.isFinite(Number(para.layoutHeightPx))
+    && Number(para.layoutHeightPx) <= 0
+    && (!Number.isFinite(Number(para.lineHeightPx)) || Number(para.lineHeightPx) <= 0);
+  if (!hasZeroLayoutMetric) return false;
+  if (para.listInfo) return false;
+  return !(para.texts || []).some(run => (
+    run?.type === 'image'
+    || String(run?.text || '').trim() !== ''
+  ));
+}
+
 function appendParagraphBlock(parent, para, className = '', options = {}) {
   const {
     alignOverride = '',
@@ -161,7 +174,10 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     rowRole = '',
     cellRole = '',
     listStateRef = null,
+    suppressSpacingAfter = false,
   } = options;
+  if (shouldSkipZeroLayoutParagraph(para)) return;
+
   const effectiveRole = role || para?.role || '';
   const p = document.createElement('p');
   p.className = className;
@@ -193,12 +209,17 @@ function appendParagraphBlock(parent, para, className = '', options = {}) {
     p.style.paddingRight = `${hwpUnitToPx(para.marginRight, 0, 310, 1 / 75, 0)}px`;
   }
   if (Number.isFinite(para.textIndent) && !['center', 'right'].includes(p.style.textAlign)) {
-    p.style.textIndent = `${hwpSignedUnitToPx(para.textIndent, -170, 226, 1 / 75, 0)}px`;
+    const textIndentPx = hwpSignedUnitToPx(para.textIndent, -170, 226, 1 / 75, 0);
+    p.style.textIndent = `${textIndentPx}px`;
+    if (textIndentPx < 0 && String(className || '').includes('hwp-table-paragraph')) {
+      const currentPaddingLeft = Number.parseFloat(p.style.paddingLeft || '0') || 0;
+      p.style.paddingLeft = `${currentPaddingLeft + Math.abs(textIndentPx)}px`;
+    }
   }
   if (Number.isFinite(para.spacingBefore) && para.spacingBefore > 0) {
     p.style.marginTop = `${hwpUnitToPx(para.spacingBefore, 0, 120, 1 / 75, 0)}px`;
   }
-  if (Number.isFinite(para.spacingAfter) && para.spacingAfter > 0) {
+  if (!suppressSpacingAfter && Number.isFinite(para.spacingAfter) && para.spacingAfter > 0) {
     p.style.marginBottom = `${hwpUnitToPx(para.spacingAfter, 0, 120, 1 / 75, 4)}px`;
   }
   // When HWP line-segment heights are available they reflect actual HWP rendering and
@@ -327,6 +348,36 @@ function appendImageBlock(parent, block, className = '') {
   wrap.appendChild(img);
   parent.appendChild(wrap);
   registerPlacedBlock(wrap, img, block);
+}
+
+function appendAnchoredInlineImage(parent, block) {
+  const wrap = document.createElement('div');
+  wrap.className = 'hwp-image-block hwp-image-inline hwp-image-anchored';
+  wrap.dataset.align = block.horzAlign || block.align || 'left';
+  wrap.dataset.inline = 'true';
+
+  const img = document.createElement('img');
+  img.className = 'hwp-image';
+  img.src = block.src;
+  img.alt = block.alt || 'image';
+
+  const widthPx = objectUnitToPx(block, block.width, 12, 360, 0);
+  const heightPx = objectUnitToPx(block, block.height, 12, 240, 0);
+  if (widthPx) img.style.width = `${widthPx}px`;
+  if (heightPx) img.style.maxHeight = `${heightPx}px`;
+
+  const leftPx = objectSignedUnitToPx(block, block.offsetX, -120, 520, 1 / 75, 0);
+  const topPx = objectSignedUnitToPx(block, block.offsetY, -80, 220, 1 / 75, 0);
+  wrap.style.left = `${Math.max(0, leftPx)}px`;
+  if (topPx) {
+    wrap.style.top = `${Math.max(0, topPx)}px`;
+  } else {
+    wrap.style.top = '50%';
+    wrap.style.transform = 'translateY(-50%)';
+  }
+
+  wrap.appendChild(img);
+  parent.appendChild(wrap);
 }
 
 function appendObjectTextBlock(parent, block, kind = 'equation', className = '') {
@@ -558,6 +609,12 @@ function hwpUnitToPx(value, minPx, maxPx, scale, fallbackPx = 0) {
   return Math.max(minPx, Math.min(maxPx, px));
 }
 
+function hwpUnitToExactPx(value, scale = 1 / 75, fallbackPx = 0) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return fallbackPx;
+  return Math.max(1, Math.round(num * scale));
+}
+
 function hwpSignedUnitToPx(value, minPx, maxPx, scale, fallbackPx = 0) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallbackPx;
@@ -651,6 +708,25 @@ function resolveParagraphLineHeight(para) {
   }
 
   return `${Math.max(1, Math.min(4, spacing / 100))}`;
+}
+
+function tableRowSourceHeightPx(tableBlock, rowIndex, scale = 1 / 75) {
+  if (!tableBlock || !Number.isFinite(Number(rowIndex))) return 0;
+  const rowHeight = Number(tableBlock.rowHeights?.[rowIndex]) || 0;
+  return hwpUnitToExactPx(rowHeight, scale, 0);
+}
+
+function tableCellSourceHeightPx(tableBlock, cell, fallbackPx = 0, scale = 1 / 75) {
+  const explicitCellHeight = hwpUnitToExactPx(cell?.height, scale, 0);
+  if (explicitCellHeight > 0) return explicitCellHeight;
+
+  const startRow = Math.max(0, Number(cell?.row) || 0);
+  const rowSpan = Math.max(1, Number(cell?.rowSpan) || 1);
+  let total = 0;
+  for (let row = startRow; row < startRow + rowSpan; row += 1) {
+    total += tableRowSourceHeightPx(tableBlock, row, scale);
+  }
+  return total > 0 ? total : fallbackPx;
 }
 
 function applyImageOffsetStyles(el, imageLike, inline = false) {
@@ -1020,22 +1096,24 @@ function applyPageStyle(pageEl, page, pageIndex) {
     const HWP_SCALE = 1 / 75;
     pageEl.dataset.sourceFormat = 'hwp';
     if (pageStyle.width > 0) {
-      pageEl.style.width = `${Math.max(680, Math.min(860, Math.round(pageStyle.width * HWP_SCALE)))}px`;
+      pageEl.style.width = `${Math.max(1, Math.round(pageStyle.width * HWP_SCALE))}px`;
     }
     if (pageStyle.height > 0) {
-      pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWP_SCALE)))}px`;
+      const heightPx = Math.max(1, Math.round(pageStyle.height * HWP_SCALE));
+      pageEl.style.height = `${heightPx}px`;
+      pageEl.style.minHeight = `${heightPx}px`;
     }
     if (margins.top > 0) {
-      pageEl.style.paddingTop = `${Math.max(22, Math.min(140, Math.round(margins.top * HWP_SCALE)))}px`;
+      pageEl.style.paddingTop = `${Math.max(0, Math.round(margins.top * HWP_SCALE))}px`;
     }
     if (margins.right > 0) {
-      pageEl.style.paddingRight = `${Math.max(22, Math.min(140, Math.round(margins.right * HWP_SCALE)))}px`;
+      pageEl.style.paddingRight = `${Math.max(0, Math.round(margins.right * HWP_SCALE))}px`;
     }
     if (margins.bottom > 0) {
-      pageEl.style.paddingBottom = `${Math.max(22, Math.min(140, Math.round(margins.bottom * HWP_SCALE)))}px`;
+      pageEl.style.paddingBottom = `${Math.max(0, Math.round(margins.bottom * HWP_SCALE))}px`;
     }
     if (margins.left > 0) {
-      pageEl.style.paddingLeft = `${Math.max(22, Math.min(140, Math.round(margins.left * HWP_SCALE)))}px`;
+      pageEl.style.paddingLeft = `${Math.max(0, Math.round(margins.left * HWP_SCALE))}px`;
     }
     return;
   }
@@ -1050,26 +1128,28 @@ function applyPageStyle(pageEl, page, pageIndex) {
   const HWPX_SCALE = 1 / 75;
   pageEl.dataset.sourceFormat = 'hwpx';
   if (pageStyle.width > 0) {
-    pageEl.style.width = `${Math.max(680, Math.min(860, Math.round(pageStyle.width * HWPX_SCALE)))}px`;
+    pageEl.style.width = `${Math.max(1, Math.round(pageStyle.width * HWPX_SCALE))}px`;
   }
   if (pageStyle.height > 0) {
-    pageEl.style.minHeight = `${Math.max(980, Math.min(1300, Math.round(pageStyle.height * HWPX_SCALE)))}px`;
+    const heightPx = Math.max(1, Math.round(pageStyle.height * HWPX_SCALE));
+    pageEl.style.height = `${heightPx}px`;
+    pageEl.style.minHeight = `${heightPx}px`;
   }
   const topVal = (margins.top || 0) + (borderOffset.top || 0);
   if (topVal > 0) {
-    pageEl.style.paddingTop = `${Math.max(22, Math.min(120, Math.round(topVal * HWPX_SCALE)))}px`;
+    pageEl.style.paddingTop = `${Math.max(0, Math.round(topVal * HWPX_SCALE))}px`;
   }
   const rightVal = (margins.right || 0) + (borderOffset.right || 0);
   if (rightVal > 0) {
-    pageEl.style.paddingRight = `${Math.max(22, Math.min(120, Math.round(rightVal * HWPX_SCALE)))}px`;
+    pageEl.style.paddingRight = `${Math.max(0, Math.round(rightVal * HWPX_SCALE))}px`;
   }
   const bottomVal = (margins.bottom || 0) + (borderOffset.bottom || 0);
   if (bottomVal > 0) {
-    pageEl.style.paddingBottom = `${Math.max(22, Math.min(120, Math.round(bottomVal * HWPX_SCALE)))}px`;
+    pageEl.style.paddingBottom = `${Math.max(0, Math.round(bottomVal * HWPX_SCALE))}px`;
   }
   const leftVal = (margins.left || 0) + (borderOffset.left || 0);
   if (leftVal > 0) {
-    pageEl.style.paddingLeft = `${Math.max(22, Math.min(120, Math.round(leftVal * HWPX_SCALE)))}px`;
+    pageEl.style.paddingLeft = `${Math.max(0, Math.round(leftVal * HWPX_SCALE))}px`;
   }
 
   const borderStyle = pageBorder?.borderStyle;
@@ -1105,10 +1185,19 @@ function hwpxBorderTypeToCss(type) {
     case 'DASH_DOT_DOT':
       return 'dashed';
     case 'DOT':
+    case 'LARGE_DOT':
       return 'dotted';
     case 'DOUBLE':
     case 'DOUBLE_SLIM':
       return 'double';
+    case 'INSET':
+      return 'inset';
+    case 'OUTSET':
+      return 'outset';
+    case 'GROOVE':
+      return 'groove';
+    case 'RIDGE':
+      return 'ridge';
     default:
       return 'none';
   }
@@ -1441,6 +1530,7 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
   if (tableBlock.sourceFormat) table.dataset.sourceFormat = tableBlock.sourceFormat;
   if (usePrimaryFormLayout) table.dataset.layout = 'first-page-primary';
   const isHwpxTable = tableBlock.sourceFormat === 'hwpx';
+  const isHwpTable = tableBlock.sourceFormat === 'hwp';
   // HWP·HWPX 모두 HWPUNIT (1/7200 inch) 기준 단위 사용 확인됨 (실제 HWPX XML 분석 기준)
   // 96 DPI 환산 스케일 = 1/75 (1 HWPUNIT = 96/7200 ≈ 1/75 px)
   const TABLE_UNIT_SCALE = 1 / 75;
@@ -1526,8 +1616,14 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
     }
 
     const rowHeight = tableBlock.rowHeights?.[row.index];
-    const maxCellHeight = cells.reduce((max, cell) => Math.max(max, Number(cell.height) || 0), 0);
-    const maxContentHeight = cells.reduce((max, cell) => Math.max(max, Number(cell.contentHeight) || 0), 0);
+    const maxCellHeight = cells.reduce((max, cell) => {
+      const span = Math.max(1, Number(cell.rowSpan) || 1);
+      return Math.max(max, (Number(cell.height) || 0) / span);
+    }, 0);
+    const maxContentHeight = cells.reduce((max, cell) => {
+      const span = Math.max(1, Number(cell.rowSpan) || 1);
+      return Math.max(max, (Number(cell.contentHeight) || 0) / span);
+    }, 0);
     const maxParagraphLines = cells.reduce((max, cell) => Math.max(max, cell.paragraphs?.length || 1), 1);
     const explicitHwpxRowHeight = isHwpxTable
       ? Number(tableBlock.hwpxRowHeights?.[row.index]) || 0
@@ -1536,29 +1632,41 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       ? (explicitHwpxRowHeight > 0
         ? Math.max(0, Math.min(280, Math.round(explicitHwpxRowHeight * TABLE_UNIT_SCALE)))
         : hwpUnitToPx(rowHeight, 24, 280, 12, 0))
-      : Math.max(0, Math.min(320, Math.round((Number(rowHeight) || 0) * TABLE_UNIT_SCALE)));
+      : (isHwpTable
+        ? tableRowSourceHeightPx(tableBlock, row.index, TABLE_UNIT_SCALE)
+        : Math.max(0, Math.min(320, Math.round((Number(rowHeight) || 0) * TABLE_UNIT_SCALE))));
     const cellHeightPx = isHwpxTable
       ? Math.max(0, Math.min(200, Math.round(maxCellHeight * TABLE_UNIT_SCALE)))
-      : Math.max(0, Math.min(300, Math.round(maxCellHeight * TABLE_UNIT_SCALE)));
+      : (isHwpTable
+        ? hwpUnitToExactPx(maxCellHeight, TABLE_UNIT_SCALE, 0)
+        : Math.max(0, Math.min(300, Math.round(maxCellHeight * TABLE_UNIT_SCALE))));
     const contentHeightPx = isHwpxTable
       ? Math.max(0, Math.min(200, Math.round(maxContentHeight * TABLE_UNIT_SCALE)))
-      : 0;
+      : (isHwpTable ? hwpUnitToExactPx(maxContentHeight, TABLE_UNIT_SCALE, 0) : 0);
     // 명시적으로 얇은 구분선 행은 30px 강제 최솟값을 적용하지 않는다.
     // 예: 한컴 HWPX 구분선 행 height=482 HWPUNIT = 6.4px
     const isThinSeparatorRow = (rowHeightPx > 0 && rowHeightPx < THIN_ROW_THRESHOLD_PX)
       || (cellHeightPx > 0 && cellHeightPx < THIN_ROW_THRESHOLD_PX && !contentHeightPx);
-    let minRowHeight = isThinSeparatorRow
+    const defaultRowMinHeight = isHwpxTable ? 30 : 18;
+    const hasExactHwpRowHeight = isHwpTable && rowHeightPx > 0;
+    let minRowHeight = hasExactHwpRowHeight
+      ? rowHeightPx
+      : (isThinSeparatorRow
       ? Math.max(4, rowHeightPx, cellHeightPx)
-      : Math.max(30, rowHeightPx, cellHeightPx, contentHeightPx);
-    if (rowLooksLikeTitle) {
+      : Math.max(defaultRowMinHeight, rowHeightPx, cellHeightPx, contentHeightPx));
+    if (!hasExactHwpRowHeight && rowLooksLikeTitle) {
       const titleBase = rowLooksLikeOptions ? 108 : 94;
       const lineBonus = Math.max(0, maxParagraphLines - 1) * 14;
       const firstTableBonus = isFirstTableOnFirstPage ? 8 : 0;
       minRowHeight = Math.max(minRowHeight, Math.min(180, titleBase + lineBonus + firstTableBonus));
-    } else if (rowLooksLikeMeta) {
+    } else if (!hasExactHwpRowHeight && rowLooksLikeMeta) {
       minRowHeight = Math.max(minRowHeight, 36);
-    } else if (rowLooksLikePersonForm) {
+    } else if (!hasExactHwpRowHeight && rowLooksLikePersonForm) {
       minRowHeight = Math.max(minRowHeight, 42);
+    }
+    if (hasExactHwpRowHeight) {
+      tr.dataset.sourceHeightHwpunit = String(Number(rowHeight) || 0);
+      tr.dataset.heightMode = 'source-border-box';
     }
     tr.style.minHeight = `${minRowHeight}px`;
     tr.style.height = `${minRowHeight}px`;
@@ -1677,13 +1785,22 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
       content.className = 'hwp-table-cell-content';
       content.dataset.role = td.dataset.role || 'body';
       content.dataset.rowRole = tr.dataset.rowRole || 'body';
+      if (hasExactHwpRowHeight) {
+        const exactCellHeight = tableCellSourceHeightPx(tableBlock, cell, minRowHeight, TABLE_UNIT_SCALE);
+        td.dataset.sourceHeightHwpunit = String(Number(cell.height) || Number(rowHeight) || 0);
+        td.dataset.sourceHeightPx = String(exactCellHeight);
+        td.style.boxSizing = 'border-box';
+        td.style.height = `${exactCellHeight}px`;
+        content.style.boxSizing = 'border-box';
+        content.dataset.sourceContentHeightPx = String(Math.max(0, exactCellHeight - topPx - bottomPx));
+      }
       const shouldCenterContent = rowLooksLikeTitle || rowLooksLikeCompactHeader || isGroupedLabelCell;
       if (shouldCenterContent) {
         const innerHeight = Math.max(
           rowLooksLikeTitle ? TITLE_CELL_MIN_CONTENT_HEIGHT_PX : COMPACT_CELL_MIN_CONTENT_HEIGHT_PX,
           minRowHeight - topPx - bottomPx,
         );
-        content.style.minHeight = `${innerHeight}px`;
+        content.style.minHeight = `${hasExactHwpRowHeight ? Math.max(0, minRowHeight - topPx - bottomPx) : innerHeight}px`;
         content.style.display = 'flex';
         content.style.flexDirection = 'column';
         content.style.justifyContent = 'center';
@@ -1744,6 +1861,15 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
         }
 
         if (paragraphToRender?.type === 'image') {
+          const shouldAnchorInlineImage = paragraphToRender.inline
+            && paragraphToRender.allowOverlap
+            && paragraphs.length > 1
+            && Number(paragraphToRender.width) > 0
+            && Number(paragraphToRender.height) > 0;
+          if (shouldAnchorInlineImage) {
+            appendAnchoredInlineImage(content, paragraphToRender);
+            return;
+          }
           appendImageBlock(content, paragraphToRender, 'hwp-image-inline');
           return;
         }
@@ -1785,6 +1911,7 @@ function appendTableBlock(parent, tableBlock, tableContext = {}) {
           rowRole: tr.dataset.rowRole || '',
           cellRole: td.dataset.role || '',
           listStateRef,
+          suppressSpacingAfter: !isHwpxTable,
         });
       });
 

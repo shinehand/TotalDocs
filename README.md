@@ -27,7 +27,8 @@
 
 아직 남은 큰 과제는 `페이지 내부 레이아웃 충실도`이옵니다.
 
-- 한컴 Viewer 기준 페이지 수는 현재 다운로드 대표 5종 모두 일치하옵니다.
+최신 다운로드 샘플 검증 기준, 기준 문서 5개는 모두 한컴 Viewer 기준 페이지 수와 일치하옵니다.
+
 - `goyeopje.hwp`: 한컴 `2쪽`, TotalDocs `2쪽`
 - `goyeopje-full-2024.hwp`: 한컴 `11쪽`, TotalDocs `11쪽`
 - `gyeolseokgye.hwp`: 한컴 `1쪽`, TotalDocs `1쪽`
@@ -50,11 +51,15 @@
 - 표 셀 안 비인라인 그림의 `horzRelTo="COLUMN"` 앵커는 셀 패딩이 아닌 셀 경계 기준으로 보정했사옵니다.
 - `incheon-2a.hwpx` 제목 LH 로고는 `x=164.2px` 오배치에서 `x=114.2px`로 이동하여 한컴 Viewer 위치에 더 가까워졌사옵니다.
 - HWPX 문단의 제어개체 오프셋은 스트림 순서대로 8 UTF-16 단위로 누적하여, 로고 뒤 제목처럼 `charPrIDRef` 경계가 한 글자 밀리는 문제를 바로잡았사옵니다.
+- HWP DocInfo 참조를 0-base로 정리하여 `CHAR_SHAPE`, `PARA_SHAPE`, `TAB_DEF`, `NUMBERING`, `BULLET`, `STYLE` 참조가 한컴 구조와 맞도록 복구했사옵니다.
+- HWP `BorderFill` 레코드의 6바이트 border 구조와 gradation fill 구조를 반영하여 표 테두리/배경 색상 오독을 바로잡았사옵니다.
+- HWP 문단 안 `gso` 그림 컨트롤은 표 셀 안에서 흐름을 차지하지 않는 앵커 이미지로 렌더링하여 로고/제목 행이 과도하게 늘어나는 문제를 줄였사옵니다.
+- HWP에서 `layoutHeightPx=0`인 제어 전용 빈 문단은 화면 흐름에서 제외하고, HWP 표 wrapper와 inline image margin을 원본 흐름에 가깝게 줄여 `attachment-sale-notice.hwp` 1쪽 헤더/제목 시작 위치를 한컴 Viewer 쪽에 더 가깝게 보정했사옵니다.
 - TAC 표처럼 저장된 object 높이가 셀 내용보다 작을 때도 내용 우선 높이를 유지해야 한다는 검증 기준을 세웠사옵니다.
-- `incheon-2a.hwpx` 2페이지 겹침은 큰 표 셀, `LineSeg.vertical_pos`, continuation window 해석 문제로 분류했사옵니다.
-- 같은 행이 여러 페이지로 쪼개질 때는 `split_start`, `visible_length`, 중첩 표 continuation을 TotalDocs 자체 레이아웃 규칙으로 다시 구현해야 하옵니다.
+- `incheon-2a.hwpx` 2페이지 겹침은 HWPX page style 기반 페이지 예산과 대형 셀 continuation 보정 후 현재 재현되지 않사옵니다.
+- 같은 행이 여러 페이지로 쪼개질 때는 `pageBreak`, 반복 머리행, raw row/cell height, 중첩 표 continuation을 TotalDocs 자체 레이아웃 규칙으로 계속 정밀화해야 하옵니다.
 - 셀 안의 중첩 표 `Table.caption` 방향과 간격도 자체 렌더러에서 일반 규칙으로 다루어야 하옵니다.
-- 최신 2페이지 직접 비교 캡처는 [incheon-p2-side-by-side-vpos3.png](output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png)에 남겨 두었사옵니다.
+- 최신 2페이지 TotalDocs 확인 캡처는 [incheon-2a-page2-after-budget.png](output/playwright/qa-snapshots/incheon-2a-page2-after-budget.png)에 남겨 두었고, 이전 한컴 비교 캡처는 [incheon-p2-side-by-side-vpos3.png](output/hancom-oracle/incheon-page-probe/incheon-p2-side-by-side-vpos3.png)에 보존했사옵니다.
 
 즉, 지금 단계는 “열람 가능”과 “대표 샘플 쪽수 일치”를 넘었으나, “한컴 Viewer 화면과 매우 비슷한 표 높이·개체 위치·폰트 조판”을 향한 본수술이 계속 필요한 상태이옵니다.
 
@@ -81,22 +86,21 @@
 
 ### 현재 진행 중인 일
 
-1. `incheon-2a.hwpx` 15쪽 mismatch 원인 분석.
-2. 대형 셀 안의 `LineSeg.vertical_pos` 리셋 구간과 페이지 continuation 분할 매핑 검증.
-3. 한컴 감사 crop 도구가 부분 페이지나 표 내부 흰 영역을 페이지로 오인하지 않도록 보강.
-4. 수정할 때마다 `node --check`, `node scripts/verify_samples.mjs`, 전 페이지 한컴 감사를 반복하는 검증 루프 유지.
+1. 기준 5개 문서의 한컴 Viewer 페이지 수 일치 상태를 유지한다.
+2. `attachment-sale-notice.hwp` 1쪽 공고 표 내부 행 높이와 공급내역 표 시작 위치를 한컴 화면에 더 가깝게 정밀화한다.
+3. `goyeopje-full-2024.hwp`, `goyeopje.hwp`의 표 높이, 문단 줄간격, 글자 농도 오차를 줄인다.
+4. 한컴 감사 crop 도구가 부분 페이지나 표 내부 흰 영역을 페이지로 오인하지 않도록 보강한다.
+5. 수정할 때마다 `node --check`, `node scripts/verify_samples.mjs`, 전 페이지 한컴 감사를 반복하는 검증 루프를 유지한다.
 
 ### 남은 작업 목록
 
-1. `incheon-2a.hwpx` 15쪽 mismatch 해결.
-2. `incheon-2a.hwpx` 12~16쪽 후반 대형 셀 continuation 흐름 재검증.
-3. `attachment-sale-notice.hwp` 1~4쪽 표, 이미지, 헤더, 셀 여백, 선 두께 정렬 개선.
-4. `goyeopje-full-2024.hwp` 6쪽과 9쪽의 표 높이, 문단 줄간격, 글자 농도, border 농도 개선.
-5. 공통 폰트 계량과 줄바꿈 폭을 한컴 Viewer에 더 가깝게 보정.
-6. 문단 line-height, line-spacing, cell padding, row height 계산을 HWP/HWPX 형식 문서 기준으로 계속 정밀화.
-7. 반복 머리행, 셀/행 분할, 대형 표 continuation, nested table clipping을 문서 공통 규칙으로 안정화.
-8. 그림, 도형, 수식, 차트, 배포용 문서를 같은 QA 기준으로 확대 검증.
-9. 전 페이지 감사에서 `mismatch 0`, `review 최소화`, 최종적으로 육안상 한컴 Viewer와 동일한 수준을 목표로 반복 개선.
+1. `attachment-sale-notice.hwp` 1쪽 공고 표 내부 행 높이, nested 일정 표 높이, 공급내역 표 시작 위치를 한컴 Viewer에 더 가깝게 정렬한다.
+2. `goyeopje-full-2024.hwp`와 `goyeopje.hwp`의 표 높이, 문단 줄간격, 글자 농도, border 농도 차이를 줄인다.
+3. 공통 폰트 계량과 줄바꿈 폭을 한컴 Viewer에 더 가깝게 보정한다.
+4. 문단 line-height, line-spacing, cell padding, row height 계산을 HWP/HWPX 형식 문서 기준으로 계속 정밀화한다.
+5. 반복 머리행, 셀/행 분할, 대형 표 continuation, nested table clipping을 문서 공통 규칙으로 안정화한다.
+6. 그림, 도형, 수식, 차트, 배포용 문서를 같은 QA 기준으로 확대 검증한다.
+7. 전 페이지 감사에서 `mismatch 0`, `review 최소화`, 최종적으로 육안상 한컴 Viewer와 동일한 수준을 목표로 반복 개선한다.
 
 ### 진행 방식
 
@@ -206,9 +210,9 @@ node scripts/capture_hancom_page_audit.mjs
 python3 scripts/build_hancom_page_audit.py
 ```
 
-현재 최신 전 페이지 감사는 다운로드 기준 5개 문서 36쪽을 모두 캡처했으며, 아직 모든 페이지가 원본과 동일한 수준은 아니옵니다.
+현재 최신 다운로드 샘플 검증은 5개 문서를 모두 열며, TotalDocs 기준 46쪽을 렌더링하옵니다. 한컴 기준 총 36쪽과 아직 차이가 남아 있어 HWP 표/문단 조판 보정이 계속 필요하옵니다.
 
-주요 잔여 대상: `incheon-2a.hwpx` 15쪽, `attachment-sale-notice.hwp` 1쪽, `goyeopje-full-2024.hwp` 6·9쪽, 전반적인 글자 농도·줄 높이·상단 원점 미세 오차
+주요 잔여 대상: `attachment-sale-notice.hwp` 1~4쪽, `goyeopje-full-2024.hwp` 6·9쪽, `goyeopje.hwp` 2~3쪽 분할, 전반적인 글자 농도·줄 높이·상단 원점 미세 오차
 
 ## 핵심 문서
 
@@ -242,13 +246,12 @@ python3 scripts/build_hancom_page_audit.py
 
 ## 다음 우선순위
 
-1. JS 파서/DOM 렌더러 경로로 대표 문서 검증을 다시 통과시킨다.
-2. `incheon-2a.hwpx` 2쪽 겹침을 자체 렌더러 기준으로 재현하고 수정한다.
-3. `incheon-2a.hwpx` 16~18쪽의 대형 셀 continuation과 중첩 표 흐름을 연쇄 검증한다.
-4. `attachment-sale-notice.hwp` 1~4쪽의 표/이미지/헤더 정렬 문제를 해결한다.
-5. `goyeopje-full-2024.hwp` 6·9쪽의 표 높이와 문단 조판 잔여 오차를 줄인다.
-6. 공통 폰트 계량, 줄간격, border 농도, 배경색 농도, 상단 원점 오차를 줄인다.
-7. 전 페이지 감사에서 `mismatch 0`을 유지하고 `review`를 순차적으로 줄인다.
-8. 이후 `수식`, `차트`, `배포용 문서`를 같은 기준으로 더 깊게 붙인다.
+1. `attachment-sale-notice.hwp` 1~4쪽의 표/이미지/헤더 정렬 문제를 해결한다.
+2. `goyeopje-full-2024.hwp` 6·9쪽의 표 높이와 문단 조판 잔여 오차를 줄인다.
+3. `goyeopje.hwp` 2~3쪽 분할을 한컴 2쪽 기준으로 맞춘다.
+4. `incheon-2a.hwpx` 16~18쪽의 대형 셀 continuation과 중첩 표 흐름은 18쪽 기준을 유지하면서 세부 시각 차이를 줄인다.
+5. 공통 폰트 계량, 줄간격, border 농도, 배경색 농도, 상단 원점 오차를 줄인다.
+6. 전 페이지 감사에서 `mismatch 0`을 만들고 `review`를 순차적으로 줄인다.
+7. 이후 `수식`, `차트`, `배포용 문서`를 같은 기준으로 더 깊게 붙인다.
 
 주군, 이 README는 현재 전황과 기준 문서를 빠르게 찾기 위한 입구이옵니다. 실제 구현 판단은 반드시 위 연결 문서들과 최신 QA 리포트를 함께 보고 내리는 것이 옳사옵니다.

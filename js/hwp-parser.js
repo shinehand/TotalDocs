@@ -371,16 +371,15 @@ const HwpParser = {
     // pageStyle이 있으면 실제 페이지 콘텐츠 높이를 기반으로 budget을 재보정한다.
     // HWPUNIT(1/7200 inch) 기준: content = height - top - bottom - header - footer
     // 1 weight unit ≈ 표준 12pt 행 높이(≈1500 HWPUNIT) ≈ 20px(@96 DPI)
-    const HWPUNIT_PER_WEIGHT = 1500;
     let budget = fallbackWeight;
     if (pageStyle && Number(pageStyle.height) > 0) {
       const margins = pageStyle.margins || {};
       const contentHwpu = Number(pageStyle.height)
         - (Number(margins.top) || 0)
         - (Number(margins.bottom) || 0)
-        - (Number(margins.header) || 0)
-        - (Number(margins.footer) || 0);
+        - (pageStyle.sourceFormat === 'hwp' ? 0 : ((Number(margins.header) || 0) + (Number(margins.footer) || 0)));
       if (contentHwpu > 0) {
+        const HWPUNIT_PER_WEIGHT = pageStyle.sourceFormat === 'hwpx' ? 2250 : 1500;
         budget = Math.max(16, Math.min(200, Math.round(contentHwpu / HWPUNIT_PER_WEIGHT)));
       }
     }
@@ -419,7 +418,7 @@ const HwpParser = {
   _run(text, opts = {}) {
     return Object.assign(
       { text: text||'', bold:false, italic:false, underline:false,
-        fontSize:11, fontName:'Malgun Gothic', color:'#000000',
+        fontSize:11, fontName:'Malgun Gothic', fontNameLatin:'', color:'#000000',
         shadeColor:'', underlineColor:'', underlineShape:'',
         strike:false, strikeColor:'', strikeShape:'',
         superscript:false, subscript:false,

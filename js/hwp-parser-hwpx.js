@@ -26,7 +26,7 @@ Object.assign(HwpParser, {
       const xml = await zip.files[keys[i]].async('string');
       const sectionData = HwpParser._hwpxSectionData(xml, header);
       const sectionMeta = sectionData.sectionMeta || {};
-      const sectionPages = HwpParser._paginate(sectionData.blocks, 46);
+      const sectionPages = HwpParser._paginateSectionBlocks(sectionData.blocks, 46, sectionMeta.pageStyle);
       const visibility = sectionMeta.visibility || {};
       const sectionStartPageNum = Math.max(1, Number(sectionMeta.startPageNum) || (pages.length + 1));
 
@@ -186,7 +186,7 @@ Object.assign(HwpParser, {
   async _hwpxParseHeader(zip) {
     const key = Object.keys(zip.files).find(p => /Contents[\\/]header\.xml$/i.test(p));
     if (!key) {
-      return { borderFills: {}, paraProps: {}, charProps: {}, hangulFonts: {} };
+      return { borderFills: {}, paraProps: {}, charProps: {}, fontFaces: {}, hangulFonts: {} };
     }
 
     let doc;
@@ -194,23 +194,50 @@ Object.assign(HwpParser, {
       const xml = await zip.files[key].async('string');
       doc = new DOMParser().parseFromString(xml, 'application/xml');
     } catch {
-      return { borderFills: {}, paraProps: {}, charProps: {}, hangulFonts: {} };
+      return { borderFills: {}, paraProps: {}, charProps: {}, fontFaces: {}, hangulFonts: {} };
     }
 
     const refs = {
       borderFills: {},
       paraProps: {},
       charProps: {},
+      fontFaces: {},
       hangulFonts: {},
     };
 
     const allNodes = Array.from(doc.getElementsByTagName('*'));
-    const hangulFontface = allNodes.find(node => (
-      HwpParser._hwpxLocalName(node) === 'fontface' && node.getAttribute('lang') === 'HANGUL'
-    ));
-    HwpParser._hwpxChildren(hangulFontface, 'font').forEach(fontEl => {
-      refs.hangulFonts[String(fontEl.getAttribute('id'))] = fontEl.getAttribute('face') || '';
-    });
+    allNodes
+      .filter(node => HwpParser._hwpxLocalName(node) === 'fontface')
+      .forEach(fontfaceEl => {
+        const lang = String(fontfaceEl.getAttribute('lang') || 'HANGUL').toUpperCase();
+        if (!refs.fontFaces[lang]) refs.fontFaces[lang] = {};
+        HwpParser._hwpxChildren(fontfaceEl, 'font').forEach(fontEl => {
+          refs.fontFaces[lang][String(fontEl.getAttribute('id'))] = fontEl.getAttribute('face') || '';
+        });
+      });
+    refs.hangulFonts = refs.fontFaces.HANGUL || {};
+
+    const fontNameFor = (lang, id) => {
+      const key = String(id ?? '');
+      return refs.fontFaces[String(lang || '').toUpperCase()]?.[key] || '';
+    };
+
+    const fontRefsFrom = (fontRefEl) => {
+      const attrs = ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user'];
+      return attrs.reduce((acc, attr) => {
+        const value = fontRefEl?.getAttribute?.(attr);
+        if (value != null && value !== '') acc[attr] = value;
+        return acc;
+      }, {});
+    };
+
+    const firstFontRef = (fontRefs, ...names) => {
+      for (const name of names) {
+        const value = fontRefs?.[name];
+        if (value != null && value !== '') return value;
+      }
+      return '';
+    };
 
     allNodes.forEach(node => {
       const name = HwpParser._hwpxLocalName(node);
@@ -267,6 +294,7 @@ Object.assign(HwpParser, {
         const id = Number(node.getAttribute('id'));
         if (!Number.isFinite(id)) return;
         const fontRefEl = HwpParser._hwpxFirstChild(node, 'fontRef');
+        const fontRefs = fontRefsFrom(fontRefEl);
         const underlineEl = HwpParser._hwpxFirstChild(node, 'underline');
         const strikeoutEl = HwpParser._hwpxFirstChild(node, 'strikeout');
         const shadowEl = HwpParser._hwpxFirstChild(node, 'shadow');
@@ -275,8 +303,17 @@ Object.assign(HwpParser, {
         const spacingEl = HwpParser._hwpxFirstChild(node, 'spacing');
         const relSzEl = HwpParser._hwpxFirstChild(node, 'relSz');
         const offsetEl = HwpParser._hwpxFirstChild(node, 'offset');
+        const hangulFontId = firstFontRef(fontRefs, 'hangul', 'other', 'latin', 'hanja', 'japanese', 'symbol', 'user');
+        const latinFontId = firstFontRef(fontRefs, 'latin', 'hangul', 'other', 'hanja', 'japanese', 'symbol', 'user');
+        const fontName = fontNameFor('HANGUL', hangulFontId)
+          || fontNameFor('OTHER', hangulFontId)
+          || fontNameFor('LATIN', hangulFontId)
+          || '';
+        const fontNameLatin = fontNameFor('LATIN', latinFontId) || '';
         refs.charProps[id] = {
-          fontName: refs.hangulFonts[String(fontRefEl?.getAttribute?.('hangul'))] || '',
+          fontName,
+          fontNameLatin: fontNameLatin !== fontName ? fontNameLatin : '',
+          fontRefs,
           fontSize: HwpParser._hwpxAttrNum(node, 'height', 0) > 0
             ? Math.round((HwpParser._hwpxAttrNum(node, 'height', 0) / 100) * 10) / 10
             : 0,
@@ -556,17 +593,17 @@ Object.assign(HwpParser, {
   _hwpxSameRunStyle(a, b) {
     if (!a || !b) return false;
     if (a.type === 'image' || b.type === 'image') return false;
-    return Boolean(a && b)
-      && a.bold === b.bold
-      && a.italic === b.italic
-      && a.underline === b.underline
-      && a.fontSize === b.fontSize
-      && a.fontName === b.fontName
-      && a.color === b.color
-      && a.scaleX === b.scaleX
-      && a.letterSpacing === b.letterSpacing
-      && a.relSize === b.relSize
-      && a.offsetY === b.offsetY;
+    const styleKeys = [
+      'bold', 'italic',
+      'underline', 'underlineColor', 'underlineShape',
+      'strike', 'strikeColor', 'strikeShape',
+      'fontSize', 'fontName', 'fontNameLatin',
+      'color', 'shadeColor',
+      'outlineType',
+      'shadowType', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY',
+      'scaleX', 'letterSpacing', 'relSize', 'offsetY',
+    ];
+    return styleKeys.every(key => a[key] === b[key]);
   },
 
   _hwpxPushTextRun(runBuffer, text, style = {}) {
@@ -745,7 +782,7 @@ Object.assign(HwpParser, {
         const name = HwpParser._hwpxLocalName(child);
         if (name === 'lineBreak' || name === 'tab') return true;
         if (name === 'compose') return Boolean(HwpParser._hwpxDecodeComposeChar(child));
-        return name === 't' && Boolean((child.textContent || '').trim());
+        return name === 't' && Boolean(HwpParser._hwpxTElementText(child).trim());
       })
     ));
   },
@@ -1017,16 +1054,34 @@ Object.assign(HwpParser, {
   _hwpxParagraphBlocks(pEl, header = {}) {
     const paraInfo = header?.paraProps?.[Number(pEl.getAttribute('paraPrIDRef') || 0)] || {};
     const paragraphLayout = HwpParser._hwpxParagraphLineMetrics(pEl);
-    const blockInfo = { ...paraInfo, ...paragraphLayout };
+    const rawParagraph = HwpParser._hwpxAttrMap(pEl, [
+      'id',
+      'paraPrIDRef',
+      'styleIDRef',
+      'pageBreak',
+      'columnBreak',
+      'merged',
+    ]);
+    const blockInfo = {
+      ...paraInfo,
+      ...paragraphLayout,
+      pageBreak: rawParagraph.pageBreak,
+      columnBreak: rawParagraph.columnBreak,
+      rawParagraph,
+    };
     const align = paraInfo.align || pEl.getAttribute('align') || 'left';
     const blocks = [];
     let runBuffer = [];
+    let fallbackRunStyle = null;
     const paragraphHasText = HwpParser._hwpxParagraphHasText(pEl);
 
     const flushText = () => {
       const normalizedRuns = HwpParser._hwpxTrimRunBuffer(runBuffer);
       const cleaned = normalizedRuns.map(run => run.text || '').join('');
-      if (cleaned.trim()) {
+      const hasRenderableRun = normalizedRuns.some(run => (
+        run.type === 'image' || String(run.text || '').trim()
+      ));
+      if (hasRenderableRun) {
         const block = HwpParser._createStyledParagraphBlock(normalizedRuns, align, blockInfo);
         const primaryRun = (block.texts || []).find(run => (
           run.type !== 'image' && String(run.text || '').trim()
@@ -1044,6 +1099,7 @@ Object.assign(HwpParser, {
 
     HwpParser._hwpxChildren(pEl, 'run').forEach(runEl => {
       const charInfo = header?.charProps?.[Number(runEl.getAttribute('charPrIDRef') || 0)] || null;
+      if (!fallbackRunStyle && charInfo) fallbackRunStyle = charInfo;
       HwpParser._hwpxChildren(runEl).forEach(child => {
         const name = HwpParser._hwpxLocalName(child);
         if (name === 'tbl') {
@@ -1074,6 +1130,24 @@ Object.assign(HwpParser, {
     });
 
     flushText();
+    if (!blocks.length) {
+      const hasParagraphLayout = Boolean(
+        Object.keys(paragraphLayout || {}).length
+        || HwpParser._hwpxChildren(pEl, 'run').length
+        || rawParagraph.pageBreak
+        || rawParagraph.columnBreak
+      );
+      if (hasParagraphLayout) {
+        blocks.push(HwpParser._createStyledParagraphBlock(
+          [HwpParser._run('', fallbackRunStyle || {})],
+          align,
+          {
+            ...blockInfo,
+            emptyParagraph: true,
+          },
+        ));
+      }
+    }
     return blocks;
   },
 

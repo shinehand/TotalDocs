@@ -777,8 +777,12 @@ body {
 
 .document-canvas {
   position: relative;
-  width: 100%;
-  max-width: 1120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -1208,6 +1212,11 @@ body {
   overflow-x: auto;
 }
 
+.hwp-page[data-source-format="hwp"] .hwp-table-wrap {
+  margin: 0;
+  overflow: visible;
+}
+
 .hwp-table {
   width: 100%;
   border-collapse: collapse;
@@ -1231,18 +1240,34 @@ body {
   white-space: normal;
 }
 
+.hwp-table[data-source-format="hwp"] .hwp-table-cell {
+  box-sizing: border-box;
+}
+
 .hwp-table-paragraph {
   margin: 0;
   min-height: 1.1em;
   line-height: 1.2;
 }
 
+.hwp-table[data-source-format="hwp"] .hwp-table-paragraph {
+  min-height: 0;
+}
+
 .hwp-table-paragraph + .hwp-table-paragraph {
   margin-top: 3px;
 }
 
+.hwp-table[data-source-format="hwp"] .hwp-table-paragraph + .hwp-table-paragraph {
+  margin-top: 0;
+}
+
 .hwp-table-cell-content {
   position: relative;
+}
+
+.hwp-table[data-source-format="hwp"] .hwp-table-cell-content {
+  min-height: 0;
 }
 
 .hwp-image-block {
@@ -1260,6 +1285,18 @@ body {
 
 .hwp-image-block[data-inline="true"] {
   margin: 4px 0 8px;
+}
+
+.hwp-page[data-source-format="hwp"] .hwp-image-block[data-inline="true"] {
+  margin: 0;
+  line-height: 0;
+}
+
+.hwp-image-anchored {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  pointer-events: none;
 }
 
 .hwp-image {
