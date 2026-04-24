@@ -226,6 +226,7 @@ python3 scripts/build_hancom_page_audit.py
 
 - [Downloads QA Baseline](docs/downloads-qa-baseline-2026-04-18.md)
 - [Rendering Status](docs/rendering-status.md)
+- [TotalDocs WASM Redesign Plan](docs/totaldocs-wasm-redesign-plan-2026-04-22.md)
 - [Font Strategy](docs/font-strategy-2026-04-18.md)
 - [Hancom Oracle Page Baseline](docs/hancom-oracle-page-baseline.json)
 

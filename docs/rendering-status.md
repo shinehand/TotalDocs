@@ -74,8 +74,8 @@
   - WASM remains allowed as a TotalDocs-owned implementation detail.
   - The source of truth remains the HWP/HWPX specs, TotalDocs's own model, and Hancom Viewer visual comparison.
   - Generated WASM binaries must not become the design authority.
-- First work date:
-  - 2026-04-23
+- Resume date:
+  - 2026-04-24
 - First tasks:
   - Stabilize the JS parser/DOM renderer verification baseline.
   - Reproduce `incheon-2a.hwpx` page 2 overlap in the official JS path.

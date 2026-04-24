@@ -1735,7 +1735,7 @@ function scrollToWasmSearchResult(idx) {
 async function processBuffer(buffer, filename, sizeBytes, options = {}) {
   showLoading(`파싱 중... (${(sizeBytes/1024).toFixed(0)} KB)`);
 
-  // 공식 경로는 ChromeHWP 내부 JS 파서/DOM 렌더러다. 외부 WASM 실험 경로는 비활성화한다.
+  // 공식 경로는 TotalDocs 내부 JS 파서/DOM 렌더러다. 외부 WASM 실험 경로는 비활성화한다.
   const ext = (filename.split('.').pop() || '').toLowerCase();
   let wasmResult = null;
   if (HWP_WASM_RENDERER_ENABLED && (ext === 'hwp' || ext === 'hwpx')) {
