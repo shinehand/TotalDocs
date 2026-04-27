@@ -43,7 +43,9 @@ function pushFailure(failures, report, message) {
   failures.push(`${report.filename || report.id || 'unknown'}: ${message}`);
 }
 
-function verifyReport(report, failures) {
+function verifyReport(report, failures, options = {}) {
+  const requireScreenshot = options.requireScreenshot !== false;
+
   if (report.fatal) {
     pushFailure(failures, report, `로드 실패: ${report.fatal}`);
     return;
@@ -100,9 +102,30 @@ function verifyReport(report, failures) {
     );
   }
 
-  if (!report.screenshotPath || !existsSync(report.screenshotPath)) {
+  if (requireScreenshot && (!report.screenshotPath || !existsSync(report.screenshotPath))) {
     pushFailure(failures, report, `스크린샷 누락: ${report.screenshotPath || '(none)'}`);
   }
+}
+
+function summarizeScreenshotArtifacts(verifyPayload) {
+  const reports = Array.isArray(verifyPayload.reports) ? verifyPayload.reports : [];
+  const summary = {
+    documents: reports.length,
+    present: 0,
+    missing: 0,
+    missingFiles: [],
+  };
+
+  for (const report of reports) {
+    if (report.screenshotPath && existsSync(report.screenshotPath)) {
+      summary.present += 1;
+    } else {
+      summary.missing += 1;
+      summary.missingFiles.push({ filename: report.filename || report.id || 'unknown', screenshotPath: report.screenshotPath || '(none)' });
+    }
+  }
+
+  return summary;
 }
 
 function summarizeStructuralAudit(verifyPayload) {
@@ -116,7 +139,7 @@ function summarizeStructuralAudit(verifyPayload) {
 
   for (const report of reports) {
     const structuralIssues = [];
-    verifyReport(report, structuralIssues);
+    verifyReport(report, structuralIssues, { requireScreenshot: false });
     if (structuralIssues.length) {
       summary.failed += 1;
       summary.failedFiles.push({ filename: report.filename || report.id || 'unknown', issues: structuralIssues });
@@ -225,6 +248,7 @@ function main() {
     verifyReport(report, failures);
   }
   const structuralSummary = summarizeStructuralAudit(verifyPayload);
+  const screenshotSummary = summarizeScreenshotArtifacts(verifyPayload);
   summarizeVisualAudit(warnings, failures, verifyPayload);
 
   console.log(`Fidelity guard: ${reports.length} document(s) checked`);
@@ -234,6 +258,15 @@ function main() {
   console.log(`- visual max age hours: ${VISUAL_MAX_AGE_HOURS}`);
   console.log(`- structural pass: ${structuralSummary.passed}/${structuralSummary.documents}`);
   console.log(`- structural fail: ${structuralSummary.failed}/${structuralSummary.documents}`);
+  console.log(`- screenshots present: ${screenshotSummary.present}/${screenshotSummary.documents}`);
+  console.log(`- screenshots missing: ${screenshotSummary.missing}/${screenshotSummary.documents}`);
+
+  if (screenshotSummary.missingFiles.length) {
+    console.log('\nScreenshot artifacts');
+    for (const item of screenshotSummary.missingFiles) {
+      console.log(`- ${item.filename}: ${item.screenshotPath}`);
+    }
+  }
 
   if (structuralSummary.failedFiles.length) {
     console.log('\nStructural summary');
