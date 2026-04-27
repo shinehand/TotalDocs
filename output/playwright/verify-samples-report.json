@@ -3,7 +3,7 @@
   "viewerFontOverrides": "",
   "sessionName": "verify-current",
   "strictPageExpectations": false,
-  "generatedAt": "2026-04-27T07:01:02.380Z",
+  "generatedAt": "2026-04-27T14:36:53.560Z",
   "downloadsDirectory": "/Users/shinehandmac/Downloads",
   "hancomOracleBaselinePath": "/Users/shinehandmac/Github/ChromeHWP/docs/hancom-oracle-page-baseline.json",
   "downloadsInventory": [
@@ -915,7 +915,7 @@
           ]
         }
       ],
-      "screenshotPath": null,
+      "screenshotPath": "/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/goyeopje.png",
       "screenshotError": null,
       "consoleErrors": 0,
       "consoleWarnings": 0,
@@ -2390,7 +2390,7 @@
           ]
         }
       ],
-      "screenshotPath": null,
+      "screenshotPath": "/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/goyeopje-full-2024.png",
       "screenshotError": null,
       "consoleErrors": 0,
       "consoleWarnings": 0,
@@ -3215,7 +3215,7 @@
           ]
         }
       ],
-      "screenshotPath": null,
+      "screenshotPath": "/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/gyeolseokgye.png",
       "screenshotError": null,
       "consoleErrors": 0,
       "consoleWarnings": 0,
@@ -4298,7 +4298,7 @@
           ]
         }
       ],
-      "screenshotPath": null,
+      "screenshotPath": "/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/attachment-sale-notice.png",
       "screenshotError": null,
       "consoleErrors": 0,
       "consoleWarnings": 0,
@@ -6049,7 +6049,7 @@
           ]
         }
       ],
-      "screenshotPath": null,
+      "screenshotPath": "/Users/shinehandmac/Github/ChromeHWP/output/playwright/qa-snapshots/incheon-2a.png",
       "screenshotError": null,
       "consoleErrors": 0,
       "consoleWarnings": 0,

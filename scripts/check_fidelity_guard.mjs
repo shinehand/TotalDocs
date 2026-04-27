@@ -105,6 +105,29 @@ function verifyReport(report, failures) {
   }
 }
 
+function summarizeStructuralAudit(verifyPayload) {
+  const reports = Array.isArray(verifyPayload.reports) ? verifyPayload.reports : [];
+  const summary = {
+    documents: reports.length,
+    passed: 0,
+    failed: 0,
+    failedFiles: [],
+  };
+
+  for (const report of reports) {
+    const structuralIssues = [];
+    verifyReport(report, structuralIssues);
+    if (structuralIssues.length) {
+      summary.failed += 1;
+      summary.failedFiles.push({ filename: report.filename || report.id || 'unknown', issues: structuralIssues });
+    } else {
+      summary.passed += 1;
+    }
+  }
+
+  return summary;
+}
+
 function summarizeVisualAudit(warnings, failures, verifyPayload) {
   if (!existsSync(HANCOM_PAGE_AUDIT_REPORT_PATH)) {
     const message = `한컴 페이지 감사 리포트가 없습니다: ${HANCOM_PAGE_AUDIT_REPORT_PATH}`;
@@ -201,6 +224,7 @@ function main() {
   for (const report of reports) {
     verifyReport(report, failures);
   }
+  const structuralSummary = summarizeStructuralAudit(verifyPayload);
   summarizeVisualAudit(warnings, failures, verifyPayload);
 
   console.log(`Fidelity guard: ${reports.length} document(s) checked`);
@@ -208,6 +232,18 @@ function main() {
   console.log(`- visual audit: ${HANCOM_PAGE_AUDIT_REPORT_PATH}`);
   console.log(`- require visual audit: ${REQUIRE_VISUAL_AUDIT ? 'yes' : 'no'}`);
   console.log(`- visual max age hours: ${VISUAL_MAX_AGE_HOURS}`);
+  console.log(`- structural pass: ${structuralSummary.passed}/${structuralSummary.documents}`);
+  console.log(`- structural fail: ${structuralSummary.failed}/${structuralSummary.documents}`);
+
+  if (structuralSummary.failedFiles.length) {
+    console.log('\nStructural summary');
+    for (const item of structuralSummary.failedFiles) {
+      console.log(`- ${item.filename}`);
+      for (const issue of item.issues) {
+        console.log(`  - ${issue}`);
+      }
+    }
+  }
 
   if (warnings.length) {
     console.log('\nWarnings');
