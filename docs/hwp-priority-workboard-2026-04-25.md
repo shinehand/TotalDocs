@@ -80,6 +80,16 @@ Goal: preserve enough HWP 5 binary source data to explain Hancom layout before a
 - Unknown HWP records are counted and inspectable instead of dropped.
 - The canonical dump identifies page 1 table, image, paragraph, and line-segment source records needed for the next phases.
 
+### 2026-04-26 Evidence Update
+
+- HWP paragraph blocks now preserve `PARA_HEADER` split flags as `hwp.splitFlags` and decoded `hwp.breakType` so section/page/column break signals survive parser output.
+- HWP table/image/object blocks now carry `rawObjectLayout` from the source control header, including raw attr bits, anchor relation, offsets, size, z-order, wrap/flow policy, margins, and instance id.
+- `scripts/dump_hwp_table_metrics.mjs` now reports parsed non-table objects, object anchor totals, raw object control headers, object payload records, unknown record counts, and a per-tag record inventory with byte offsets and body hashes.
+- HWP image blocks now preserve parsed picture payload evidence: `pictureBinId`, `pictureStreamId`, `pictureMime`, `binaryName`, and `rawPicture` payload hints, so the parsed image object can be traced back to its `SHAPE_COMPONENT_PICTURE` record and `BinData` stream.
+- Current `attachment-sale-notice.hwp` diagnostic evidence from the repository baseline sample: 16 parsed tables, 3 parsed HWP image objects, 19 parsed object anchors, 812 paragraphs, 854 line segments, 693 parsed cells; raw scan reports 695 `LIST_HEADER` records, of which 693 are table cells and 2 are non-table header/footer list headers. Raw scan also reports 19 object controls, 3 `SHAPE_COMPONENT_PICTURE` payload records, and 0 unknown HWP record tags.
+- The app-side parsed diagnostics now recognize HWP's flat `rawObjectLayout` as explicit object-layout evidence, instead of only recognizing HWPX-style nested `pos`/`offset`/`object` raw layouts.
+- This is source-preservation evidence only. It does not claim Hancom visual parity.
+
 ## Phase 2: HWP Table Engine
 
 Goal: make HWP table geometry deterministic and source-driven, starting with page 1 of `attachment-sale-notice.hwp`.

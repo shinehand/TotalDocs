@@ -866,11 +866,24 @@ Object.assign(HwpParser, {
     return null;
   },
 
+  _decodeHwpParaBreakType(flags = 0) {
+    const raw = Number(flags) || 0;
+    return {
+      raw,
+      hex: HwpParser._hwpHex(raw, 2),
+      section: Boolean(raw & 0x01),
+      multiColumn: Boolean(raw & 0x02),
+      page: Boolean(raw & 0x04),
+      column: Boolean(raw & 0x08),
+    };
+  },
+
   _parseHwpParaHeader(body) {
     if (!body || body.length < 18) {
       return { paraShapeId: 0, charShapes: [], controls: [] };
     }
     const rawCharCount = HwpParser._u32(body, 0);
+    const splitFlags = body[11] ?? 0;
     return {
       rawCharCount,
       charCount: rawCharCount & 0x7FFFFFFF,
@@ -878,7 +891,8 @@ Object.assign(HwpParser, {
       controlMask: HwpParser._u32(body, 4),
       paraShapeId: HwpParser._u16(body, 8),
       styleId: body[10] ?? 0,
-      splitFlags: body[11] ?? 0,
+      splitFlags,
+      breakType: HwpParser._decodeHwpParaBreakType(splitFlags),
       charShapeCount: HwpParser._u16(body, 12),
       rangeTagCount: body.length >= 16 ? HwpParser._u16(body, 14) : 0,
       lineAlignCount: body.length >= 18 ? HwpParser._u16(body, 16) : 0,
@@ -1051,6 +1065,8 @@ Object.assign(HwpParser, {
         controlMaskHex: HwpParser._hwpHex(paraState?.controlMask || 0, 8),
         paraShapeId: paraState?.paraShapeId ?? 0,
         styleId: paraState?.styleId ?? 0,
+        splitFlags: paraState?.splitFlags ?? 0,
+        breakType: paraState?.breakType || HwpParser._decodeHwpParaBreakType(paraState?.splitFlags || 0),
         charShapeCount: paraState?.charShapeCount ?? 0,
         rangeTagCount: paraState?.rangeTagCount ?? 0,
         lineAlignCount: paraState?.lineAlignCount ?? 0,
@@ -1413,7 +1429,7 @@ Object.assign(HwpParser, {
     const descLen = HwpParser._u16(ctrlBody, 44);
     const vertRelTo = HwpParser._hwpObjectRelTo('vert', (attr >> 3) & 0x3);
     const horzRelTo = HwpParser._hwpObjectRelTo('horz', (attr >> 8) & 0x3);
-    return {
+    const objectInfo = {
       controlId: HwpParser._ctrlId(ctrlBody),
       attr,
       vertOffset: HwpParser._i32(ctrlBody, 8),
@@ -1446,6 +1462,35 @@ Object.assign(HwpParser, {
       textFlow: HwpParser._hwpObjectTextFlow((attr >> 24) & 0x3),
       numberingCategory: (attr >> 26) & 0x7,
     };
+    objectInfo.rawObjectLayout = {
+      controlId: objectInfo.controlId,
+      attr: objectInfo.attr,
+      attrHex: HwpParser._hwpHex(objectInfo.attr, 8),
+      inline: objectInfo.inline,
+      affectLineSpacing: objectInfo.affectLineSpacing,
+      vertRelTo: objectInfo.vertRelTo,
+      vertAlign: objectInfo.vertAlign,
+      horzRelTo: objectInfo.horzRelTo,
+      horzAlign: objectInfo.horzAlign,
+      vertOffset: objectInfo.vertOffset,
+      horzOffset: objectInfo.horzOffset,
+      width: objectInfo.width,
+      height: objectInfo.height,
+      widthRelTo: objectInfo.widthRelTo,
+      heightRelTo: objectInfo.heightRelTo,
+      zOrder: objectInfo.zOrder,
+      margin: [...objectInfo.margin],
+      flowWithText: objectInfo.flowWithText,
+      allowOverlap: objectInfo.allowOverlap,
+      sizeProtected: objectInfo.sizeProtected,
+      textWrap: objectInfo.textWrap,
+      textFlow: objectInfo.textFlow,
+      numberingCategory: objectInfo.numberingCategory,
+      instanceId: objectInfo.instanceId,
+      preventPageBreak: objectInfo.preventPageBreak,
+      description: objectInfo.description,
+    };
+    return objectInfo;
   },
 
   _createHwpObjectTextBlock(type, objectInfo, text, runOpts = {}, extra = {}) {
@@ -1545,10 +1590,34 @@ Object.assign(HwpParser, {
     );
   },
 
+  _parseHwpPictureInfo(pictureBody, docInfo = null) {
+    const body = pictureBody || new Uint8Array();
+    const binId = HwpParser._parseHwpPictureBinId(body, docInfo);
+    return {
+      tagId: 85,
+      tagName: 'SHAPE_COMPONENT_PICTURE',
+      bodySize: body.length,
+      binId,
+      widthCandidates: [
+        HwpParser._u32(body, 52),
+        HwpParser._u32(body, 20),
+        HwpParser._u32(body, 28),
+      ].filter(value => value > 0),
+      heightCandidates: [
+        HwpParser._u32(body, 56),
+        HwpParser._u32(body, 32),
+        HwpParser._u32(body, 40),
+      ].filter(value => value > 0),
+      payloadTailBytes: Array.from(body.slice(Math.max(0, body.length - 24))),
+    };
+  },
+
   _parseHwpGsoBlock(objectInfo, pictureBody, docInfo = null) {
     if (!pictureBody?.length) return null;
+    const pictureInfo = HwpParser._parseHwpPictureInfo(pictureBody, docInfo);
     const imageRef = HwpParser._resolveHwpBinaryImage(docInfo, pictureBody);
     if (!imageRef?.src) return null;
+    const binaryEntry = HwpParser._resolveHwpBinaryEntry(docInfo, pictureInfo.binId) || imageRef;
 
     const width = HwpParser._firstPositiveMetric(
       objectInfo?.width,
@@ -1571,6 +1640,17 @@ Object.assign(HwpParser, {
       alt: objectInfo?.description || imageRef.name || 'image',
       width,
       height,
+      binaryName: imageRef.name || binaryEntry?.name || '',
+      pictureBinId: pictureInfo.binId || imageRef.refId || imageRef.id || 0,
+      pictureRefId: imageRef.refId || 0,
+      pictureStreamId: imageRef.id || 0,
+      pictureMime: imageRef.mime || '',
+      rawPicture: {
+        ...pictureInfo,
+        binaryName: imageRef.name || binaryEntry?.name || '',
+        extension: imageRef.extension || binaryEntry?.extension || '',
+        mime: imageRef.mime || '',
+      },
       sourceFormat: 'hwp',
     }, objectInfo);
   },

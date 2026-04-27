@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -35,6 +35,8 @@ const LOAD_TIMEOUT_MS = Number(process.env.VERIFY_LOAD_TIMEOUT_MS || 20000);
 const SCROLL_SETTLE_MS = Number(process.env.VERIFY_SCROLL_SETTLE_MS || 350);
 const STRICT_PAGE_EXPECTATIONS = process.env.STRICT_PAGE_EXPECTATIONS === '1';
 const CAPTURE_SCREENSHOTS = process.env.VERIFY_SCREENSHOTS !== '0';
+const AUTO_START_VIEWER_SERVER = process.env.VERIFY_AUTO_START_SERVER !== '0';
+const VIEWER_SERVER_START_TIMEOUT_MS = Number(process.env.VERIFY_SERVER_START_TIMEOUT_MS || 8000);
 const SESSION_ARGS = [`-s=${SESSION_NAME}`];
 const SUPPORTED_DOCUMENT_EXTENSIONS = new Set(['.hwp', '.hwpx', '.owpml']);
 const GENERIC_FONT_FAMILY_NAMES = new Set([
@@ -226,6 +228,71 @@ function sleepSync(ms) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isLocalViewerUrl() {
+  try {
+    const url = new URL(VIEWER_URL);
+    return url.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function canReachViewer() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch(VIEWER_URL, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function ensureViewerServer() {
+  if (await canReachViewer()) {
+    return null;
+  }
+  if (!AUTO_START_VIEWER_SERVER || !isLocalViewerUrl()) {
+    fail(`뷰어 서버에 연결하지 못했습니다: ${VIEWER_URL}\n먼저 저장소 루트에서 \`python3 -m http.server 4173\`를 실행하거나 VERIFY_AUTO_START_SERVER=1 기본값을 사용하십시오.`);
+  }
+
+  const url = new URL(VIEWER_URL);
+  const host = url.hostname === 'localhost' ? '127.0.0.1' : url.hostname;
+  const port = url.port || '80';
+  const child = spawn('python3', ['-m', 'http.server', port, '--bind', host], {
+    cwd: ROOT_DIR,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  const stderr = [];
+  child.stderr.on('data', chunk => stderr.push(String(chunk)));
+
+  const started = Date.now();
+  while (Date.now() - started < VIEWER_SERVER_START_TIMEOUT_MS) {
+    if (child.exitCode !== null) {
+      fail(`뷰어 서버 자동 시작 실패: python3 -m http.server ${port} --bind ${host}\n${stderr.join('').trim()}`);
+    }
+    if (await canReachViewer()) {
+      return child;
+    }
+    await sleep(250);
+  }
+
+  child.kill();
+  fail(`뷰어 서버 자동 시작 후에도 연결하지 못했습니다: ${VIEWER_URL}\n${stderr.join('').trim()}`);
+}
+
+function stopViewerServer(child) {
+  if (!child || child.exitCode !== null) return;
+  child.kill();
 }
 
 function isRetryableSessionError(output = '') {
@@ -1156,6 +1223,8 @@ async function main() {
     fail(`playwright_cli.sh 경로를 찾지 못했습니다: ${PWCLI}`);
   }
 
+  const viewerServer = await ensureViewerServer();
+
   const samples = buildSampleDefinitions();
   const downloadsFiles = discoverDownloadsDocuments();
   const hancomOracleBaseline = loadHancomOracleBaseline();
@@ -1247,6 +1316,7 @@ async function main() {
     }
   } finally {
     runPw(['close-all'], { retries: MAX_SESSION_RETRIES });
+    stopViewerServer(viewerServer);
   }
 
   mkdirSync(path.dirname(REPORT_PATH), { recursive: true });

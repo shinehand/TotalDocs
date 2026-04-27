@@ -672,11 +672,32 @@ function incrementControlType(controlTypes, key) {
 
 function hasExplicitObjectLayout(block = {}) {
   const raw = block.rawObjectLayout || block.rawLayout?.object || null;
-  return Boolean(raw && (
+  if (!raw || typeof raw !== 'object') return false;
+  if (
     Object.keys(raw.pos || {}).length
     || Object.keys(raw.offset || {}).length
     || Object.keys(raw.object || {}).length
-  ));
+  ) {
+    return true;
+  }
+  return [
+    'controlId',
+    'attr',
+    'attrHex',
+    'vertRelTo',
+    'vertAlign',
+    'horzRelTo',
+    'horzAlign',
+    'vertOffset',
+    'horzOffset',
+    'width',
+    'height',
+    'zOrder',
+    'margin',
+    'textWrap',
+    'textFlow',
+    'instanceId',
+  ].some(key => raw[key] !== undefined && raw[key] !== null && raw[key] !== '');
 }
 
 function collectObjectLayoutSignals(block = {}, signals) {

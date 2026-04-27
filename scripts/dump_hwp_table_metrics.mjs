@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -19,8 +20,20 @@ const PARSER_FILES = [
   'js/hwp-parser-hwp5-container.js',
   'js/hwp-parser-hwp5-records.js',
 ];
+const RECORD_EXAMPLE_LIMIT_PER_TAG = 5;
+const RAW_RECORD_DETAIL_LIMIT = 200;
+const OBJECT_BLOCK_TYPES = new Set(['image', 'shape', 'textbox', 'equation', 'ole', 'chart', 'video']);
+const OBJECT_CONTROL_IDS = new Set(['tbl ', 'gso ']);
+const OBJECT_PAYLOAD_TAG_IDS = new Set([78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 95, 98]);
 
 const require = createRequire(import.meta.url);
+
+process.stdout.on('error', error => {
+  if (error?.code === 'EPIPE') {
+    process.exit(0);
+  }
+  throw error;
+});
 
 function printUsage() {
   console.log(`Usage:
@@ -120,6 +133,16 @@ function toHex(value, width = 2) {
   return `0x${(Number(value) >>> 0).toString(16).toUpperCase().padStart(width, '0')}`;
 }
 
+function sha256Hex(bytes = new Uint8Array()) {
+  return createHash('sha256').update(Buffer.from(bytes || [])).digest('hex');
+}
+
+function hexPreview(bytes = new Uint8Array(), limit = 16) {
+  return Array.from((bytes || []).slice(0, limit))
+    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+    .join('');
+}
+
 function pageSplitPolicy(splitPage) {
   switch (Number(splitPage) || 0) {
     case 1: return 'CELL';
@@ -215,12 +238,17 @@ function summarizeLineSegs(lineSegs = []) {
 }
 
 function countBlocks(blocks = []) {
-  const counts = { paragraphCount: 0, tableCount: 0, lineSegCount: 0 };
+  const counts = { paragraphCount: 0, tableCount: 0, lineSegCount: 0, objectCount: 0 };
   const visit = block => {
     if (!block) return;
     if (block.type === 'paragraph') {
       counts.paragraphCount += 1;
       counts.lineSegCount += Array.isArray(block.lineSegs) ? block.lineSegs.length : 0;
+      return;
+    }
+    if (isObjectBlock(block)) {
+      counts.objectCount += 1;
+      for (const child of block.paragraphs || []) visit(child);
       return;
     }
     if (block.type === 'table') {
@@ -278,6 +306,44 @@ function objectLayout(block = {}) {
     'outMargin',
     'rawObjectLayout',
   ]));
+}
+
+function isObjectBlock(block = {}) {
+  return Boolean(block && OBJECT_BLOCK_TYPES.has(block.type));
+}
+
+function objectMetric(block = {}, locator = {}) {
+  const nestedCounts = countBlocks(block.paragraphs || []);
+  return stripEmpty({
+    index: locator.objectIndex,
+    sectionIndex: locator.sectionIndex,
+    context: locator.context,
+    path: locator.path,
+    parentTableIndex: locator.parentTableIndex ?? null,
+    nestingDepth: locator.nestingDepth || 0,
+    type: block.type || '',
+    sourceFormat: block.sourceFormat || '',
+    width: block.width,
+    height: block.height,
+    alt: block.alt,
+    description: block.description,
+    hasImageSource: Boolean(block.src),
+    imageSourceLength: block.src ? String(block.src).length : 0,
+    binaryName: block.binaryName || '',
+    pictureBinId: block.pictureBinId,
+    pictureRefId: block.pictureRefId,
+    pictureStreamId: block.pictureStreamId,
+    pictureMime: block.pictureMime || '',
+    rawPicture: cleanJson(block.rawPicture),
+    oleBinId: block.oleBinId,
+    hasChartData: block.hasChartData,
+    hasVideoData: block.hasVideoData,
+    paragraphCount: nestedCounts.paragraphCount,
+    lineSegCount: nestedCounts.lineSegCount,
+    nestedTableCount: nestedCounts.tableCount,
+    textLength: textLength(block),
+    layout: objectLayout(block),
+  });
 }
 
 function cellMetric(cell = {}, rowIndex = 0, cellIndex = 0) {
@@ -394,18 +460,25 @@ function paragraphMetric(block = {}, locator = {}) {
 function collectParsedMetrics(parsedBody = null) {
   const tables = [];
   const paragraphs = [];
+  const objects = [];
   const sections = [];
   const contexts = {
-    body: { tableCount: 0, paragraphCount: 0, lineSegCount: 0 },
-    header: { tableCount: 0, paragraphCount: 0, lineSegCount: 0 },
-    footer: { tableCount: 0, paragraphCount: 0, lineSegCount: 0 },
+    body: { tableCount: 0, paragraphCount: 0, lineSegCount: 0, objectCount: 0 },
+    header: { tableCount: 0, paragraphCount: 0, lineSegCount: 0, objectCount: 0 },
+    footer: { tableCount: 0, paragraphCount: 0, lineSegCount: 0, objectCount: 0 },
   };
 
   const addCounts = (context, counts) => {
-    const bucket = contexts[context] || (contexts[context] = { tableCount: 0, paragraphCount: 0, lineSegCount: 0 });
+    const bucket = contexts[context] || (contexts[context] = {
+      tableCount: 0,
+      paragraphCount: 0,
+      lineSegCount: 0,
+      objectCount: 0,
+    });
     bucket.tableCount += counts.tableCount;
     bucket.paragraphCount += counts.paragraphCount;
     bucket.lineSegCount += counts.lineSegCount;
+    bucket.objectCount += counts.objectCount || 0;
   };
 
   const walkBlocks = (blocks = [], locator = {}) => {
@@ -420,6 +493,22 @@ function collectParsedMetrics(parsedBody = null) {
           path: blockPath,
           paragraphIndex,
         }));
+        continue;
+      }
+
+      if (isObjectBlock(block)) {
+        const objectIndex = objects.length;
+        objects.push(objectMetric(block, {
+          ...locator,
+          path: blockPath,
+          objectIndex,
+        }));
+        if (Array.isArray(block.paragraphs)) {
+          walkBlocks(block.paragraphs, {
+            ...locator,
+            path: `${blockPath}/paragraphs`,
+          });
+        }
         continue;
       }
 
@@ -468,6 +557,7 @@ function collectParsedMetrics(parsedBody = null) {
     const before = {
       tableCount: tables.length,
       paragraphCount: paragraphs.length,
+      objectCount: objects.length,
     };
 
     const bodyCounts = countBlocks(section.paragraphs || []);
@@ -514,6 +604,10 @@ function collectParsedMetrics(parsedBody = null) {
         { length: paragraphs.length - before.paragraphCount },
         (_, offset) => before.paragraphCount + offset,
       ),
+      objectIndices: Array.from(
+        { length: objects.length - before.objectCount },
+        (_, offset) => before.objectCount + offset,
+      ),
       pageStyle: cleanJson(section.pageStyle || null),
     }));
   });
@@ -521,14 +615,17 @@ function collectParsedMetrics(parsedBody = null) {
   return {
     tables,
     paragraphs,
+    objects,
     sections,
     contexts,
   };
 }
 
-function aggregateParsedSignals(tables = [], paragraphs = []) {
+function aggregateParsedSignals(tables = [], paragraphs = [], objects = []) {
   const tablePageBreakPolicies = {};
   const tableSplitPolicies = {};
+  const objectTypes = {};
+  const objectAnchorRelTo = {};
   let repeatHeaderTableCount = 0;
   let splitTableCount = 0;
   let mergedCellCount = 0;
@@ -556,12 +653,19 @@ function aggregateParsedSignals(tables = [], paragraphs = []) {
     }
   }
 
+  for (const object of objects) {
+    increment(objectTypes, object.type || 'unknown');
+    increment(objectAnchorRelTo, `${object.layout?.vertRelTo || 'unknown'}/${object.layout?.horzRelTo || 'unknown'}`);
+  }
+
   return {
     tablePageBreakPolicies: sortObjectByKey(tablePageBreakPolicies),
     tableSplitPolicies: sortObjectByKey(tableSplitPolicies),
     repeatHeaderTableCount,
     splitTableCount,
     mergedCellCount,
+    objectTypes: sortObjectByKey(objectTypes),
+    objectAnchorRelTo: sortObjectByKey(objectAnchorRelTo),
     paragraphControlBreakCount,
     paragraphControlKinds: sortObjectByKey(paragraphControlKinds),
     lineSegFlagCounts: sortObjectByKey(lineSegFlagCounts),
@@ -653,15 +757,112 @@ function recordTagName(tagId) {
     81: 'SHAPE_COMPONENT_ELLIPSE',
     82: 'SHAPE_COMPONENT_ARC',
     83: 'SHAPE_COMPONENT_POLYGON',
-    84: 'SHAPE_COMPONENT_CURVE',
-    85: 'SHAPE_COMPONENT_OLE',
-    86: 'SHAPE_COMPONENT_PICTURE',
+    84: 'SHAPE_COMPONENT_OLE',
+    85: 'SHAPE_COMPONENT_PICTURE',
+    86: 'SHAPE_COMPONENT',
     87: 'CONTAINER',
-    88: 'CTRL_DATA',
-    89: 'EQEDIT',
+    88: 'EQEDIT',
+    89: 'CTRL_DATA',
+    95: 'CHART_DATA',
+    98: 'VIDEO_DATA',
     99: 'MEMO_SHAPE',
   };
   return names[tagId] || `TAG_${tagId}`;
+}
+
+function recordLocator(rec = {}, record = {}, context = {}) {
+  const tagName = recordTagName(rec.tagId);
+  return stripEmpty({
+    recordIndex: record.recordIndex,
+    offset: record.offset,
+    level: rec.level,
+    tagId: rec.tagId,
+    tagName,
+    size: rec.size,
+    headerSize: Math.max(0, (rec.startPos || 0) - (record.offset || 0)),
+    bodyOffset: rec.startPos,
+    nextOffset: rec.nextPos,
+    bodySha256: sha256Hex(rec.body).slice(0, 24),
+    bodyPreviewHex: hexPreview(rec.body, 16),
+    parentControls: context.parentControls || [],
+  });
+}
+
+function addRecordInventory(inventory, rec = {}, record = {}, context = {}) {
+  const tagName = recordTagName(rec.tagId);
+  const bucket = inventory[tagName] || (inventory[tagName] = {
+    tagId: rec.tagId,
+    tagName,
+    count: 0,
+    totalBodyBytes: 0,
+    levels: {},
+    examples: [],
+  });
+  bucket.count += 1;
+  bucket.totalBodyBytes += Number(rec.size) || 0;
+  increment(bucket.levels, rec.level);
+  if (bucket.examples.length < RECORD_EXAMPLE_LIMIT_PER_TAG) {
+    bucket.examples.push(recordLocator(rec, record, context));
+  }
+}
+
+function finalizeRecordInventory(inventory = {}) {
+  const out = {};
+  for (const [tagName, bucket] of Object.entries(inventory)) {
+    out[tagName] = {
+      ...bucket,
+      levels: sortObjectByKey(bucket.levels || {}),
+    };
+  }
+  return sortObjectByKey(out);
+}
+
+function isUnknownRecordTag(tagId) {
+  return recordTagName(tagId).startsWith('TAG_');
+}
+
+function hasParentControl(controlStack = [], controlId = '') {
+  return controlStack.some(control => control?.controlId === controlId);
+}
+
+function positiveMetrics(...values) {
+  return values
+    .map(value => Number(value) || 0)
+    .filter(value => value > 0);
+}
+
+function objectPayloadMetric(HwpParser, rec = {}, record = {}, context = {}) {
+  const metric = recordLocator(rec, record, context);
+  const body = rec.body || new Uint8Array();
+  if (rec.tagId === 85) {
+    metric.picture = stripEmpty({
+      binId: HwpParser._parseHwpPictureBinId?.(body, null) || 0,
+      widthCandidates: positiveMetrics(
+        HwpParser._u32(body, 52),
+        HwpParser._u32(body, 20),
+        HwpParser._u32(body, 28),
+      ),
+      heightCandidates: positiveMetrics(
+        HwpParser._u32(body, 56),
+        HwpParser._u32(body, 32),
+        HwpParser._u32(body, 40),
+      ),
+      payloadTailPreviewHex: hexPreview(body.slice(Math.max(0, body.length - 24)), 24),
+    });
+  } else if (rec.tagId === 84 && body.length >= 24) {
+    metric.ole = stripEmpty({
+      attr: HwpParser._u16(body, 0),
+      extentX: HwpParser._i32(body, 2),
+      extentY: HwpParser._i32(body, 6),
+      binId: HwpParser._u16(body, 10),
+    });
+  } else if (rec.tagId === 88 && body.length >= 6) {
+    metric.equation = stripEmpty({
+      attr: HwpParser._u32(body, 0),
+      scriptLength: HwpParser._u16(body, 4),
+    });
+  }
+  return stripEmpty(metric);
 }
 
 function compactTableInfo(tableInfo = {}, record = {}) {
@@ -699,6 +900,7 @@ function compactCellRecord(cell = {}, record = {}) {
     recordIndex: record.recordIndex,
     offset: record.offset,
     level: record.level,
+    parentControls: record.parentControls || [],
     row: cell?.row,
     col: cell?.col,
     rowSpan: cell?.rowSpan,
@@ -717,6 +919,18 @@ function scanRecordMetrics(HwpParser, bytes) {
   const tagCounts = {};
   const tagNameCounts = {};
   const controlCounts = {};
+  const recordInventory = {};
+  const unknownTagCounts = {};
+  const unknownRecords = [];
+  const objectControls = [];
+  const objectPayloadRecords = [];
+  const nonTableListHeaders = [];
+  const controlStack = [];
+  let unknownRecordCount = 0;
+  let objectControlCount = 0;
+  let objectPayloadRecordCount = 0;
+  let listHeaderRecordCount = 0;
+  let nonTableListHeaderCount = 0;
   const paragraphBreakTypeCounts = {
     section: 0,
     multiColumn: 0,
@@ -745,14 +959,35 @@ function scanRecordMetrics(HwpParser, bytes) {
     const bodyEnd = rec.startPos + rec.size;
     if (bodyEnd > bytes.length) truncated = true;
 
+    while (controlStack.length && rec.level <= controlStack[controlStack.length - 1].level) {
+      controlStack.pop();
+    }
+    const recordLocatorContext = {
+      parentControls: controlStack.map(control => `${control.controlId}@${control.recordIndex}`),
+    };
+
     increment(tagCounts, rec.tagId);
     increment(tagNameCounts, recordTagName(rec.tagId));
 
-    const recordLocator = {
+    const recordRef = {
       recordIndex: recordCount,
       offset: pos,
       level: rec.level,
     };
+    addRecordInventory(recordInventory, rec, recordRef, recordLocatorContext);
+    if (isUnknownRecordTag(rec.tagId)) {
+      increment(unknownTagCounts, rec.tagId);
+      unknownRecordCount += 1;
+      if (unknownRecords.length < RAW_RECORD_DETAIL_LIMIT) {
+        unknownRecords.push(recordLocator(rec, recordRef, recordLocatorContext));
+      }
+    }
+    if (OBJECT_PAYLOAD_TAG_IDS.has(rec.tagId) && controlStack.some(control => OBJECT_CONTROL_IDS.has(control.controlId))) {
+      objectPayloadRecordCount += 1;
+      if (objectPayloadRecords.length < RAW_RECORD_DETAIL_LIMIT) {
+        objectPayloadRecords.push(objectPayloadMetric(HwpParser, rec, recordRef, recordLocatorContext));
+      }
+    }
 
     if (rec.tagId === 66) {
       const header = HwpParser._parseHwpParaHeader(rec.body);
@@ -766,7 +1001,7 @@ function scanRecordMetrics(HwpParser, bytes) {
         if (breakType.column) paragraphBreakTypeCounts.column += 1;
       }
       paragraphHeaders.push(stripEmpty({
-        ...recordLocator,
+        ...recordRef,
         charCount: header?.charCount,
         controlMask: header?.controlMask,
         controlMaskHex: toHex(header?.controlMask || 0, 8),
@@ -784,7 +1019,25 @@ function scanRecordMetrics(HwpParser, bytes) {
         increment(lineSegFlagCounts, toHex(seg?.flags || 0, 8));
       }
     } else if (rec.tagId === 71) {
-      increment(controlCounts, HwpParser._ctrlId(rec.body) || 'unknown');
+      const controlId = HwpParser._ctrlId(rec.body) || 'unknown';
+      increment(controlCounts, controlId);
+      if (OBJECT_CONTROL_IDS.has(controlId)) {
+        objectControlCount += 1;
+        const objectInfo = HwpParser._parseHwpObjectCommon(rec.body);
+        if (objectControls.length < RAW_RECORD_DETAIL_LIMIT) {
+          objectControls.push(stripEmpty({
+            ...recordLocator(rec, recordRef, recordLocatorContext),
+            controlId,
+            objectLayout: cleanJson(objectInfo),
+          }));
+        }
+      }
+      controlStack.push({
+        controlId,
+        level: rec.level,
+        recordIndex: recordCount,
+        offset: pos,
+      });
     } else if (rec.tagId === 77) {
       const tableInfo = HwpParser._parseTableInfo(rec.body);
       if (tableInfo) {
@@ -792,13 +1045,24 @@ function scanRecordMetrics(HwpParser, bytes) {
         const splitPolicy = pageSplitPolicy(tableInfo.splitPage);
         increment(tableSplitPolicies, splitPolicy);
         increment(tablePageBreakPolicies, splitPolicy);
-        tableInfos.push(compactTableInfo(tableInfo, recordLocator));
+        tableInfos.push(compactTableInfo(tableInfo, recordRef));
       }
     } else if (rec.tagId === 72) {
-      const cell = HwpParser._parseTableCell(rec.body);
-      if (cell) {
-        cellRecordCount += 1;
-        cellRecords.push(compactCellRecord(cell, recordLocator));
+      listHeaderRecordCount += 1;
+      if (hasParentControl(controlStack, 'tbl ')) {
+        const cell = HwpParser._parseTableCell(rec.body);
+        if (cell) {
+          cellRecordCount += 1;
+          cellRecords.push(compactCellRecord(cell, {
+            ...recordRef,
+            parentControls: recordLocatorContext.parentControls,
+          }));
+        }
+      } else {
+        nonTableListHeaderCount += 1;
+        if (nonTableListHeaders.length < RAW_RECORD_DETAIL_LIMIT) {
+          nonTableListHeaders.push(recordLocator(rec, recordRef, recordLocatorContext));
+        }
       }
     }
 
@@ -822,11 +1086,22 @@ function scanRecordMetrics(HwpParser, bytes) {
     lineSegCount,
     lineSegFlagCounts: sortObjectByKey(lineSegFlagCounts),
     tableInfoCount,
+    listHeaderRecordCount,
     cellRecordCount,
+    nonTableListHeaderCount,
+    nonTableListHeaders,
     tableSplitPolicies: sortObjectByKey(tableSplitPolicies),
     tablePageBreakPolicies: sortObjectByKey(tablePageBreakPolicies),
     tableInfos,
     cellRecords,
+    recordInventory: finalizeRecordInventory(recordInventory),
+    unknownRecordCount,
+    unknownTagCounts: sortObjectByKey(unknownTagCounts),
+    unknownRecords,
+    objectControlCount,
+    objectControls,
+    objectPayloadRecordCount,
+    objectPayloadRecords,
   };
 }
 
@@ -942,7 +1217,9 @@ async function inspectRawHwp(HwpParser, bytes, diagnostics) {
         recordCount: attempt.metrics.recordCount,
         paragraphHeaderCount: attempt.metrics.paragraphHeaderCount,
         tableInfoCount: attempt.metrics.tableInfoCount,
+        listHeaderRecordCount: attempt.metrics.listHeaderRecordCount,
         cellRecordCount: attempt.metrics.cellRecordCount,
+        nonTableListHeaderCount: attempt.metrics.nonTableListHeaderCount,
         lineSegCount: attempt.metrics.lineSegCount,
         truncated: attempt.metrics.truncated,
       })),
@@ -978,7 +1255,9 @@ function aggregateRawSignals(raw = null) {
     paragraphSectionBreakCount: 0,
     paragraphMultiColumnBreakCount: 0,
     tableInfoCount: 0,
+    listHeaderRecordCount: 0,
     tableCellRecordCount: 0,
+    nonTableListHeaderCount: 0,
     lineSegRecordCount: 0,
     lineSegCount: 0,
     tableSplitPolicies: {},
@@ -986,6 +1265,10 @@ function aggregateRawSignals(raw = null) {
     controlCounts: {},
     tagNameCounts: {},
     lineSegFlagCounts: {},
+    unknownRecordCount: 0,
+    unknownTagCounts: {},
+    objectControlCount: 0,
+    objectPayloadRecordCount: 0,
   };
 
   for (const section of raw?.sections || []) {
@@ -996,15 +1279,21 @@ function aggregateRawSignals(raw = null) {
     out.paragraphSectionBreakCount += records.paragraphBreakTypeCounts?.section || 0;
     out.paragraphMultiColumnBreakCount += records.paragraphBreakTypeCounts?.multiColumn || 0;
     out.tableInfoCount += records.tableInfoCount || 0;
+    out.listHeaderRecordCount += records.listHeaderRecordCount || 0;
     out.tableCellRecordCount += records.cellRecordCount || 0;
+    out.nonTableListHeaderCount += records.nonTableListHeaderCount || 0;
     out.lineSegRecordCount += records.lineSegRecordCount || 0;
     out.lineSegCount += records.lineSegCount || 0;
+    out.unknownRecordCount += records.unknownRecordCount || 0;
+    out.objectControlCount += records.objectControlCount || 0;
+    out.objectPayloadRecordCount += records.objectPayloadRecordCount || 0;
 
     for (const [key, value] of Object.entries(records.tableSplitPolicies || {})) increment(out.tableSplitPolicies, key, value);
     for (const [key, value] of Object.entries(records.tablePageBreakPolicies || {})) increment(out.tablePageBreakPolicies, key, value);
     for (const [key, value] of Object.entries(records.controlCounts || {})) increment(out.controlCounts, key, value);
     for (const [key, value] of Object.entries(records.tagNameCounts || {})) increment(out.tagNameCounts, key, value);
     for (const [key, value] of Object.entries(records.lineSegFlagCounts || {})) increment(out.lineSegFlagCounts, key, value);
+    for (const [key, value] of Object.entries(records.unknownTagCounts || {})) increment(out.unknownTagCounts, key, value);
   }
 
   out.tableSplitPolicies = sortObjectByKey(out.tableSplitPolicies);
@@ -1012,6 +1301,7 @@ function aggregateRawSignals(raw = null) {
   out.controlCounts = sortObjectByKey(out.controlCounts);
   out.tagNameCounts = sortObjectByKey(out.tagNameCounts);
   out.lineSegFlagCounts = sortObjectByKey(out.lineSegFlagCounts);
+  out.unknownTagCounts = sortObjectByKey(out.unknownTagCounts);
   return out;
 }
 
@@ -1037,11 +1327,13 @@ async function buildReport(inputPath) {
       reusedFiles: PARSER_FILES,
     },
     tableCount: 0,
+    objectCount: 0,
     paragraphCount: 0,
     lineSegCount: 0,
     counts: {},
     signals: {},
     tables: [],
+    objects: [],
     paragraphs: [],
     sections: [],
     raw: null,
@@ -1071,14 +1363,18 @@ async function buildReport(inputPath) {
   if (parsedBody) {
     const parsed = collectParsedMetrics(parsedBody);
     report.tables = parsed.tables;
+    report.objects = parsed.objects;
     report.paragraphs = parsed.paragraphs;
     report.sections = parsed.sections;
     report.tableCount = parsed.tables.length;
+    report.objectCount = parsed.objects.length;
     report.paragraphCount = parsed.paragraphs.length;
     report.lineSegCount = parsed.paragraphs.reduce((sum, paragraph) => sum + (paragraph.lineSegCount || 0), 0);
     report.counts = {
       sections: parsed.sections.length,
       tables: report.tableCount,
+      objects: report.objectCount,
+      objectAnchors: report.tableCount + report.objectCount,
       paragraphs: report.paragraphCount,
       lineSegs: report.lineSegCount,
       cells: parsed.tables.reduce((sum, table) => sum + (table.cellCount || 0), 0),
@@ -1086,17 +1382,20 @@ async function buildReport(inputPath) {
       raw: aggregateRawSignals(raw),
     };
     report.signals = {
-      parsed: aggregateParsedSignals(parsed.tables, parsed.paragraphs),
+      parsed: aggregateParsedSignals(parsed.tables, parsed.paragraphs, parsed.objects),
       raw: report.counts.raw,
     };
   } else {
     const rawSignals = aggregateRawSignals(raw);
     report.tableCount = rawSignals.tableInfoCount;
+    report.objectCount = rawSignals.objectControlCount;
     report.paragraphCount = rawSignals.paragraphHeaderCount;
     report.lineSegCount = rawSignals.lineSegCount;
     report.counts = {
       sections: raw?.sections?.length || 0,
       tables: report.tableCount,
+      objects: report.objectCount,
+      objectAnchors: report.objectCount,
       paragraphs: report.paragraphCount,
       lineSegs: report.lineSegCount,
       cells: rawSignals.tableCellRecordCount,
