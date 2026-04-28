@@ -434,6 +434,15 @@ function resolveSampleAccess(sample) {
   };
 }
 
+function toPortableReportPath(filePath) {
+  if (!filePath) return filePath;
+  const relativePath = path.relative(ROOT_DIR, filePath);
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return filePath;
+  }
+  return relativePath;
+}
+
 function captureCurrentPageScreenshot(sampleId) {
   if (!CAPTURE_SCREENSHOTS) return null;
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -1171,7 +1180,7 @@ async function verifySample(sample, hancomOracleBaseline) {
     layoutSignals: diagnostics?.layoutSignals || null,
     layoutSignalLabels,
     hotspots,
-    screenshotPath,
+    screenshotPath: toPortableReportPath(screenshotPath),
     screenshotError,
     consoleErrors,
     consoleWarnings,

@@ -15,6 +15,7 @@ const HANCOM_PAGE_AUDIT_REPORT_PATH = process.env.HANCOM_PAGE_AUDIT_REPORT_PATH
   || path.join(ROOT_DIR, 'output', 'hancom-oracle', 'page-audit', 'hancom-page-audit-report.json');
 const REQUIRE_VISUAL_AUDIT = process.env.FIDELITY_REQUIRE_VISUAL_AUDIT === '1';
 const VISUAL_MAX_AGE_HOURS = Number(process.env.FIDELITY_VISUAL_MAX_AGE_HOURS || 24);
+const DEFAULT_SCREENSHOT_DIR = path.join(ROOT_DIR, 'output', 'playwright', 'qa-snapshots');
 
 function readJson(filePath, label) {
   if (!existsSync(filePath)) {
@@ -41,6 +42,29 @@ function pushVisualAuditIssue(warnings, failures, message) {
 
 function pushFailure(failures, report, message) {
   failures.push(`${report.filename || report.id || 'unknown'}: ${message}`);
+}
+
+function uniquePaths(paths) {
+  return [...new Set(paths.filter(Boolean))];
+}
+
+function resolveReportArtifactPath(filePath, options = {}) {
+  if (!filePath) return null;
+
+  const fallbackDir = options.fallbackDir || '';
+  const basename = path.basename(filePath);
+  const candidates = uniquePaths([
+    path.isAbsolute(filePath) ? filePath : null,
+    path.resolve(ROOT_DIR, filePath),
+    path.resolve(path.dirname(VERIFY_REPORT_PATH), filePath),
+    fallbackDir ? path.join(fallbackDir, basename) : null,
+  ]);
+
+  return candidates.find((candidate) => existsSync(candidate)) || candidates[0] || null;
+}
+
+function resolveScreenshotPath(report) {
+  return resolveReportArtifactPath(report?.screenshotPath || '', { fallbackDir: DEFAULT_SCREENSHOT_DIR });
 }
 
 function verifyReport(report, failures, options = {}) {
@@ -102,7 +126,8 @@ function verifyReport(report, failures, options = {}) {
     );
   }
 
-  if (requireScreenshot && (!report.screenshotPath || !existsSync(report.screenshotPath))) {
+  const screenshotPath = resolveScreenshotPath(report);
+  if (requireScreenshot && !screenshotPath) {
     pushFailure(failures, report, `스크린샷 누락: ${report.screenshotPath || '(none)'}`);
   }
 }
@@ -117,7 +142,8 @@ function summarizeScreenshotArtifacts(verifyPayload) {
   };
 
   for (const report of reports) {
-    if (report.screenshotPath && existsSync(report.screenshotPath)) {
+    const screenshotPath = resolveScreenshotPath(report);
+    if (screenshotPath) {
       summary.present += 1;
     } else {
       summary.missing += 1;
